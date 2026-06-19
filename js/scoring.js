@@ -5,11 +5,13 @@ export function calculateWPM(correctCharacters, elapsedMs) {
   return (characters / 5) / (duration / 60000);
 }
 
-export function calculateAccuracy(correctKeystrokes, totalKeystrokes) {
+export function calculateAccuracy(correctKeystrokes, totalKeystrokes, missedCharacters = 0) {
   const correct = Number.isFinite(correctKeystrokes) ? Math.max(0, correctKeystrokes) : 0;
   const total = Number.isFinite(totalKeystrokes) ? Math.max(0, totalKeystrokes) : 0;
-  if (total === 0) return 100;
-  return Math.min((correct / total) * 100, 100);
+  const missed = Number.isFinite(missedCharacters) ? Math.max(0, missedCharacters) : 0;
+  const denominator = total + missed;
+  if (denominator === 0) return 100;
+  return Math.max(0, Math.min((correct / denominator) * 100, 100));
 }
 
 export function getComboMultiplier(currentCombo) {
@@ -27,63 +29,16 @@ export function calculateWordScore(wordLength, actualTimeSeconds, currentCombo) 
   return Math.round((baseScore + speedBonus) * getComboMultiplier(currentCombo));
 }
 
-export function calculateGrade({
-  accuracy,
-  actualWPM,
-  targetWPM,
-  livesRemaining,
-  startingLives,
-  maxComboAchieved,
-  wordCount,
-  failed = false,
-}) {
-  if (failed || livesRemaining <= 0) return "Fail";
-  const levelScore = calculateLevelScore({
-    accuracy,
-    actualWPM,
-    targetWPM,
-    livesRemaining,
-    startingLives,
-    maxComboAchieved,
-    wordCount,
-  });
-  if (levelScore >= 92) return "S";
-  if (levelScore >= 80) return "A";
-  if (levelScore >= 65) return "B";
-  if (levelScore >= 45) return "C";
+export function calculateGrade({ accuracy, failed = false }) {
+  if (failed) return "Fail";
+  const safeAccuracy = Number.isFinite(accuracy)
+    ? Math.max(0, Math.min(100, accuracy))
+    : 0;
+  if (safeAccuracy >= 98) return "S";
+  if (safeAccuracy >= 95) return "A";
+  if (safeAccuracy >= 90) return "B";
+  if (safeAccuracy >= 80) return "C";
   return "D";
-}
-
-function finiteNonNegative(value) {
-  return Number.isFinite(value) ? Math.max(0, value) : 0;
-}
-
-function boundedRatio(numerator, denominator) {
-  const safeNumerator = finiteNonNegative(numerator);
-  const safeDenominator = finiteNonNegative(denominator);
-  if (safeDenominator === 0) return 0;
-  return Math.min(safeNumerator / safeDenominator, 1);
-}
-
-export function calculateLevelScore({
-  accuracy,
-  actualWPM,
-  targetWPM,
-  livesRemaining,
-  startingLives,
-  maxComboAchieved,
-  wordCount,
-}) {
-  const safeAccuracy = Math.min(finiteNonNegative(accuracy), 100);
-  const speedRatio = boundedRatio(actualWPM, targetWPM);
-  const livesRatio = boundedRatio(livesRemaining, startingLives);
-  const comboRatio = boundedRatio(maxComboAchieved, wordCount);
-  return (
-    safeAccuracy * 0.4 +
-    speedRatio * 100 * 0.3 +
-    livesRatio * 100 * 0.2 +
-    comboRatio * 100 * 0.1
-  );
 }
 
 const GRADE_RANK = { D: 1, C: 2, B: 3, A: 4, S: 5 };

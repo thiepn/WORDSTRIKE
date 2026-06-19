@@ -8,14 +8,32 @@ import {
   Screens,
   shouldPersistLevelResult,
 } from "./state.js";
-import { generateLevel } from "./levelGenerator.js";
+import { generateBossLevel, generateLevel } from "./levelGenerator.js";
 import { loadSave, resetProgress, updateLevelResult, updateSetting } from "./storage.js";
-import { loadWordBank, selectWordsForLevel } from "./wordBank.js";
+import {
+  loadBossPhraseBank,
+  loadWordBank,
+  selectBossPhrases,
+  selectWordsForLevel,
+} from "./wordBank.js";
 import { calculateAccuracy, calculateGrade, calculateWPM } from "./scoring.js";
-import { handleGameplayKey } from "./input.js";
+import { handleBossKey, handleGameplayKey } from "./input.js";
 import { resumeGameLoop, startLevelLoop, stopGameLoop } from "./gameLoop.js";
 import {
+  completeBossPhrase,
+  resumeBossLoop,
+  startBossLoop,
+  stopBossLoop,
+} from "./bossLoop.js";
+import {
+  applyForcedModifier,
+  isForcedModifierRequested,
+  NO_BACKSPACE_ID,
+  QUICK_FINGERS_ID,
+} from "./modifiers.js";
+import {
   hidePauseOverlay,
+  renderBossShell,
   renderGameplayShell,
   renderLevelSelect,
   renderDevModeIndicator,
@@ -23,20 +41,28 @@ import {
   renderSettings,
   renderTitle,
   showPauseOverlay,
+  updateBossHud,
   updateHud,
 } from "./ui.js";
 
 const titleActions = ["start", "levels", "settings"];
 
-function openTitle() {
+function stopActiveLoops() {
   stopGameLoop();
+  stopBossLoop();
+}
+
+function openTitle() {
+  stopActiveLoops();
+  appState.game = null;
   changeScreen(Screens.TITLE);
   appState.menuIndex = 0;
   renderCurrentScreen();
 }
 
 function openLevelSelect() {
-  stopGameLoop();
+  stopActiveLoops();
+  appState.game = null;
   changeScreen(Screens.LEVEL_SELECT);
   const selectionLimit = appState.devMode ? 100 : appState.save.currentFurthestLevel;
   appState.levelSelection = Math.min(appState.currentLevel || 1, selectionLimit, 100);
@@ -58,14 +84,43 @@ function startLevel(levelNumber) {
   const safeLevel = Math.max(1, Math.min(100, levelNumber));
   const legitimatelyUnlocked = safeLevel <= appState.save.currentFurthestLevel;
   if (!canLaunchLevel(appState.devMode, appState.save.currentFurthestLevel, safeLevel)) return;
-  stopGameLoop();
+  stopActiveLoops();
   appState.currentLevel = safeLevel;
-  const config = generateLevel(safeLevel);
+  if (safeLevel % 10 === 0) {
+    startBossLevel(safeLevel, legitimatelyUnlocked);
+    return;
+  }
+  const baseConfig = generateLevel(safeLevel);
+  const modifiers = applyForcedModifier(
+    safeLevel,
+    baseConfig.modifiers,
+    appState.devMode ? appState.forcedModifierId : null,
+  );
+  const config = { ...baseConfig, modifiers };
+  const forcedModifier = (
+    appState.devMode &&
+    [QUICK_FINGERS_ID, NO_BACKSPACE_ID].includes(appState.forcedModifierId) &&
+    safeLevel % 10 !== 0
+  );
   const words = selectWordsForLevel(appState.wordBank, config, safeLevel);
   changeScreen(Screens.PLAYING);
-  renderGameplayShell(safeLevel, config.lives);
+  renderGameplayShell(safeLevel, config.lives, config, appState.devMode, forcedModifier);
   const game = startLevelLoop(safeLevel, config, words, {
     onHudUpdate: updateHud,
+    onEnd: finishLevel,
+  });
+  game.persistResult = shouldPersistLevelResult(appState.devMode, legitimatelyUnlocked);
+  game.forcedModifier = forcedModifier;
+  game.devMode = appState.devMode;
+}
+
+function startBossLevel(levelNumber, legitimatelyUnlocked) {
+  const config = generateBossLevel(levelNumber);
+  const phrases = selectBossPhrases(appState.bossPhraseBank, config);
+  changeScreen(Screens.PLAYING);
+  renderBossShell(levelNumber, config);
+  const game = startBossLoop(levelNumber, config, phrases, {
+    onUpdate: updateBossHud,
     onEnd: finishLevel,
   });
   game.persistResult = shouldPersistLevelResult(appState.devMode, legitimatelyUnlocked);
@@ -73,26 +128,33 @@ function startLevel(levelNumber) {
 
 function finishLevel(game, success) {
   const wpm = calculateWPM(game.correctCharacters, game.elapsedMs);
-  const accuracy = calculateAccuracy(game.correctKeystrokes, game.totalKeystrokes);
+  const accuracy = calculateAccuracy(
+    game.correctKeystrokes,
+    game.totalKeystrokes,
+    game.missedCharacters,
+  );
   const grade = calculateGrade({
     accuracy,
-    actualWPM: wpm,
-    targetWPM: game.config.targetWPM,
-    livesRemaining: game.lives,
-    startingLives: game.config.lives,
-    maxComboAchieved: game.maxCombo,
-    wordCount: game.config.wordCount,
     failed: !success,
   });
+  const isBoss = game.mode === "boss";
   appState.results = {
     grade,
     wpm,
     accuracy,
     maxCombo: game.maxCombo,
     score: game.score,
-    livesRemaining: game.lives,
-    startingLives: game.config.lives,
+    livesRemaining: isBoss ? 0 : game.lives,
+    startingLives: isBoss ? 0 : game.config.lives,
     levelNumber: game.levelNumber,
+    isBoss,
+    timeRemaining: isBoss ? game.remainingMs / 1000 : 0,
+    phrasesCompleted: isBoss ? game.phrasesCompleted : 0,
+    phraseCount: isBoss ? game.phrases.length : 0,
+    modifierIds: isBoss ? [] : [...(game.config.modifiers || [])],
+    burstCount: isBoss ? 0 : game.modifierRuntime?.quickFingers?.burstCount || 0,
+    abandonedWordCount: isBoss ? 0 : game.abandonedWordCount || 0,
+    abandonedCharacters: isBoss ? 0 : game.abandonedCharacters || 0,
   };
   if (success && game.persistResult) {
     updateLevelResult(appState.save, game.levelNumber, appState.results);
@@ -113,7 +175,8 @@ function resumeGame() {
   if (appState.screen !== Screens.PAUSED) return;
   hidePauseOverlay();
   changeScreen(Screens.PLAYING);
-  resumeGameLoop();
+  if (appState.game?.mode === "boss") resumeBossLoop();
+  else resumeGameLoop();
 }
 
 function activateTitleAction() {
@@ -144,12 +207,20 @@ function renderCurrentScreen() {
       settings: openSettings,
     });
   } else if (appState.screen === Screens.LEVEL_SELECT) {
-    renderLevelSelect(appState.save, appState.levelSelection, appState.devMode, {
+    renderLevelSelect(
+      appState.save,
+      appState.levelSelection,
+      appState.devMode,
+      appState.bossPhraseBank,
+      appState.forcedModifierId,
+      {
       back: openTitle,
       select: startLevel,
       devInspect: inspectDevLevel,
       devLaunch: startLevel,
-    });
+      devForceModifier: setForcedModifier,
+      },
+    );
   } else if (appState.screen === Screens.RESULTS) {
     renderResults(appState.results, appState.resultsIndex, {
       retry: () => startLevel(appState.results.levelNumber),
@@ -165,6 +236,14 @@ function renderCurrentScreen() {
   }
   document.querySelector(".dev-mode-indicator")?.remove();
   if (appState.devMode) renderDevModeIndicator();
+}
+
+function setForcedModifier(modifierId) {
+  if (!appState.devMode || appState.levelSelection % 10 === 0) return;
+  appState.forcedModifierId = appState.forcedModifierId === modifierId
+    ? null
+    : modifierId;
+  renderCurrentScreen();
 }
 
 function moveLevelSelection(key) {
@@ -192,8 +271,13 @@ function handleGlobalKeydown(event) {
       pauseGame();
       return;
     }
-    handleGameplayKey(event, appState.game, appState.save.settings, updateHud);
-    updateHud(appState.game);
+    if (appState.game?.mode === "boss") {
+      handleBossKey(event, appState.game, appState.save.settings, completeBossPhrase);
+      updateBossHud(appState.game);
+    } else {
+      handleGameplayKey(event, appState.game, appState.save.settings, updateHud);
+      updateHud(appState.game);
+    }
     return;
   }
 
@@ -266,8 +350,14 @@ function handleGlobalKeydown(event) {
 
 async function bootstrap() {
   appState.devMode = isDevelopmentMode(window.location.search);
+  appState.forcedModifierId = appState.devMode
+    ? isForcedModifierRequested(window.location.search)
+    : null;
   appState.save = loadSave();
-  appState.wordBank = await loadWordBank();
+  [appState.wordBank, appState.bossPhraseBank] = await Promise.all([
+    loadWordBank(),
+    loadBossPhraseBank(),
+  ]);
   document.addEventListener("keydown", handleGlobalKeydown);
   renderCurrentScreen();
 }

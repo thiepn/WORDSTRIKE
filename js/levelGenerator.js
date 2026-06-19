@@ -1,3 +1,5 @@
+import { getModifiersForLevel } from "./modifiers.js";
+
 export function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -22,7 +24,21 @@ export function generateLevel(n) {
     maxSimultaneousWords: clamp(3 + Math.floor(n / 15), 3, 10),
     lives: 3,
     targetWPM: clamp(30 + n * 0.05, 30, 90),
-    modifiers: [],
+    modifiers: getModifiersForLevel(n),
+    wordTier: getWordTierForLevel(n),
+    world: Math.floor((n - 1) / 100),
+  };
+}
+
+export function generateBossLevel(n) {
+  const bossIndex = n / 10;
+
+  return {
+    level: n,
+    bossIndex,
+    phraseCount: clamp(1 + Math.floor(bossIndex / 5), 1, 3),
+    wordsPerPhrase: clamp(3 + Math.floor(bossIndex / 2), 3, 12),
+    timeLimitSec: clamp(60 - bossIndex * 0.5, 25, 60),
     wordTier: getWordTierForLevel(n),
     world: Math.floor((n - 1) / 100),
   };

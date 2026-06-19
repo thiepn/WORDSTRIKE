@@ -4,9 +4,22 @@ const FALLBACK_WORDS = [
   "velocity", "keyboard", "midnight", "overdrive", "precision", "starlight",
 ];
 
+const FALLBACK_BOSS_PHRASES = [
+  { tier: 1, text: "the quiet storm" },
+  { tier: 1, text: "light fills the room" },
+  { tier: 2, text: "follow the road through rain" },
+  { tier: 2, text: "the morning opens every door" },
+  { tier: 3, text: "steady hands guide the signal home" },
+  { tier: 3, text: "bright currents move beneath the surface" },
+  { tier: 4, text: "careful observation reveals the hidden pattern" },
+  { tier: 4, text: "precision transforms uncertainty into reliable progress" },
+  { tier: 5, text: "patient coordination sustains the complex communication network" },
+  { tier: 5, text: "the architecture of memory persists beyond conscious thought" },
+];
+
 export async function loadWordBank() {
   try {
-    const response = await fetch("./data/theme-default.json");
+    const response = await fetch(new URL("../data/theme-default.json", import.meta.url));
     if (!response.ok) throw new Error(`Word bank request failed: ${response.status}`);
     const data = await response.json();
     if (!data?.tiers) throw new Error("Invalid word bank");
@@ -14,6 +27,27 @@ export async function loadWordBank() {
   } catch (error) {
     console.warn("Using fallback word bank.", error);
     return { theme: "fallback", tiers: { 1: FALLBACK_WORDS } };
+  }
+}
+
+export async function loadBossPhraseBank() {
+  try {
+    const response = await fetch(new URL("../data/bossPhrases.json", import.meta.url));
+    if (!response.ok) throw new Error(`Boss phrase request failed: ${response.status}`);
+    const data = await response.json();
+    if (!Array.isArray(data?.phrases)) throw new Error("Invalid boss phrase bank");
+    const phrases = data.phrases.filter((entry) => (
+      Number.isInteger(entry?.tier) &&
+      entry.tier >= 1 &&
+      entry.tier <= 5 &&
+      typeof entry.text === "string" &&
+      /^[a-z]+(?: [a-z]+)*$/.test(entry.text.trim())
+    )).map((entry) => ({ tier: entry.tier, text: entry.text.trim() }));
+    if (!phrases.length) throw new Error("Boss phrase bank contains no usable phrases");
+    return { phrases };
+  } catch (error) {
+    console.warn("Using fallback boss phrase bank.", error);
+    return { phrases: FALLBACK_BOSS_PHRASES };
   }
 }
 
@@ -26,6 +60,59 @@ function seededRandom(seed) {
   };
 }
 
+function shuffled(items, seed) {
+  const result = [...items];
+  const random = seededRandom(seed);
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+  }
+  return result;
+}
+
+export function selectBossPhrases(bank, config) {
+  const valid = (bank?.phrases || []).filter((entry) => (
+    entry.tier === config.wordTier &&
+    typeof entry.text === "string" &&
+    /^[a-z]+(?: [a-z]+)*$/.test(entry.text)
+  ));
+  const sameOrLowerTier = (bank?.phrases || []).filter((entry) => (
+    entry.tier <= config.wordTier &&
+    typeof entry.text === "string" &&
+    /^[a-z]+(?: [a-z]+)*$/.test(entry.text)
+  ));
+  const initialSource = valid.length >= config.phraseCount
+    ? valid
+    : sameOrLowerTier.length
+      ? sameOrLowerTier
+      : FALLBACK_BOSS_PHRASES;
+  let unique = [...new Map(initialSource.map((entry) => [entry.text, entry])).values()];
+  if (unique.length < config.phraseCount) {
+    const supplements = FALLBACK_BOSS_PHRASES.filter((entry) => entry.tier <= config.wordTier);
+    unique = [...new Map([...unique, ...supplements].map((entry) => [entry.text, entry])).values()];
+  }
+  const ranked = unique
+    .map((entry) => ({
+      ...entry,
+      distance: Math.abs(entry.text.split(" ").length - config.wordsPerPhrase),
+    }))
+    .sort((a, b) => a.distance - b.distance || a.text.localeCompare(b.text));
+  const exact = ranked.filter((entry) => entry.distance === 0);
+  const closestDistance = ranked[0]?.distance ?? 0;
+  const preferred = ranked.filter((entry) => entry.distance <= closestDistance + 1);
+  const candidates = exact.length >= config.phraseCount
+    ? exact
+    : preferred.length >= config.phraseCount
+      ? preferred
+      : ranked;
+  const ordered = shuffled(candidates, config.level * 104729);
+  const selected = [];
+  for (let index = 0; index < config.phraseCount; index += 1) {
+    selected.push(ordered[index % ordered.length]?.text || FALLBACK_BOSS_PHRASES[index].text);
+  }
+  return selected;
+}
+
 export function selectWordsForLevel(bank, config, levelNumber) {
   const tierNumbers = Object.keys(bank.tiers).map(Number).sort((a, b) => a - b);
   const preferredTiers = tierNumbers.filter((tier) => tier <= config.wordTier);
@@ -35,16 +122,11 @@ export function selectWordsForLevel(bank, config, levelNumber) {
     (word) => word.length >= config.minWordLength && word.length <= config.maxWordLength,
   );
   const pool = [...new Set(inRange.length ? inRange : allWords.length ? allWords : FALLBACK_WORDS)];
-  const random = seededRandom(levelNumber * 7919 + config.wordCount);
-
-  for (let index = pool.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(random() * (index + 1));
-    [pool[index], pool[swapIndex]] = [pool[swapIndex], pool[index]];
-  }
+  const ordered = shuffled(pool, levelNumber * 7919 + config.wordCount);
 
   const selected = [];
   for (let index = 0; index < config.wordCount; index += 1) {
-    selected.push(pool[index % pool.length]);
+    selected.push(ordered[index % ordered.length]);
   }
   return selected;
 }

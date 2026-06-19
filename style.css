@@ -170,12 +170,12 @@ button {
 
 .level-screen {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   padding: 28px clamp(20px, 5vw, 72px);
 }
 
 .level-screen.dev-enabled {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
 .level-header {
@@ -211,6 +211,7 @@ button {
 }
 
 .level-tile {
+  position: relative;
   aspect-ratio: 1;
   display: grid;
   place-items: center;
@@ -220,6 +221,42 @@ button {
   background: rgb(16 23 32 / 90%);
   cursor: pointer;
   transition: 120ms ease;
+}
+
+.modifier-mark {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  color: var(--secondary);
+  font-size: 11px;
+  font-weight: 700;
+  text-shadow: 0 0 8px var(--secondary);
+}
+
+.modifier-mark.no-backspace {
+  color: var(--danger);
+  font-size: 9px;
+  text-shadow: 0 0 8px var(--danger);
+}
+
+.level-detail {
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 34px;
+  padding: 7px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--locked);
+}
+
+.level-detail.has-modifier {
+  border-color: rgb(255 60 172 / 38%);
+}
+
+.level-detail strong {
+  color: var(--secondary);
 }
 
 .level-tile:hover,
@@ -283,6 +320,110 @@ button {
   display: grid;
   grid-template-rows: var(--hud-height) minmax(0, 1fr);
   background: radial-gradient(circle at 50% 50%, rgb(0 255 242 / 8%), transparent 34%);
+}
+
+.game-screen.has-modifier {
+  grid-template-rows: var(--hud-height) auto minmax(0, 1fr);
+}
+
+.modifier-hud {
+  z-index: 19;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 18px;
+  min-height: 30px;
+  padding: 5px 16px;
+  border-bottom: 1px solid rgb(0 255 242 / 25%);
+  background: rgb(10 14 20 / 92%);
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.modifier-hud strong {
+  color: var(--primary);
+}
+
+.modifier-hud small {
+  color: var(--muted);
+}
+
+.modifier-hud.active {
+  border-color: var(--secondary);
+  color: var(--secondary);
+  box-shadow: 0 4px 18px rgb(255 60 172 / 12%);
+}
+
+.modifier-hud.active strong {
+  color: var(--secondary);
+  text-shadow: 0 0 9px var(--secondary);
+}
+
+.modifier-hud.no-backspace {
+  border-color: rgb(255 71 87 / 45%);
+  color: var(--danger);
+}
+
+.modifier-hud.no-backspace strong {
+  color: var(--danger);
+  text-shadow: 0 0 8px rgb(255 71 87 / 35%);
+}
+
+.no-backspace-mode .modifier-briefing strong {
+  color: var(--danger);
+  text-shadow: 0 0 18px rgb(255 71 87 / 62%);
+}
+
+.modifier-hud.imminent {
+  animation: modifier-imminent 450ms ease-in-out infinite alternate;
+}
+
+@keyframes modifier-imminent {
+  to { background: rgb(255 60 172 / 10%); }
+}
+
+.modifier-briefing {
+  position: absolute;
+  z-index: 40;
+  inset: var(--hud-height) 0 0;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  text-align: center;
+  background: rgb(5 8 12 / 88%);
+  backdrop-filter: blur(3px);
+}
+
+.modifier-briefing[hidden] {
+  display: none;
+}
+
+.modifier-briefing span,
+.modifier-briefing p {
+  margin: 0;
+  color: var(--muted);
+  letter-spacing: 0.16em;
+}
+
+.modifier-briefing strong {
+  color: var(--secondary);
+  font-size: clamp(40px, 7vw, 80px);
+  text-shadow: 0 0 18px rgb(255 60 172 / 62%);
+}
+
+.game-screen.quick-burst-flash::after {
+  content: "";
+  position: absolute;
+  z-index: 35;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 100px 18px rgb(255 60 172 / 35%);
+  animation: quick-burst-flash 300ms ease-out forwards;
+}
+
+@keyframes quick-burst-flash {
+  to { opacity: 0; }
 }
 
 .hud {
@@ -370,6 +511,7 @@ button {
 }
 
 .word-visual {
+  position: relative;
   padding: 5px 8px;
   border: 1px solid transparent;
   border-radius: 2px;
@@ -391,6 +533,49 @@ button {
   border-color: var(--danger);
   color: var(--danger);
   animation: wrong 160ms linear;
+}
+
+.word-visual.word-abandoned {
+  border-color: var(--danger);
+  color: rgb(232 240 245 / 48%);
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgb(255 60 172 / 8%) 0 4px,
+      transparent 4px 8px
+    ),
+    rgb(255 71 87 / 5%);
+  box-shadow: 0 0 14px rgb(255 71 87 / 18%);
+}
+
+.word-visual.word-abandoned .remaining-letter {
+  color: rgb(255 71 87 / 68%);
+  text-decoration: line-through;
+  text-decoration-color: var(--secondary);
+}
+
+.corrupted-label {
+  position: absolute;
+  top: -11px;
+  right: 2px;
+  color: var(--danger);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+}
+
+.word-visual.word-corruption-flash {
+  animation: word-corruption 260ms steps(2, end);
+}
+
+@keyframes word-corruption {
+  35% {
+    border-color: var(--secondary);
+    filter: brightness(1.6) saturate(1.4);
+  }
+  70% {
+    border-color: var(--danger);
+    opacity: 0.68;
+  }
 }
 
 .typed-letter {
@@ -453,12 +638,50 @@ button {
   gap: 6px;
 }
 
+.dev-phrases {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.dev-phrases code {
+  color: var(--text);
+  font-size: 11px;
+  white-space: normal;
+}
+
 .dev-quick-buttons button,
 .dev-level-entry button {
   padding: 8px;
   border: 1px solid var(--locked);
   background: var(--panel);
   cursor: pointer;
+}
+
+.dev-force-button {
+  padding: 8px;
+  border: 1px solid var(--locked);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.dev-force-button.active {
+  border-color: var(--secondary);
+  color: var(--secondary);
+  box-shadow: 0 0 12px rgb(255 60 172 / 18%);
+}
+
+.dev-force-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.forced-modifier-label {
+  color: var(--secondary);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-align: center;
 }
 
 .dev-quick-buttons button:hover,
@@ -547,6 +770,199 @@ button {
 .grade.grade-b { color: var(--secondary); }
 .grade.grade-c { color: var(--text); }
 .grade.grade-d { color: var(--danger); }
+
+.result-modifier {
+  margin: -4px 0 18px;
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 1.7;
+  letter-spacing: 0.12em;
+}
+
+.result-modifier.danger {
+  color: var(--danger);
+}
+
+.boss-screen {
+  display: grid;
+  grid-template-rows: 86px minmax(0, 1fr);
+  background:
+    radial-gradient(circle at 50% 48%, rgb(255 60 172 / 12%), transparent 36%),
+    linear-gradient(135deg, rgb(255 60 172 / 4%), transparent 45%);
+}
+
+.boss-hud {
+  z-index: 20;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  align-items: center;
+  gap: 18px;
+  padding: 0 28px;
+  border-bottom: 1px solid rgb(255 60 172 / 48%);
+  background: rgb(10 14 20 / 96%);
+  font-size: 14px;
+}
+
+.boss-hud-value {
+  color: var(--secondary);
+}
+
+.boss-hud-right {
+  text-align: right;
+}
+
+.boss-timer-wrap {
+  text-align: center;
+}
+
+.boss-timer {
+  display: block;
+  color: var(--primary);
+  font-size: 34px;
+  line-height: 1;
+  text-shadow: 0 0 12px rgb(0 255 242 / 55%);
+}
+
+.boss-timer.warning {
+  color: var(--secondary);
+  text-shadow: 0 0 12px rgb(255 60 172 / 55%);
+}
+
+.boss-timer.danger {
+  color: var(--danger);
+  animation: timer-warning 500ms ease-in-out infinite alternate;
+}
+
+@keyframes timer-warning {
+  to { transform: scale(1.07); text-shadow: 0 0 20px var(--danger); }
+}
+
+.boss-arena {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  padding: 40px;
+  overflow: hidden;
+}
+
+.boss-arena::before,
+.boss-arena::after {
+  content: "";
+  position: absolute;
+  width: 160px;
+  height: 160px;
+  border-color: rgb(255 60 172 / 32%);
+  pointer-events: none;
+}
+
+.boss-arena::before {
+  top: 34px;
+  left: 34px;
+  border-top: 1px solid;
+  border-left: 1px solid;
+}
+
+.boss-arena::after {
+  right: 34px;
+  bottom: 34px;
+  border-right: 1px solid;
+  border-bottom: 1px solid;
+}
+
+.boss-intro {
+  color: var(--secondary);
+  font-size: clamp(38px, 7vw, 88px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-align: center;
+  text-shadow: 0 0 18px rgb(255 60 172 / 75%);
+  animation: boss-intro-pulse 450ms ease-out;
+}
+
+@keyframes boss-intro-pulse {
+  from { opacity: 0; transform: scale(0.92); }
+}
+
+.boss-phrase-frame {
+  width: min(1000px, 88vw);
+  padding: clamp(34px, 6vw, 72px);
+  border: 1px solid var(--secondary);
+  background: rgb(10 14 20 / 88%);
+  box-shadow: 0 0 36px rgb(255 60 172 / 15%), inset 0 0 36px rgb(255 60 172 / 4%);
+  text-align: center;
+}
+
+.boss-phrase-frame.hidden {
+  display: none;
+}
+
+.boss-phrase-frame.transition {
+  border-color: var(--success);
+  box-shadow: 0 0 38px rgb(76 255 142 / 24%);
+}
+
+.boss-phrase-frame.wrong {
+  animation: boss-wrong 160ms linear;
+}
+
+@keyframes boss-wrong {
+  50% {
+    border-color: var(--danger);
+    box-shadow: 0 0 42px rgb(255 71 87 / 38%);
+    filter: brightness(1.3);
+  }
+}
+
+.boss-phrase {
+  max-width: 920px;
+  min-height: 2.4em;
+  margin: 0 auto;
+  font-size: clamp(30px, 4.2vw, 58px);
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+
+.boss-typed {
+  color: var(--primary);
+  text-shadow: 0 0 9px rgb(0 255 242 / 75%);
+}
+
+.boss-current {
+  color: var(--text);
+  border-bottom: 3px solid var(--primary);
+  background: rgb(0 255 242 / 10%);
+  animation: boss-caret 700ms ease-in-out infinite alternate;
+}
+
+@keyframes boss-caret {
+  to { background: rgb(0 255 242 / 24%); }
+}
+
+.boss-remaining {
+  color: var(--text);
+}
+
+.boss-progress {
+  height: 4px;
+  margin: 32px auto 16px;
+  background: var(--locked);
+}
+
+.boss-progress div {
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  box-shadow: 0 0 10px var(--primary);
+  transition: width 80ms linear;
+}
+
+.boss-instruction {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+}
 
 .stats-grid {
   display: grid;

@@ -1,4 +1,5 @@
 const wordElements = new Map();
+let bossPhraseElement = null;
 
 function playArea() {
   return document.querySelector("#play-area");
@@ -35,9 +36,12 @@ export function updateWordElement(word, isActive) {
   const { position, visual } = elements;
   position.style.transform = `translate(${word.x}px, ${word.y}px) translate(-50%, -50%)`;
   visual.classList.toggle("active", isActive);
+  visual.classList.toggle("word-abandoned", word.abandoned === true);
   const typed = word.text.slice(0, word.typedIndex);
   const remaining = word.text.slice(word.typedIndex);
-  visual.innerHTML = `<span class="typed-letter">${typed}</span><span>${remaining}</span>`;
+  visual.innerHTML = `
+    <span class="typed-letter">${typed}</span><span class="remaining-letter">${remaining}</span>
+    ${word.abandoned ? '<span class="corrupted-label">LOST</span>' : ""}`;
 }
 
 export function removeWordElement(word, completed = false, particlesEnabled = true) {
@@ -81,4 +85,58 @@ export function flashDamage(screenShake = true) {
     );
   }
   window.setTimeout(() => area.classList.remove("damage-flash"), 260);
+}
+
+export function clearBossPhrase() {
+  if (bossPhraseElement) bossPhraseElement.innerHTML = "";
+  bossPhraseElement = null;
+}
+
+export function renderBossPhrase(game) {
+  const container = document.querySelector("#boss-phrase");
+  if (!container) return;
+  bossPhraseElement = container;
+  const typed = game.currentPhrase.slice(0, game.phraseCharIndex);
+  const current = game.currentPhrase[game.phraseCharIndex] || "";
+  const remaining = game.currentPhrase.slice(game.phraseCharIndex + (current ? 1 : 0));
+  const currentDisplay = current === " " ? "&nbsp;" : current;
+  container.innerHTML = [
+    `<span class="boss-typed">${typed}</span>`,
+    current ? `<span class="boss-current">${currentDisplay}</span>` : "",
+    `<span class="boss-remaining">${remaining}</span>`,
+  ].join("");
+  const progress = document.querySelector("#boss-progress-fill");
+  if (progress) {
+    const percent = game.currentPhrase.length
+      ? (game.phraseCharIndex / game.currentPhrase.length) * 100
+      : 0;
+    progress.style.width = `${percent}%`;
+  }
+}
+
+export function flashBossWrong() {
+  const frame = document.querySelector(".boss-phrase-frame");
+  if (!frame) return;
+  frame.classList.remove("wrong");
+  void frame.offsetWidth;
+  frame.classList.add("wrong");
+  window.setTimeout(() => frame.classList.remove("wrong"), 180);
+}
+
+export function flashQuickFingersBurst() {
+  const screen = document.querySelector(".game-screen");
+  if (!screen) return;
+  screen.classList.remove("quick-burst-flash");
+  void screen.offsetWidth;
+  screen.classList.add("quick-burst-flash");
+  window.setTimeout(() => screen.classList.remove("quick-burst-flash"), 300);
+}
+
+export function flashWordCorruption(wordId) {
+  const visual = wordElements.get(wordId)?.visual;
+  if (!visual) return;
+  visual.classList.remove("word-corruption-flash");
+  void visual.offsetWidth;
+  visual.classList.add("word-corruption-flash");
+  window.setTimeout(() => visual.classList.remove("word-corruption-flash"), 260);
 }

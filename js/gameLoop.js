@@ -1,17 +1,43 @@
 import { appState, Screens } from "./state.js";
 import {
   clearWordElements,
+  clearBossPhrase,
   createWordElement,
   flashDamage,
   removeWordElement,
   updateWordElement,
+  flashQuickFingersBurst,
 } from "./renderer.js";
+import {
+  getEffectiveSpawnInterval,
+  getQuickFingersPhase,
+  NO_BACKSPACE_ID,
+  QUICK_FINGERS_ID,
+} from "./modifiers.js";
 
 let animationFrameId = null;
 let callbacks = {};
+const MODIFIER_BRIEFING_MS = 2000;
 
-function buildGame(levelNumber, config, words) {
+function createModifierRuntime(config) {
+  if (!config.modifiers?.includes(QUICK_FINGERS_ID)) return null;
   return {
+    quickFingers: {
+      active: false,
+      phase: "waiting",
+      remainingMs: 6000,
+      burstCount: 0,
+      effectiveSpawnIntervalMs: config.spawnIntervalMs,
+    },
+  };
+}
+
+export function createGameState(levelNumber, config, words) {
+  const hasModifier = config.modifiers?.some((id) => (
+    id === QUICK_FINGERS_ID || id === NO_BACKSPACE_ID
+  ));
+  return {
+    mode: "normal",
     levelNumber,
     config,
     wordQueue: [...words],
@@ -26,13 +52,27 @@ function buildGame(levelNumber, config, words) {
     maxCombo: 0,
     correctKeystrokes: 0,
     totalKeystrokes: 0,
+    missedCharacters: 0,
     correctCharacters: 0,
     elapsedMs: 0,
+    phase: hasModifier ? "MODIFIER_BRIEFING" : "ACTIVE",
+    briefingElapsedMs: 0,
+    modifierRuntime: createModifierRuntime(config),
+    abandonedWordCount: 0,
+    abandonedCharacters: 0,
     coreX: 0,
     coreY: 0,
     lastTimestamp: null,
     ended: false,
   };
+}
+
+export function registerMissedWord(game, word) {
+  if (word.missedCharactersRecorded) return 0;
+  word.missedCharactersRecorded = true;
+  const remainingCharacters = Math.max(0, word.text.length - word.typedIndex);
+  game.missedCharacters += remainingCharacters;
+  return remainingCharacters;
 }
 
 function getDimensions(game) {
@@ -78,6 +118,10 @@ function spawnWord(game, dimensions) {
     vy: (dy / distance) * speed,
     createdAt: game.elapsedMs,
     startedAt: null,
+    abandoned: false,
+    abandonedAt: null,
+    missedCharactersRecorded: false,
+    coreArrivalProcessed: false,
   };
   game.nextWordId += 1;
   game.spawnedCount += 1;
@@ -85,7 +129,10 @@ function spawnWord(game, dimensions) {
   createWordElement(word);
 }
 
-function missWord(game, word) {
+export function processWordCoreArrival(game, word) {
+  if (word.coreArrivalProcessed) return false;
+  word.coreArrivalProcessed = true;
+  registerMissedWord(game, word);
   game.words = game.words.filter((candidate) => candidate.id !== word.id);
   if (game.activeTargetId === word.id) game.activeTargetId = null;
   game.lives -= 1;
@@ -93,6 +140,7 @@ function missWord(game, word) {
   removeWordElement(word);
   flashDamage(appState.save.settings.screenShake);
   callbacks.onHudUpdate?.(game);
+  return true;
 }
 
 function finish(game, success) {
@@ -114,14 +162,51 @@ function tick(timestamp) {
   if (game.lastTimestamp === null) game.lastTimestamp = timestamp;
   const deltaMs = Math.min(timestamp - game.lastTimestamp, 100);
   game.lastTimestamp = timestamp;
+
+  if (game.phase === "MODIFIER_BRIEFING") {
+    game.briefingElapsedMs += deltaMs;
+    if (game.briefingElapsedMs >= MODIFIER_BRIEFING_MS) {
+      game.phase = "ACTIVE";
+      game.lastSpawnAt = -game.config.spawnIntervalMs;
+    }
+    callbacks.onHudUpdate?.(game);
+    animationFrameId = requestAnimationFrame(tick);
+    return;
+  }
+
   game.elapsedMs += deltaMs;
+  const quickRuntime = game.modifierRuntime?.quickFingers;
+  if (quickRuntime) {
+    if (game.spawnedCount >= game.config.wordCount) {
+      Object.assign(quickRuntime, {
+        active: false,
+        phase: "complete",
+        remainingMs: 0,
+        effectiveSpawnIntervalMs: game.config.spawnIntervalMs,
+      });
+    } else {
+      const previousBurstCount = quickRuntime.burstCount;
+      const phase = getQuickFingersPhase(game.elapsedMs);
+      Object.assign(quickRuntime, phase, {
+        effectiveSpawnIntervalMs: getEffectiveSpawnInterval(
+          game.config.spawnIntervalMs,
+          phase.active,
+        ),
+      });
+      if (phase.active && phase.burstCount > previousBurstCount) {
+        flashQuickFingersBurst();
+      }
+    }
+  }
   const dimensions = getDimensions(game);
   if (!dimensions) return;
+  const effectiveSpawnIntervalMs = quickRuntime?.effectiveSpawnIntervalMs
+    ?? game.config.spawnIntervalMs;
 
   if (
     game.spawnedCount < game.config.wordCount &&
     game.words.length < game.config.maxSimultaneousWords &&
-    game.elapsedMs - game.lastSpawnAt >= game.config.spawnIntervalMs
+    game.elapsedMs - game.lastSpawnAt >= effectiveSpawnIntervalMs
   ) {
     spawnWord(game, dimensions);
     game.lastSpawnAt = game.elapsedMs;
@@ -132,7 +217,7 @@ function tick(timestamp) {
     word.x += word.vx * deltaSeconds;
     word.y += word.vy * deltaSeconds;
     if (Math.hypot(word.x - game.coreX, word.y - game.coreY) <= 42) {
-      missWord(game, word);
+      processWordCoreArrival(game, word);
       if (game.lives <= 0) {
         finish(game, false);
         return;
@@ -152,9 +237,10 @@ function tick(timestamp) {
 
 export function startLevelLoop(levelNumber, config, words, nextCallbacks = {}) {
   stopGameLoop();
+  clearBossPhrase();
   clearWordElements();
   callbacks = nextCallbacks;
-  appState.game = buildGame(levelNumber, config, words);
+  appState.game = createGameState(levelNumber, config, words);
   animationFrameId = requestAnimationFrame(tick);
   return appState.game;
 }
@@ -162,7 +248,7 @@ export function startLevelLoop(levelNumber, config, words, nextCallbacks = {}) {
 export function stopGameLoop() {
   if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
   animationFrameId = null;
-  if (appState.game) appState.game.lastTimestamp = null;
+  if (appState.game?.mode === "normal") appState.game.lastTimestamp = null;
 }
 
 export function resumeGameLoop() {

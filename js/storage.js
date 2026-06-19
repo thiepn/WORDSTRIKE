@@ -1,4 +1,4 @@
-import { isBetterGrade } from "./scoring.js";
+import { calculateGrade } from "./scoring.js";
 
 const STORAGE_KEY = "wordstrike_save";
 
@@ -17,9 +17,19 @@ export function createDefaultSave() {
 function validateSave(value) {
   const defaults = createDefaultSave();
   if (!value || typeof value !== "object") return defaults;
+  const levels = value.levels && typeof value.levels === "object" ? value.levels : {};
+  const migratedLevels = Object.fromEntries(Object.entries(levels).map(([key, result]) => {
+    if (!result || typeof result !== "object" || !Number.isFinite(Number(result.bestAccuracy))) {
+      return [key, result];
+    }
+    return [key, {
+      ...result,
+      grade: calculateGrade({ accuracy: Number(result.bestAccuracy) }),
+    }];
+  }));
   return {
     currentFurthestLevel: Math.max(1, Number(value.currentFurthestLevel) || 1),
-    levels: value.levels && typeof value.levels === "object" ? value.levels : {},
+    levels: migratedLevels,
     settings: {
       screenShake: value.settings?.screenShake !== false,
       particles: value.settings?.particles !== false,
@@ -46,18 +56,19 @@ export function saveGame(save) {
 }
 
 export function updateLevelResult(save, levelNumber, result) {
+  if (result.grade === "Fail") return;
   const key = String(levelNumber);
   const previous = save.levels[key];
+  const bestAccuracy = Math.max(previous?.bestAccuracy || 0, result.accuracy);
   const next = {
-    grade: previous?.grade || result.grade,
+    grade: calculateGrade({ accuracy: bestAccuracy }),
     bestWPM: Math.max(previous?.bestWPM || 0, result.wpm),
-    bestAccuracy: Math.max(previous?.bestAccuracy || 0, result.accuracy),
+    bestAccuracy,
     bestScore: Math.max(previous?.bestScore || 0, result.score),
     maxCombo: Math.max(previous?.maxCombo || 0, result.maxCombo),
+    bestTimeRemaining: Math.max(previous?.bestTimeRemaining || 0, result.timeRemaining || 0),
+    bossCleared: previous?.bossCleared || result.isBoss || false,
   };
-  if (!previous || isBetterGrade(result.grade, previous.grade)) {
-    next.grade = result.grade;
-  }
   save.levels[key] = next;
   save.currentFurthestLevel = Math.max(save.currentFurthestLevel, levelNumber + 1);
   saveGame(save);
