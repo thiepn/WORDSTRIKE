@@ -1,0 +1,55 @@
+{
+  "theme": "default",
+  "tiers": {
+    "1": [
+      "ace", "act", "aim", "air", "arc", "ash", "ask", "bar", "bat", "bit",
+      "box", "bug", "bus", "cap", "cat", "code", "cool", "core", "dash", "data",
+      "dawn", "disk", "dock", "echo", "edge", "fast", "file", "fire", "flow", "flux",
+      "gate", "glow", "grid", "hack", "heat", "hero", "icon", "jump", "key", "kick",
+      "beam", "link", "loop", "map", "mark", "mode", "moon", "node", "nova", "path",
+      "ping", "play", "port", "pure", "race", "raid", "rank", "pace", "ray", "ring",
+      "rise", "rush", "scan", "ship", "shot", "snap", "zap", "star", "sync", "task",
+      "team", "text", "tile", "time", "type", "unit", "wave", "word", "zone", "zoom"
+    ],
+    "2": [
+      "alert", "arrow", "audio", "avoid", "blade", "blast", "block", "boost", "brain", "burst",
+      "cable", "chain", "chase", "clear", "click", "cloud", "combo", "crash", "cycle", "delta",
+      "drive", "drift", "enter", "field", "flash", "focus", "force", "frame", "ghost", "giant",
+      "guard", "input", "level", "light", "logic", "match", "matrix", "meter", "night", "orbit",
+      "phase", "pixel", "power", "prime", "pulse", "quick", "radar", "react", "route", "score",
+      "screen", "shift", "signal", "skill", "space", "speed", "storm", "strike", "switch", "target",
+      "theme", "timer", "track", "trail", "vivid", "voice", "world", "shield", "rocket", "motion",
+      "impact", "binary", "render", "module", "typing", "system", "vector", "energy", "cipher", "launch"
+    ],
+    "3": [
+      "active", "arcade", "beacon", "buffer", "charge", "chrome", "circuit", "console", "control", "crystal",
+      "defend", "digital", "dynamic", "engine", "escape", "future", "galaxy", "glitch", "horizon", "interact",
+      "journey", "kinetic", "master", "memory", "mission", "network", "offline", "overlap", "pattern", "player",
+      "portal", "precise", "quantum", "random", "reactor", "reflex", "restart", "rhythm", "runner", "sector",
+      "shatter", "socket", "source", "starlit", "static", "stream", "system", "terminal", "thunder", "timing",
+      "tracker", "trigger", "turbo", "update", "virtual", "voltage", "warrior", "window", "wireless", "advance",
+      "balance", "cascade", "command", "compete", "defense", "electric", "feedback", "generate", "keyboard", "momentum",
+      "navigate", "override", "practice", "project", "sequence", "software", "tactical", "velocity", "victory", "wildcard"
+    ],
+    "4": [
+      "accuracy", "afterglow", "algorithm", "alignment", "ambition", "amplifier", "animation", "bandwidth", "breakpoint", "challenge",
+      "champion", "checkpoint", "collision", "commander", "connection", "coordinate", "dashboard", "database", "debugging", "detector",
+      "dimension", "direction", "discovery", "distance", "downtime", "efficiency", "electric", "encounter", "frequency", "function",
+      "generator", "graphics", "hardware", "headspace", "highlight", "indicator", "infinite", "keystroke", "luminous", "mechanics",
+      "milestone", "nightfall", "objective", "operator", "optimize", "outbreak", "overflow", "platform", "precision", "processor",
+      "progress", "prototype", "radiance", "reaction", "recovery", "responsive", "satellite", "scanning", "scenario", "shortcut",
+      "simulation", "spectrum", "stability", "strategy", "harmonic", "technology", "threshold", "trajectory", "transmit", "upgrade",
+      "variable", "viewport", "waveform", "workflow", "adventure", "atmosphere", "brilliance", "calibrate", "continuous", "framework"
+    ],
+    "5": [
+      "acceleration", "achievement", "afterimage", "architecture", "atmospheric", "calibration", "championship", "configure", "convergence", "coordination",
+      "cyberspace", "determine", "development", "electricity", "engagement", "environment", "equilibrium", "exploration", "frequency", "generation",
+      "hyperdrive", "illumination", "imagination", "independent", "information", "structure", "interaction", "interstellar", "invincible", "leaderboard",
+      "lightweight", "mastermind", "microsecond", "navigation", "observation", "optimization", "outstanding", "performance", "persistence", "playground",
+      "possibility", "preparation", "probability", "programming", "projection", "recalibrate", "recognition", "reinforce", "resolution", "responsive",
+      "revolution", "simulation", "starlight", "synchronizer", "technician", "trajectory", "transmission", "unbreakable", "knowledge", "visualize",
+      "wavefront", "wonderland", "breakthrough", "communicate", "attention", "astronomy", "experimental", "functional", "improvement", "interactive",
+      "keyboardist", "magnificent", "perception", "overwhelming", "reliability", "spectacular", "streamlined", "transition", "uncertain", "versatility"
+    ]
+  }
+}
