@@ -18,10 +18,10 @@ export const MODIFIERS = Object.freeze({
   BLACKOUT: Object.freeze({
     id: "blackout",
     name: "Blackout",
-    shortLabel: "BLACKOUT",
-    description: "Words fade after appearing and must be remembered.",
+    shortLabel: "BLK",
+    description: "Words fade after two seconds. Remember and type them while hidden.",
     unlockLevel: 60,
-    implemented: false,
+    implemented: true,
   }),
   CHAIN: Object.freeze({
     id: "chain",
@@ -35,6 +35,10 @@ export const MODIFIERS = Object.freeze({
 
 export const QUICK_FINGERS_ID = MODIFIERS.QUICK_FINGERS.id;
 export const NO_BACKSPACE_ID = MODIFIERS.NO_BACKSPACE.id;
+export const BLACKOUT_ID = MODIFIERS.BLACKOUT.id;
+export const BLACKOUT_VISIBLE_MS = 1600;
+export const BLACKOUT_FADE_MS = 400;
+export const BLACKOUT_HIDDEN_AT_MS = BLACKOUT_VISIBLE_MS + BLACKOUT_FADE_MS;
 
 export function hasQuickFingers(level) {
   return getModifiersForLevel(level).includes(QUICK_FINGERS_ID);
@@ -50,8 +54,13 @@ export function getModifiersForLevel(level) {
     return [];
   }
   if (level < MODIFIERS.NO_BACKSPACE.unlockLevel) return [QUICK_FINGERS_ID];
-  const slotIndex = Math.floor((level - 42) / 5);
-  return [slotIndex % 2 === 0 ? NO_BACKSPACE_ID : QUICK_FINGERS_ID];
+  if (level < MODIFIERS.BLACKOUT.unlockLevel) {
+    const slotIndex = Math.floor((level - 42) / 5);
+    return [slotIndex % 2 === 0 ? NO_BACKSPACE_ID : QUICK_FINGERS_ID];
+  }
+  const cycle = [BLACKOUT_ID, QUICK_FINGERS_ID, NO_BACKSPACE_ID];
+  const slotIndex = Math.floor((level - 62) / 5);
+  return [cycle[slotIndex % cycle.length]];
 }
 
 export function getModifierById(id) {
@@ -93,13 +102,29 @@ export function getEffectiveSpawnInterval(baseIntervalMs, quickFingersActive) {
   return quickFingersActive ? Math.max(150, safeBase * 0.5) : safeBase;
 }
 
+export function getBlackoutVisibility(wordAgeMs) {
+  const safeAge = Number.isFinite(wordAgeMs) ? Math.max(0, wordAgeMs) : 0;
+  if (safeAge < BLACKOUT_VISIBLE_MS) {
+    return { phase: "visible", textOpacity: 1, hidden: false };
+  }
+  if (safeAge < BLACKOUT_HIDDEN_AT_MS) {
+    const fadeProgress = (safeAge - BLACKOUT_VISIBLE_MS) / BLACKOUT_FADE_MS;
+    return {
+      phase: "fading",
+      textOpacity: 1 - fadeProgress,
+      hidden: false,
+    };
+  }
+  return { phase: "hidden", textOpacity: 0, hidden: true };
+}
+
 export function applyForcedModifier(level, modifiers, forcedModifierId) {
   const assigned = Array.isArray(modifiers) ? [...modifiers] : [];
   const forcedModifier = getModifierById(forcedModifierId);
   if (
     level % 10 === 0 ||
     !forcedModifier?.implemented ||
-    ![QUICK_FINGERS_ID, NO_BACKSPACE_ID].includes(forcedModifierId)
+    ![QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID].includes(forcedModifierId)
   ) {
     return assigned;
   }
@@ -108,5 +133,7 @@ export function applyForcedModifier(level, modifiers, forcedModifierId) {
 
 export function isForcedModifierRequested(search = "") {
   const requested = new URLSearchParams(search).get("modifier");
-  return [QUICK_FINGERS_ID, NO_BACKSPACE_ID].includes(requested) ? requested : null;
+  return [QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID].includes(requested)
+    ? requested
+    : null;
 }

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import {
   applyForcedModifier,
+  BLACKOUT_FADE_MS,
+  BLACKOUT_HIDDEN_AT_MS,
+  BLACKOUT_ID,
+  BLACKOUT_VISIBLE_MS,
   getEffectiveSpawnInterval,
+  getBlackoutVisibility,
   getModifiersForLevel,
   getQuickFingersPhase,
   isForcedModifierRequested,
@@ -26,7 +31,16 @@ assert.deepEqual(getModifiersForLevel(47), [QUICK_FINGERS_ID]);
 assert.deepEqual(getModifiersForLevel(52), [NO_BACKSPACE_ID]);
 assert.deepEqual(getModifiersForLevel(57), [QUICK_FINGERS_ID]);
 assert.deepEqual(getModifiersForLevel(60), []);
-assert.deepEqual(getModifiersForLevel(62), [NO_BACKSPACE_ID]);
+assert.deepEqual(getModifiersForLevel(62), [BLACKOUT_ID]);
+assert.deepEqual(getModifiersForLevel(67), [QUICK_FINGERS_ID]);
+assert.deepEqual(getModifiersForLevel(72), [NO_BACKSPACE_ID]);
+assert.deepEqual(getModifiersForLevel(77), [BLACKOUT_ID]);
+assert.deepEqual(getModifiersForLevel(80), []);
+assert.deepEqual(getModifiersForLevel(82), [QUICK_FINGERS_ID]);
+assert.deepEqual(getModifiersForLevel(87), [NO_BACKSPACE_ID]);
+assert.deepEqual(getModifiersForLevel(92), [BLACKOUT_ID]);
+assert.deepEqual(getModifiersForLevel(97), [QUICK_FINGERS_ID]);
+assert.deepEqual(getModifiersForLevel(100), []);
 assert.deepEqual(getModifiersForLevel(22), getModifiersForLevel(22));
 
 const assigned = [];
@@ -67,6 +81,31 @@ for (const [elapsed, phase, active, remainingMs, burstCount] of phases) {
 assert.equal(getEffectiveSpawnInterval(1000, false), 1000);
 assert.equal(getEffectiveSpawnInterval(1000, true), 500);
 assert.equal(getEffectiveSpawnInterval(250, true), 150);
+assert.equal(BLACKOUT_VISIBLE_MS, 1600);
+assert.equal(BLACKOUT_FADE_MS, 400);
+assert.equal(BLACKOUT_HIDDEN_AT_MS, 2000);
+assert.deepEqual(getBlackoutVisibility(0), {
+  phase: "visible", textOpacity: 1, hidden: false,
+});
+assert.deepEqual(getBlackoutVisibility(1599), {
+  phase: "visible", textOpacity: 1, hidden: false,
+});
+assert.deepEqual(getBlackoutVisibility(1600), {
+  phase: "fading", textOpacity: 1, hidden: false,
+});
+assert.deepEqual(getBlackoutVisibility(1800), {
+  phase: "fading", textOpacity: 0.5, hidden: false,
+});
+assert.equal(getBlackoutVisibility(1999).phase, "fading");
+assert.ok(getBlackoutVisibility(1999).textOpacity < 0.01);
+assert.deepEqual(getBlackoutVisibility(2000), {
+  phase: "hidden", textOpacity: 0, hidden: true,
+});
+assert.deepEqual(getBlackoutVisibility(5000), {
+  phase: "hidden", textOpacity: 0, hidden: true,
+});
+assert.equal(getBlackoutVisibility(NaN).phase, "visible");
+assert.equal(getBlackoutVisibility(-100).phase, "visible");
 
 const base = generateLevel(22);
 const originalInterval = base.spawnIntervalMs;
@@ -78,6 +117,7 @@ assert.equal(generateBossLevel(20).modifiers, undefined);
 
 assert.deepEqual(applyForcedModifier(21, [], QUICK_FINGERS_ID), [QUICK_FINGERS_ID]);
 assert.deepEqual(applyForcedModifier(21, [], NO_BACKSPACE_ID), [NO_BACKSPACE_ID]);
+assert.deepEqual(applyForcedModifier(21, [], BLACKOUT_ID), [BLACKOUT_ID]);
 assert.deepEqual(
   applyForcedModifier(47, [QUICK_FINGERS_ID], NO_BACKSPACE_ID),
   [NO_BACKSPACE_ID],
@@ -87,11 +127,12 @@ assert.deepEqual(applyForcedModifier(20, [], NO_BACKSPACE_ID), []);
 assert.deepEqual(getModifiersForLevel(21), []);
 assert.equal(isForcedModifierRequested("?dev=1&modifier=no-backspace"), NO_BACKSPACE_ID);
 assert.equal(isForcedModifierRequested("?dev=1&modifier=quick-fingers"), QUICK_FINGERS_ID);
-assert.equal(isForcedModifierRequested("?dev=1&modifier=blackout"), null);
+assert.equal(isForcedModifierRequested("?dev=1&modifier=blackout"), BLACKOUT_ID);
 
 const gradeInputs = [
   { accuracy: 86.1 },
   { accuracy: 86.1, modifier: QUICK_FINGERS_ID, burstCount: 99, actualWPM: 200 },
+  { accuracy: 86.1, modifier: BLACKOUT_ID, hiddenWordsCompleted: 99 },
   { accuracy: 86.1, score: 999999, combo: 100, livesRemaining: 1 },
 ];
 assert.ok(gradeInputs.every((input) => calculateGrade(input) === "C"));

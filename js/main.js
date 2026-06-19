@@ -27,6 +27,7 @@ import {
 } from "./bossLoop.js";
 import {
   applyForcedModifier,
+  BLACKOUT_ID,
   isForcedModifierRequested,
   NO_BACKSPACE_ID,
   QUICK_FINGERS_ID,
@@ -99,7 +100,7 @@ function startLevel(levelNumber) {
   const config = { ...baseConfig, modifiers };
   const forcedModifier = (
     appState.devMode &&
-    [QUICK_FINGERS_ID, NO_BACKSPACE_ID].includes(appState.forcedModifierId) &&
+    [QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID].includes(appState.forcedModifierId) &&
     safeLevel % 10 !== 0
   );
   const words = selectWordsForLevel(appState.wordBank, config, safeLevel);
@@ -155,6 +156,9 @@ function finishLevel(game, success) {
     burstCount: isBoss ? 0 : game.modifierRuntime?.quickFingers?.burstCount || 0,
     abandonedWordCount: isBoss ? 0 : game.abandonedWordCount || 0,
     abandonedCharacters: isBoss ? 0 : game.abandonedCharacters || 0,
+    wordsHidden: isBoss ? 0 : game.blackoutStats?.wordsHidden || 0,
+    hiddenWordsCompleted: isBoss ? 0 : game.blackoutStats?.hiddenWordsCompleted || 0,
+    wordsMissedAfterFade: isBoss ? 0 : game.blackoutStats?.wordsMissedAfterFade || 0,
   };
   if (success && game.persistResult) {
     updateLevelResult(appState.save, game.levelNumber, appState.results);

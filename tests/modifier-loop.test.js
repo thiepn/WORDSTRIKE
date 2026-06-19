@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { NO_BACKSPACE_ID, QUICK_FINGERS_ID } from "../js/modifiers.js";
+import {
+  BLACKOUT_ID,
+  NO_BACKSPACE_ID,
+  QUICK_FINGERS_ID,
+} from "../js/modifiers.js";
 
 class ClassList {
   add() {}
@@ -119,6 +123,56 @@ assert.equal(game.modifierRuntime.quickFingers.phase, "complete");
 assert.equal(game.modifierRuntime.quickFingers.active, false);
 stopGameLoop();
 
+game = startLevelLoop(
+  62,
+  {
+    ...config,
+    wordCount: 1,
+    maxSimultaneousWords: 1,
+    modifiers: [BLACKOUT_ID],
+  },
+  ["memory"],
+  {},
+);
+assert.equal(game.phase, "MODIFIER_BRIEFING");
+while (game.phase === "MODIFIER_BRIEFING") frame();
+frame();
+assert.equal(game.words.length, 1);
+const blackoutWord = game.words[0];
+while (game.elapsedMs - blackoutWord.spawnedAtActiveMs < 1700) frame();
+assert.equal(blackoutWord.blackoutPhase, "fading");
+const blackoutAgeBeforePause = game.elapsedMs - blackoutWord.spawnedAtActiveMs;
+const blackoutOpacityBeforePause = blackoutWord.blackoutTextOpacity;
+appState.screen = Screens.PAUSED;
+for (let index = 0; index < 20; index += 1) frame();
+assert.equal(game.elapsedMs - blackoutWord.spawnedAtActiveMs, blackoutAgeBeforePause);
+assert.equal(blackoutWord.blackoutTextOpacity, blackoutOpacityBeforePause);
+appState.screen = Screens.PLAYING;
+while (!blackoutWord.blackoutHidden) frame();
+assert.equal(game.blackoutStats.wordsHidden, 1);
+for (let index = 0; index < 5; index += 1) frame();
+assert.equal(game.blackoutStats.wordsHidden, 1);
+stopGameLoop();
+
+game = startLevelLoop(
+  62,
+  {
+    ...config,
+    wordCount: 1,
+    maxSimultaneousWords: 1,
+    modifiers: [BLACKOUT_ID],
+  },
+  ["memory"],
+  {},
+);
+assert.deepEqual(game.blackoutStats, {
+  wordsHidden: 0,
+  hiddenWordsCompleted: 0,
+  wordsMissedAfterFade: 0,
+});
+assert.equal(game.words.length, 0);
+stopGameLoop();
+
 let outcome = null;
 game = startLevelLoop(
   42,
@@ -194,6 +248,7 @@ stopBossLoop();
 game = startLevelLoop(21, { ...config, modifiers: [] }, words, {});
 assert.equal(game.mode, "normal");
 assert.equal(game.modifierRuntime, null);
+assert.equal(game.blackoutStats, undefined);
 assert.equal(game.phase, "ACTIVE");
 assert.equal(frames.size, 1);
 stopGameLoop();

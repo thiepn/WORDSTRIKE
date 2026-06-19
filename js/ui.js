@@ -2,6 +2,9 @@ import { calculateAccuracy, calculateWPM } from "./scoring.js";
 import { generateBossLevel, generateLevel } from "./levelGenerator.js";
 import { selectBossPhrases } from "./wordBank.js";
 import {
+  BLACKOUT_FADE_MS,
+  BLACKOUT_ID,
+  BLACKOUT_VISIBLE_MS,
   getModifierById,
   getModifiersForLevel,
   NO_BACKSPACE_ID,
@@ -72,6 +75,8 @@ function renderDevPanel(selectedLevel, bossPhraseBank, forcedModifierId) {
       ["world", config.world],
       ["modifiers", config.modifiers.join(", ") || "none"],
       ["forcedModifier", forcedModifierId && !isBoss ? forcedModifierId : "none"],
+      ["blackoutVisibleMs", BLACKOUT_VISIBLE_MS],
+      ["blackoutFadeMs", BLACKOUT_FADE_MS],
     ];
   return `
     <aside class="dev-panel" aria-label="Developer level controls">
@@ -82,7 +87,7 @@ function renderDevPanel(selectedLevel, bossPhraseBank, forcedModifierId) {
           <button type="button" data-dev-action="launch">LAUNCH</button>
         </div>
         <div class="dev-quick-buttons">
-          ${[42, 52, 72, 22, 47, 87, 10, 50, 100].map((level) => `<button type="button" data-dev-level="${level}">${level}</button>`).join("")}
+          ${[62, 77, 92, 42, 52, 72, 22, 47, 87, 10, 50, 100].map((level) => `<button type="button" data-dev-level="${level}">${level}</button>`).join("")}
         </div>
         <div class="dev-force-options">
           <button type="button" class="dev-force-button ${forcedModifierId === QUICK_FINGERS_ID ? "active" : ""}" data-force-modifier="${QUICK_FINGERS_ID}" ${isBoss ? "disabled" : ""}>
@@ -90,6 +95,9 @@ function renderDevPanel(selectedLevel, bossPhraseBank, forcedModifierId) {
           </button>
           <button type="button" class="dev-force-button ${forcedModifierId === NO_BACKSPACE_ID ? "active" : ""}" data-force-modifier="${NO_BACKSPACE_ID}" ${isBoss ? "disabled" : ""}>
             FORCE NO BACKSPACE
+          </button>
+          <button type="button" class="dev-force-button ${forcedModifierId === BLACKOUT_ID ? "active" : ""}" data-force-modifier="${BLACKOUT_ID}" ${isBoss ? "disabled" : ""}>
+            FORCE BLACKOUT
           </button>
         </div>
         ${forcedModifierId && !isBoss ? `<span class="forced-modifier-label">FORCED MODIFIER: ${getModifierById(forcedModifierId)?.name.toUpperCase()}</span>` : ""}
@@ -113,7 +121,7 @@ export function renderLevelSelect(
 ) {
   const selectedModifiers = getModifiersForLevel(selectedLevel);
   if (
-    [QUICK_FINGERS_ID, NO_BACKSPACE_ID].includes(forcedModifierId) &&
+    [QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID].includes(forcedModifierId) &&
     selectedLevel % 10 !== 0 &&
     !selectedModifiers.includes(forcedModifierId)
   ) {
@@ -128,6 +136,7 @@ export function renderLevelSelect(
     const modifiers = getModifiersForLevel(level);
     const quickFingers = modifiers.includes(QUICK_FINGERS_ID);
     const noBackspace = modifiers.includes(NO_BACKSPACE_ID);
+    const blackout = modifiers.includes(BLACKOUT_ID);
     return `
       <button class="level-tile ${locked ? "locked" : ""} ${locked && devMode ? "dev-access" : ""} ${boss ? "boss" : ""} ${level === selectedLevel ? "selected" : ""}"
         data-level="${level}" ${locked && !devMode ? "disabled" : ""}>
@@ -136,6 +145,7 @@ export function renderLevelSelect(
         ${boss ? '<span class="boss-mark">◆ BOSS</span>' : ""}
         ${quickFingers ? '<span class="modifier-mark" title="Quick Fingers">Q</span>' : ""}
         ${noBackspace ? '<span class="modifier-mark no-backspace" title="No Backspace">NB</span>' : ""}
+        ${blackout ? '<span class="modifier-mark blackout" title="Blackout">BLK</span>' : ""}
       </button>`;
   }).join("");
   app().innerHTML = `
@@ -195,10 +205,11 @@ export function renderDevModeIndicator() {
 export function renderGameplayShell(levelNumber, lives, config, devMode = false, forcedModifier = false) {
   const quickFingers = config.modifiers?.includes(QUICK_FINGERS_ID);
   const noBackspace = config.modifiers?.includes(NO_BACKSPACE_ID);
-  const hasModifier = quickFingers || noBackspace;
+  const blackout = config.modifiers?.includes(BLACKOUT_ID);
+  const hasModifier = quickFingers || noBackspace || blackout;
   const modifier = getModifierById(config.modifiers?.[0]);
   app().innerHTML = `
-    <section class="screen game-screen ${hasModifier ? "has-modifier" : ""} ${noBackspace ? "no-backspace-mode" : ""}">
+    <section class="screen game-screen ${hasModifier ? "has-modifier" : ""} ${noBackspace ? "no-backspace-mode" : ""} ${blackout ? "blackout-mode" : ""}">
       <header class="hud">
         <div>
           <span class="micro-label">Level</span>
@@ -217,10 +228,15 @@ export function renderGameplayShell(levelNumber, lives, config, devMode = false,
         </div>
       </header>
       ${hasModifier ? `
-        <div class="modifier-hud ${noBackspace ? "no-backspace" : ""}" id="modifier-hud">
+        <div class="modifier-hud ${noBackspace ? "no-backspace" : ""} ${blackout ? "blackout" : ""}" id="modifier-hud">
           <strong>${modifier.name.toUpperCase()}${forcedModifier ? " // FORCED MODIFIER" : ""}</strong>
-          <span id="modifier-phase">${quickFingers ? "BRIEFING" : "ZERO RECOVERY"}</span>
+          <span id="modifier-phase">${quickFingers
+    ? "BRIEFING"
+    : blackout
+      ? "MEMORIZE THE WORDS"
+      : "ZERO RECOVERY"}</span>
           ${noBackspace ? '<span id="abandoned-count">LOST WORDS: 0</span>' : ""}
+          ${blackout ? '<span id="blackout-counts">VISIBLE 0 // FADING 0 // HIDDEN 0</span>' : ""}
           ${devMode ? '<small id="modifier-runtime-details"></small>' : ""}
         </div>` : ""}
       <div class="play-area" id="play-area">
@@ -232,7 +248,9 @@ export function renderGameplayShell(levelNumber, lives, config, devMode = false,
           <strong>${modifier.name.toUpperCase()}</strong>
           ${quickFingers
     ? "<p>SPAWN RATE SURGES IN BURSTS</p>"
-    : "<p>ONE WRONG KEY CORRUPTS THE TARGET<br>CORRUPTED WORDS CANNOT BE RECOVERED</p>"}
+    : noBackspace
+      ? "<p>ONE WRONG KEY CORRUPTS THE TARGET<br>CORRUPTED WORDS CANNOT BE RECOVERED</p>"
+      : "<p>WORDS VANISH AFTER TWO SECONDS<br>REMEMBER THEM BEFORE THEY DISAPPEAR</p>"}
         </div>` : ""}
     </section>`;
 }
@@ -303,6 +321,32 @@ export function updateHud(game) {
         `abandoned=${game.abandonedWordCount}`,
         `charactersLost=${game.abandonedCharacters}`,
         `recoverable=${recoverable}`,
+        `active=${game.words.length}`,
+        `lives=${game.lives}`,
+      ].join(" // ");
+    }
+  }
+  if (game.config.modifiers?.includes(BLACKOUT_ID) && modifierHud) {
+    const counts = { visible: 0, fading: 0, hidden: 0 };
+    for (const word of game.words) {
+      counts[word.blackoutPhase || "visible"] += 1;
+    }
+    const countElement = document.querySelector("#blackout-counts");
+    if (countElement) {
+      countElement.textContent = `VISIBLE ${counts.visible} // FADING ${counts.fading} // HIDDEN ${counts.hidden}`;
+    }
+    const details = document.querySelector("#modifier-runtime-details");
+    if (details) {
+      const target = game.words.find((word) => word.id === game.activeTargetId);
+      const targetAge = target
+        ? Math.max(0, game.elapsedMs - target.spawnedAtActiveMs)
+        : 0;
+      details.textContent = [
+        `targetPhase=${target?.blackoutPhase || "none"}`,
+        `targetAge=${Math.round(targetAge)}ms`,
+        `hidden=${game.blackoutStats.wordsHidden}`,
+        `hiddenCompleted=${game.blackoutStats.hiddenWordsCompleted}`,
+        `missedAfterFade=${game.blackoutStats.wordsMissedAfterFade}`,
         `active=${game.words.length}`,
         `lives=${game.lives}`,
       ].join(" // ");
@@ -432,6 +476,13 @@ export function renderResults(result, selectedIndex, handlers) {
             MODIFIER: NO BACKSPACE<br>
             WORDS ABANDONED: ${result.abandonedWordCount}<br>
             CHARACTERS LOST: ${result.abandonedCharacters}
+          </div>` : ""}
+        ${result.modifierIds?.includes(BLACKOUT_ID) ? `
+          <div class="result-modifier blackout">
+            MODIFIER: BLACKOUT<br>
+            WORDS HIDDEN: ${result.wordsHidden}<br>
+            HIDDEN WORDS COMPLETED: ${result.hiddenWordsCompleted}<br>
+            WORDS MISSED AFTER FADE: ${result.wordsMissedAfterFade}
           </div>` : ""}
         <div class="stats-grid">
           <div class="stat"><span class="micro-label">WPM</span><strong>${Math.round(result.wpm)}</strong></div>

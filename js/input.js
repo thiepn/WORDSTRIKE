@@ -7,7 +7,7 @@ import {
   renderBossPhrase,
   updateWordElement,
 } from "./renderer.js";
-import { NO_BACKSPACE_ID } from "./modifiers.js";
+import { BLACKOUT_ID, NO_BACKSPACE_ID } from "./modifiers.js";
 
 const IGNORED_KEYS = new Set([
   "Shift", "Control", "Alt", "Meta", "CapsLock", "Tab", "Escape", "Enter",
@@ -93,6 +93,14 @@ export function handleGameplayKey(event, game, settings, onWordCompleted) {
   updateWordElement(target, true);
 
   if (target.typedIndex >= target.text.length) {
+    if (
+      game.config.modifiers?.includes(BLACKOUT_ID) &&
+      target.blackoutHidden &&
+      !target.blackoutCompletedCounted
+    ) {
+      target.blackoutCompletedCounted = true;
+      game.blackoutStats.hiddenWordsCompleted += 1;
+    }
     const actualTimeSeconds = Math.max((game.elapsedMs - target.startedAt) / 1000, 0.05);
     game.score += calculateWordScore(target.text.length, actualTimeSeconds, game.combo);
     game.combo += 1;

@@ -37,10 +37,23 @@ export function updateWordElement(word, isActive) {
   position.style.transform = `translate(${word.x}px, ${word.y}px) translate(-50%, -50%)`;
   visual.classList.toggle("active", isActive);
   visual.classList.toggle("word-abandoned", word.abandoned === true);
+  visual.classList.toggle("word-blackout-visible", word.blackoutPhase === "visible");
+  visual.classList.toggle("word-blackout-fading", word.blackoutPhase === "fading");
+  visual.classList.toggle("word-blackout-hidden", word.blackoutHidden === true);
+  position.setAttribute(
+    "aria-label",
+    word.blackoutHidden ? "Hidden incoming word" : word.text,
+  );
   const typed = word.text.slice(0, word.typedIndex);
   const remaining = word.text.slice(word.typedIndex);
   visual.innerHTML = `
-    <span class="typed-letter">${typed}</span><span class="remaining-letter">${remaining}</span>
+    <span class="word-text" style="opacity:${word.blackoutTextOpacity ?? 1}" aria-hidden="${word.blackoutHidden === true}">
+      <span class="typed-letter">${typed}</span><span class="remaining-letter">${remaining}</span>
+    </span>
+    ${word.blackoutHidden ? `
+      <span class="word-blackout-marker" aria-hidden="true">&#9671;</span>
+      ${isActive ? `<span class="word-blackout-progress">${word.typedIndex} / ${word.text.length}</span>` : ""}
+    ` : ""}
     ${word.abandoned ? '<span class="corrupted-label">LOST</span>' : ""}`;
 }
 

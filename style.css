@@ -239,6 +239,12 @@ button {
   text-shadow: 0 0 8px var(--danger);
 }
 
+.modifier-mark.blackout {
+  color: var(--primary);
+  font-size: 8px;
+  text-shadow: 0 0 8px var(--primary);
+}
+
 .level-detail {
   z-index: 2;
   display: flex;
@@ -368,6 +374,21 @@ button {
 .modifier-hud.no-backspace strong {
   color: var(--danger);
   text-shadow: 0 0 8px rgb(255 71 87 / 35%);
+}
+
+.modifier-hud.blackout {
+  border-color: rgb(0 255 242 / 42%);
+  color: var(--primary);
+}
+
+.modifier-hud.blackout strong {
+  color: var(--primary);
+  text-shadow: 0 0 9px rgb(0 255 242 / 38%);
+}
+
+.blackout-mode .modifier-briefing strong {
+  color: var(--primary);
+  text-shadow: 0 0 18px rgb(0 255 242 / 62%);
 }
 
 .no-backspace-mode .modifier-briefing strong {
@@ -565,6 +586,59 @@ button {
 
 .word-visual.word-corruption-flash {
   animation: word-corruption 260ms steps(2, end);
+}
+
+.word-text {
+  display: inline-block;
+  transition: none;
+}
+
+.word-visual.word-blackout-fading {
+  border-color: rgb(255 60 172 / 28%);
+}
+
+.word-visual.word-blackout-hidden {
+  min-width: 34px;
+  min-height: 34px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.word-visual.word-blackout-hidden.active {
+  border-color: var(--secondary);
+  background: rgb(255 60 172 / 6%);
+  box-shadow: 0 0 14px rgb(255 60 172 / 20%);
+}
+
+.word-blackout-marker {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  color: var(--muted);
+  font-size: 17px;
+  text-shadow: 0 0 7px rgb(129 144 158 / 55%);
+}
+
+.word-blackout-hidden.active .word-blackout-marker {
+  color: var(--secondary);
+  text-shadow: 0 0 9px var(--secondary);
+}
+
+.word-blackout-progress {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--primary);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.word-visual.word-blackout-hidden.wrong .word-blackout-marker {
+  color: var(--danger);
+  text-shadow: 0 0 9px var(--danger);
 }
 
 @keyframes word-corruption {
@@ -781,6 +855,10 @@ button {
 
 .result-modifier.danger {
   color: var(--danger);
+}
+
+.result-modifier.blackout {
+  color: var(--primary);
 }
 
 .boss-screen {

@@ -9,6 +9,8 @@ import {
   flashQuickFingersBurst,
 } from "./renderer.js";
 import {
+  BLACKOUT_ID,
+  getBlackoutVisibility,
   getEffectiveSpawnInterval,
   getQuickFingersPhase,
   NO_BACKSPACE_ID,
@@ -34,8 +36,9 @@ function createModifierRuntime(config) {
 
 export function createGameState(levelNumber, config, words) {
   const hasModifier = config.modifiers?.some((id) => (
-    id === QUICK_FINGERS_ID || id === NO_BACKSPACE_ID
+    id === QUICK_FINGERS_ID || id === NO_BACKSPACE_ID || id === BLACKOUT_ID
   ));
+  const hasBlackout = config.modifiers?.includes(BLACKOUT_ID);
   return {
     mode: "normal",
     levelNumber,
@@ -60,6 +63,13 @@ export function createGameState(levelNumber, config, words) {
     modifierRuntime: createModifierRuntime(config),
     abandonedWordCount: 0,
     abandonedCharacters: 0,
+    ...(hasBlackout ? {
+      blackoutStats: {
+        wordsHidden: 0,
+        hiddenWordsCompleted: 0,
+        wordsMissedAfterFade: 0,
+      },
+    } : {}),
     coreX: 0,
     coreY: 0,
     lastTimestamp: null,
@@ -108,6 +118,7 @@ function spawnWord(game, dimensions) {
   const dy = game.coreY - y;
   const distance = Math.max(Math.hypot(dx, dy), 1);
   const speed = game.config.wordSpeedPxPerSec;
+  const hasBlackout = game.config.modifiers?.includes(BLACKOUT_ID);
   const word = {
     id: game.nextWordId,
     text: game.wordQueue[game.spawnedCount],
@@ -122,6 +133,14 @@ function spawnWord(game, dimensions) {
     abandonedAt: null,
     missedCharactersRecorded: false,
     coreArrivalProcessed: false,
+    ...(hasBlackout ? {
+      spawnedAtActiveMs: game.elapsedMs,
+      blackoutPhase: "visible",
+      blackoutTextOpacity: 1,
+      blackoutHidden: false,
+      blackoutHiddenCounted: false,
+      blackoutMissedAfterFadeCounted: false,
+    } : {}),
   };
   game.nextWordId += 1;
   game.spawnedCount += 1;
@@ -132,6 +151,14 @@ function spawnWord(game, dimensions) {
 export function processWordCoreArrival(game, word) {
   if (word.coreArrivalProcessed) return false;
   word.coreArrivalProcessed = true;
+  if (
+    game.config.modifiers?.includes(BLACKOUT_ID) &&
+    word.blackoutPhase !== "visible" &&
+    !word.blackoutMissedAfterFadeCounted
+  ) {
+    word.blackoutMissedAfterFadeCounted = true;
+    game.blackoutStats.wordsMissedAfterFade += 1;
+  }
   registerMissedWord(game, word);
   game.words = game.words.filter((candidate) => candidate.id !== word.id);
   if (game.activeTargetId === word.id) game.activeTargetId = null;
@@ -141,6 +168,21 @@ export function processWordCoreArrival(game, word) {
   flashDamage(appState.save.settings.screenShake);
   callbacks.onHudUpdate?.(game);
   return true;
+}
+
+export function updateBlackoutWordState(game, word) {
+  if (!game.config.modifiers?.includes(BLACKOUT_ID)) return word;
+  const visibility = getBlackoutVisibility(
+    game.elapsedMs - word.spawnedAtActiveMs,
+  );
+  word.blackoutPhase = visibility.phase;
+  word.blackoutTextOpacity = visibility.textOpacity;
+  word.blackoutHidden = visibility.hidden;
+  if (visibility.hidden && !word.blackoutHiddenCounted) {
+    word.blackoutHiddenCounted = true;
+    game.blackoutStats.wordsHidden += 1;
+  }
+  return word;
 }
 
 function finish(game, success) {
@@ -214,6 +256,7 @@ function tick(timestamp) {
 
   const deltaSeconds = deltaMs / 1000;
   for (const word of [...game.words]) {
+    if (game.blackoutStats) updateBlackoutWordState(game, word);
     word.x += word.vx * deltaSeconds;
     word.y += word.vy * deltaSeconds;
     if (Math.hypot(word.x - game.coreX, word.y - game.coreY) <= 42) {
