@@ -1,63 +1,24 @@
 import assert from "node:assert/strict";
-import { generateBossLevel, generateLevel } from "../js/levelGenerator.js";
-import {
-  loadBossPhraseBank,
-  selectBossPhrases,
-} from "../js/wordBank.js";
 import { readFile } from "node:fs/promises";
-
-const expected = {
-  10: [1, 3, 59.5],
-  20: [1, 4, 59],
-  30: [1, 4, 58.5],
-  40: [1, 5, 58],
-  50: [2, 5, 57.5],
-  60: [2, 6, 57],
-  70: [2, 6, 56.5],
-  80: [2, 7, 56],
-  90: [2, 7, 55.5],
-  100: [3, 8, 55],
-};
-for (const [level, values] of Object.entries(expected)) {
-  const config = generateBossLevel(Number(level));
-  assert.deepEqual(
-    [config.phraseCount, config.wordsPerPhrase, config.timeLimitSec],
-    values,
-  );
-}
-assert.equal(generateLevel(10).spawnIntervalMs, 1560);
-assert.equal(generateLevel(100).wordSpeedPxPerSec, 90);
-
-const sourceBank = JSON.parse(await readFile(new URL("../data/bossPhrases.json", import.meta.url), "utf8"));
-const realFetch = globalThis.fetch;
-globalThis.fetch = async () => ({
-  ok: true,
-  async json() { return sourceBank; },
-});
-const bank = await loadBossPhraseBank();
-assert.ok(bank.phrases.length >= 100);
-for (const level of [10, 50, 100]) {
-  const config = generateBossLevel(level);
-  const first = selectBossPhrases(bank, config, 12345);
-  const second = selectBossPhrases(bank, config, 12345);
-  assert.deepEqual(first, second);
-  assert.equal(first.length, config.phraseCount);
-  assert.equal(new Set(first).size, first.length);
-  assert.ok(first.every((phrase) => phrase.split(" ").length === config.wordsPerPhrase));
-}
-
-globalThis.fetch = async () => { throw new Error("offline"); };
-const fallback = await loadBossPhraseBank();
-globalThis.fetch = realFetch;
-assert.ok(fallback.phrases.length > 0);
+import {
+  addBossTimeoutMisses,
+  createBossGameState,
+} from "../js/bossLoop.js";
+import { handleBossKey } from "../js/input.js";
+import { getBossPhraseSizeClass } from "../js/renderer.js";
 
 class ClassList {
   constructor() { this.values = new Set(); }
-  add(value) { this.values.add(value); }
-  remove(value) { this.values.delete(value); }
+  add(...values) { values.forEach((value) => this.values.add(value)); }
+  remove(...values) { values.forEach((value) => this.values.delete(value)); }
   toggle(value, force) { force ? this.add(value) : this.remove(value); }
+  contains(value) { return this.values.has(value); }
 }
-const phraseElement = { innerHTML: "" };
+
+const phraseElement = {
+  innerHTML: "",
+  classList: new ClassList(),
+};
 const progressElement = { style: {} };
 const frameElement = { classList: new ClassList(), offsetWidth: 1 };
 globalThis.document = {
@@ -70,12 +31,10 @@ globalThis.document = {
 };
 globalThis.window = { setTimeout() {} };
 
-const { handleBossKey } = await import("../js/input.js");
-const { createBossGameState, addBossTimeoutMisses } = await import("../js/bossLoop.js");
 const inputGame = createBossGameState(
   10,
-  { timeLimitSec: 59.5 },
-  ["go now"],
+  { timeLimitSec: 9, totalWordCount: 2 },
+  ["quantum vector"],
 );
 inputGame.phase = "ACTIVE";
 let completed = 0;
@@ -86,24 +45,23 @@ const press = (key, strictMode = false) => handleBossKey(
   () => { completed += 1; },
 );
 
-press("g");
+press("q");
 const stablePhraseMarkup = phraseElement.innerHTML;
+const stableSizeClasses = [...phraseElement.classList.values];
 assert.match(stablePhraseMarkup, /boss-word-group/);
 assert.match(stablePhraseMarkup, /boss-char/);
 assert.match(stablePhraseMarkup, /boss-space/);
 assert.match(stablePhraseMarkup, /boss-wrap-opportunity/);
+assert.equal(phraseElement.classList.contains("boss-phrase-size-normal"), true);
 press("x");
 assert.equal(inputGame.combo, 0);
 assert.equal(inputGame.totalKeystrokes, 2);
-press("o");
-assert.equal(phraseElement.innerHTML, stablePhraseMarkup);
-press(" ");
-assert.equal(phraseElement.innerHTML, stablePhraseMarkup);
-assert.equal(inputGame.combo, 1);
-for (const key of "now") press(key);
+for (const key of "uantum vector") press(key);
 assert.equal(completed, 1);
 assert.equal(inputGame.combo, 2);
-assert.equal(inputGame.correctKeystrokes, 6);
+assert.equal(inputGame.correctKeystrokes, "quantum vector".length);
+assert.equal(phraseElement.innerHTML, stablePhraseMarkup);
+assert.deepEqual([...phraseElement.classList.values], stableSizeClasses);
 
 inputGame.combo = 5;
 press("x", true);
@@ -111,12 +69,30 @@ assert.equal(inputGame.combo, 0);
 
 const timeoutGame = createBossGameState(
   50,
-  { timeLimitSec: 57.5 },
-  ["alpha beta", "gamma ray"],
+  { timeLimitSec: 24 },
+  ["abstraction biometrics", "configuration methodology"],
 );
 timeoutGame.phraseCharIndex = 3;
-assert.equal(addBossTimeoutMisses(timeoutGame), 16);
+const expectedMisses = (
+  timeoutGame.phrases[0].length - 3 + timeoutGame.phrases[1].length
+);
+assert.equal(addBossTimeoutMisses(timeoutGame), expectedMisses);
 assert.equal(addBossTimeoutMisses(timeoutGame), 0);
-assert.equal(timeoutGame.missedCharacters, 16);
+assert.equal(timeoutGame.missedCharacters, expectedMisses);
+assert.deepEqual(timeoutGame.segments, timeoutGame.phrases);
 
-console.log("Boss generation, phrase selection, fallback, input, and timeout tests passed.");
+assert.equal(getBossPhraseSizeClass(75), "boss-phrase-size-normal");
+assert.equal(getBossPhraseSizeClass(76), "boss-phrase-size-dense");
+assert.equal(getBossPhraseSizeClass(111), "boss-phrase-size-extreme");
+
+const css = await readFile(new URL("../style.css", import.meta.url), "utf8");
+assert.match(css, /\.boss-phrase\s*\{[^}]*min-height:\s*3\.6em/s);
+assert.match(css, /\.boss-word-group\s*\{[^}]*white-space:\s*nowrap/s);
+assert.match(css, /\.boss-char\s*\{[^}]*width:\s*1ch[^}]*min-width:\s*1ch/s);
+assert.match(css, /\.boss-phrase-size-normal/);
+assert.match(css, /\.boss-phrase-size-dense/);
+assert.match(css, /\.boss-phrase-size-extreme/);
+assert.match(css, /\.boss-phrase\s*\{[^}]*overflow:\s*visible/s);
+assert.doesNotMatch(css, /\.boss-typed\s*\{[^}]*font-(?:size|weight)/s);
+
+console.log("Boss input, timeout accounting, immutable markup, and stable sizing tests passed.");

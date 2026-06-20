@@ -1021,7 +1021,7 @@ button {
   place-items: center;
   min-height: 0;
   padding: 40px;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .boss-arena::before,
@@ -1058,13 +1058,42 @@ button {
   animation: boss-intro-pulse 450ms ease-out;
 }
 
+.boss-intro strong,
+.boss-intro span,
+.boss-intro p,
+.boss-intro small {
+  display: block;
+}
+
+.boss-intro span {
+  margin-top: 18px;
+  color: var(--secondary);
+  font-size: clamp(18px, 2.6vw, 30px);
+  letter-spacing: 0.14em;
+}
+
+.boss-intro p {
+  margin: 12px 0 0;
+  color: var(--text);
+  font-size: clamp(12px, 1.8vw, 20px);
+  letter-spacing: 0.12em;
+  text-shadow: none;
+}
+
+.boss-intro small {
+  margin-top: 12px;
+  color: var(--danger);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+}
+
 @keyframes boss-intro-pulse {
   from { opacity: 0; transform: scale(0.92); }
 }
 
 .boss-phrase-frame {
   width: min(1000px, 88vw);
-  padding: clamp(34px, 6vw, 72px);
+  padding: clamp(26px, 4vw, 52px);
   border: 1px solid var(--secondary);
   background: rgb(10 14 20 / 88%);
   box-shadow: 0 0 36px rgb(255 60 172 / 15%), inset 0 0 36px rgb(255 60 172 / 4%);
@@ -1095,13 +1124,25 @@ button {
 .boss-phrase {
   width: 100%;
   max-width: 920px;
-  min-height: 2.4em;
+  min-height: 3.6em;
   margin: 0 auto;
-  font-size: clamp(30px, 4.2vw, 58px);
   font-weight: 700;
   line-height: 1.2;
   font-variant-ligatures: none;
   text-align: center;
+  overflow: visible;
+}
+
+.boss-phrase-size-normal {
+  font-size: clamp(28px, 3.5vw, 50px);
+}
+
+.boss-phrase-size-dense {
+  font-size: clamp(25px, 3vw, 42px);
+}
+
+.boss-phrase-size-extreme {
+  font-size: clamp(22px, 2.45vw, 34px);
 }
 
 .boss-word-group {

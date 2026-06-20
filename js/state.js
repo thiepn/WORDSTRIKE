@@ -15,7 +15,7 @@ export const appState = {
   developerSeed: null,
   save: null,
   wordBank: null,
-  bossPhraseBank: null,
+  bossWordBank: null,
   currentLevel: 1,
   game: null,
   results: null,
@@ -66,6 +66,7 @@ export function clearAttemptRuntime(game) {
     game.abandonedWordCount = 0;
     game.abandonedCharacters = 0;
   } else if (game.mode === "boss") {
+    if (Array.isArray(game.segments)) game.segments.length = 0;
     if (Array.isArray(game.phrases)) game.phrases.length = 0;
     game.currentPhrase = "";
     game.transitionElapsedMs = 0;

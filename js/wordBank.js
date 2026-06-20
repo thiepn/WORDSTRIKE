@@ -1,20 +1,13 @@
+import {
+  EMERGENCY_BOSS_WORDS,
+  validateBossVocabulary,
+} from "./bossGenerator.js";
+import { mixSeed, shuffleSeeded } from "./random.js";
+
 const FALLBACK_WORDS = [
   "arc", "bit", "code", "dash", "echo", "flux", "glow", "grid", "laser", "neon",
   "pixel", "pulse", "quick", "react", "shift", "spark", "strike", "target", "vector",
   "velocity", "keyboard", "midnight", "overdrive", "precision", "starlight",
-];
-
-const FALLBACK_BOSS_PHRASES = [
-  { tier: 1, text: "the quiet storm" },
-  { tier: 1, text: "light fills the room" },
-  { tier: 2, text: "follow the road through rain" },
-  { tier: 2, text: "the morning opens every door" },
-  { tier: 3, text: "steady hands guide the signal home" },
-  { tier: 3, text: "bright currents move beneath the surface" },
-  { tier: 4, text: "careful observation reveals the hidden pattern" },
-  { tier: 4, text: "precision transforms uncertainty into reliable progress" },
-  { tier: 5, text: "patient coordination sustains the complex communication network" },
-  { tier: 5, text: "the architecture of memory persists beyond conscious thought" },
 ];
 
 export async function loadWordBank() {
@@ -30,68 +23,30 @@ export async function loadWordBank() {
   }
 }
 
-export async function loadBossPhraseBank() {
+export async function loadBossWordBank() {
   try {
-    const response = await fetch(new URL("../data/bossPhrases.json", import.meta.url));
-    if (!response.ok) throw new Error(`Boss phrase request failed: ${response.status}`);
+    const response = await fetch(new URL("../data/bossWords.json", import.meta.url));
+    if (!response.ok) throw new Error(`Boss vocabulary request failed: ${response.status}`);
     const data = await response.json();
-    if (!Array.isArray(data?.phrases)) throw new Error("Invalid boss phrase bank");
-    const phrases = data.phrases.filter((entry) => (
-      Number.isInteger(entry?.tier) &&
-      entry.tier >= 1 &&
-      entry.tier <= 5 &&
-      typeof entry.text === "string" &&
-      /^[a-z]+(?: [a-z]+)*$/.test(entry.text.trim())
-    )).map((entry) => ({ tier: entry.tier, text: entry.text.trim() }));
-    if (!phrases.length) throw new Error("Boss phrase bank contains no usable phrases");
-    return { phrases };
+    const validation = validateBossVocabulary(data);
+    if (!validation.valid) {
+      throw new Error(`Invalid boss vocabulary: ${validation.errors.join("; ")}`);
+    }
+    return {
+      schemaVersion: data.schemaVersion ?? 1,
+      source: "dedicated",
+      words: validation.entries,
+      bucketCounts: validation.bucketCounts,
+    };
   } catch (error) {
-    console.warn("Using fallback boss phrase bank.", error);
-    return { phrases: FALLBACK_BOSS_PHRASES };
+    console.warn("Using difficult emergency boss vocabulary.", error);
+    return {
+      schemaVersion: 1,
+      source: "emergency",
+      words: EMERGENCY_BOSS_WORDS.map((entry) => ({ ...entry })),
+      bucketCounts: [],
+    };
   }
-}
-
-export function selectBossPhrases(bank, config, attemptSeed = config.level * 104729) {
-  const valid = (bank?.phrases || []).filter((entry) => (
-    entry.tier === config.wordTier &&
-    typeof entry.text === "string" &&
-    /^[a-z]+(?: [a-z]+)*$/.test(entry.text)
-  ));
-  const sameOrLowerTier = (bank?.phrases || []).filter((entry) => (
-    entry.tier <= config.wordTier &&
-    typeof entry.text === "string" &&
-    /^[a-z]+(?: [a-z]+)*$/.test(entry.text)
-  ));
-  const initialSource = valid.length >= config.phraseCount
-    ? valid
-    : sameOrLowerTier.length
-      ? sameOrLowerTier
-      : FALLBACK_BOSS_PHRASES;
-  let unique = [...new Map(initialSource.map((entry) => [entry.text, entry])).values()];
-  if (unique.length < config.phraseCount) {
-    const supplements = FALLBACK_BOSS_PHRASES.filter((entry) => entry.tier <= config.wordTier);
-    unique = [...new Map([...unique, ...supplements].map((entry) => [entry.text, entry])).values()];
-  }
-  const ranked = unique
-    .map((entry) => ({
-      ...entry,
-      distance: Math.abs(entry.text.split(" ").length - config.wordsPerPhrase),
-    }))
-    .sort((a, b) => a.distance - b.distance || a.text.localeCompare(b.text));
-  const exact = ranked.filter((entry) => entry.distance === 0);
-  const closestDistance = ranked[0]?.distance ?? 0;
-  const preferred = ranked.filter((entry) => entry.distance <= closestDistance + 1);
-  const candidates = exact.length >= config.phraseCount
-    ? exact
-    : preferred.length >= config.phraseCount
-      ? preferred
-      : ranked;
-  const ordered = shuffleSeeded(candidates, mixSeed(attemptSeed, config.level * 104729));
-  const selected = [];
-  for (let index = 0; index < config.phraseCount; index += 1) {
-    selected.push(ordered[index % ordered.length]?.text || FALLBACK_BOSS_PHRASES[index].text);
-  }
-  return selected;
 }
 
 function isValidWord(word) {
@@ -153,4 +108,3 @@ export function createNormalWordAttempt(bank, config, attemptSeed) {
 export function selectWordsForLevel(bank, config, attemptSeed) {
   return createNormalWordAttempt(bank, config, attemptSeed).spawnQueue;
 }
-import { mixSeed, shuffleSeeded } from "./random.js";

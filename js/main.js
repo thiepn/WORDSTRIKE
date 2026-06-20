@@ -13,15 +13,14 @@ import {
   shouldPersistLevelResult,
 } from "./state.js";
 import {
-  calculateBossTiming,
   generateBossLevel,
   generateLevel,
 } from "./levelGenerator.js";
+import { generateBossEncounter } from "./bossGenerator.js";
 import { loadSave, resetProgress, updateLevelResult, updateSetting } from "./storage.js";
 import {
-  loadBossPhraseBank,
+  loadBossWordBank,
   loadWordBank,
-  selectBossPhrases,
   createNormalWordAttempt,
 } from "./wordBank.js";
 import { calculateAccuracy, calculateGrade, calculateWPM } from "./scoring.js";
@@ -162,17 +161,27 @@ function startLevel(levelNumber) {
 function startBossLevel(levelNumber, legitimatelyUnlocked) {
   const baseConfig = generateBossLevel(levelNumber);
   const attemptSeed = getAttemptSeed();
-  const phrases = selectBossPhrases(appState.bossPhraseBank, baseConfig, attemptSeed);
-  const timing = calculateBossTiming(levelNumber, phrases);
+  const encounter = generateBossEncounter(
+    appState.bossWordBank,
+    levelNumber,
+    attemptSeed,
+  );
+  const phrases = encounter.segments;
   const config = {
     ...baseConfig,
     attemptSeed,
-    baselineTimeLimitSec: baseConfig.timeLimitSec,
-    timeLimitSec: timing.effectiveTimeLimitSec,
-    ...timing,
+    vocabularySource: appState.bossWordBank?.source || "dedicated",
+    timeLimitSec: encounter.timing.effectiveTimeLimitSec,
+    generationAttempt: encounter.generationAttempt,
+    fallbackUsed: encounter.fallbackUsed,
+    ...encounter.metrics,
+    ...encounter.timing,
   };
   changeScreen(Screens.PLAYING);
-  renderBossShell(levelNumber, config, appState.devMode, { attemptSeed, phrases });
+  renderBossShell(levelNumber, config, appState.devMode, {
+    attemptSeed,
+    encounter,
+  });
   const game = startBossLoop(levelNumber, config, phrases, {
     onUpdate: updateBossHud,
     onEnd: finishLevel,
@@ -289,7 +298,7 @@ function renderCurrentScreen() {
       appState.save,
       appState.levelSelection,
       appState.devMode,
-      appState.bossPhraseBank,
+      appState.bossWordBank,
       appState.forcedModifierId,
       appState.developerSeed,
       {
@@ -447,9 +456,9 @@ async function bootstrap() {
     ? isForcedModifierRequested(window.location.search)
     : null;
   appState.save = loadSave();
-  [appState.wordBank, appState.bossPhraseBank] = await Promise.all([
+  [appState.wordBank, appState.bossWordBank] = await Promise.all([
     loadWordBank(),
-    loadBossPhraseBank(),
+    loadBossWordBank(),
   ]);
   document.addEventListener("keydown", handleGlobalKeydown);
   renderCurrentScreen();

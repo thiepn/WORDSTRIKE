@@ -1,10 +1,9 @@
 import { calculateAccuracy, calculateWPM } from "./scoring.js";
 import {
-  calculateBossTiming,
   generateBossLevel,
   generateLevel,
 } from "./levelGenerator.js";
-import { selectBossPhrases } from "./wordBank.js";
+import { generateBossEncounter } from "./bossGenerator.js";
 import {
   BLACKOUT_FADE_MS,
   BLACKOUT_ID,
@@ -52,34 +51,37 @@ export function renderTitle(menuIndex, handlers) {
 
 function renderDevPanel(
   selectedLevel,
-  bossPhraseBank,
+  bossWordBank,
   forcedModifierId,
   developerSeed,
 ) {
   const isBoss = selectedLevel % 10 === 0;
   const config = isBoss ? generateBossLevel(selectedLevel) : generateLevel(selectedLevel);
   const previewSeed = developerSeed || selectedLevel * 104729;
-  const phrases = isBoss
-    ? selectBossPhrases(bossPhraseBank, config, previewSeed)
-    : [];
-  const timing = isBoss ? calculateBossTiming(selectedLevel, phrases) : null;
+  const encounter = isBoss
+    ? generateBossEncounter(bossWordBank, selectedLevel, previewSeed)
+    : null;
   const fields = isBoss
     ? [
       ["level", selectedLevel],
       ["bossIndex", config.bossIndex],
-      ["phraseCount", config.phraseCount],
-      ["wordsPerPhrase", config.wordsPerPhrase],
-      ["baselineTimeLimitSec", config.timeLimitSec],
+      ["segmentCount", config.segmentCount],
+      ["wordsPerSegment", config.wordsPerSegment],
+      ["totalWordCount", config.totalWordCount],
+      ["minimumWordLength", config.minimumWordLength],
+      ["requiredAverageWordLength", config.requiredAverageWordLength],
+      ["minimumLongestWord", config.minimumLongestWord],
       ["attemptSeed", previewSeed],
-      ["totalRequiredCharacters", timing.totalRequiredCharacters],
-      ["bossTargetWPM", timing.bossTargetWPM],
-      ["idealTypingSeconds", timing.idealTypingSeconds.toFixed(2)],
-      ["transitionAllowance", timing.transitionAllowanceSeconds.toFixed(2)],
-      ["effectiveTimeLimitSec", timing.effectiveTimeLimitSec.toFixed(2)],
-      ["wordTier", config.wordTier],
-      ["world", config.world],
-      ["totalCharacters", phrases.reduce((sum, phrase) => sum + phrase.length, 0)],
-      ["totalWords", phrases.reduce((sum, phrase) => sum + phrase.split(" ").length, 0)],
+      ["minimumSelectedWordLength", encounter.metrics.minimumSelectedWordLength],
+      ["averageSelectedWordLength", encounter.metrics.averageSelectedWordLength.toFixed(2)],
+      ["longestSelectedWord", encounter.metrics.longestSelectedWord],
+      ["totalRequiredCharacters", encounter.metrics.totalRequiredCharacters],
+      ["targetWPM", config.targetWPM],
+      ["idealTypingSeconds", encounter.timing.idealTypingSeconds.toFixed(2)],
+      ["transitionAllowance", encounter.timing.transitionAllowanceSeconds.toFixed(2)],
+      ["effectiveTimeLimitSec", encounter.timing.effectiveTimeLimitSec.toFixed(2)],
+      ["generationAttempt", encounter.generationAttempt],
+      ["fallbackUsed", encounter.fallbackUsed],
     ]
     : [
       ["level", selectedLevel],
@@ -108,7 +110,7 @@ function renderDevPanel(
           <button type="button" data-dev-action="launch">LAUNCH</button>
         </div>
         <div class="dev-quick-buttons">
-          ${[82, 45, 99, 62, 77, 92, 42, 52, 72, 22, 10, 100].map((level) => `<button type="button" data-dev-level="${level}">${level}</button>`).join("")}
+          ${[10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 22, 42, 62, 82, 99].map((level) => `<button type="button" data-dev-level="${level}">${level}</button>`).join("")}
         </div>
         <div class="dev-force-options">
           <button type="button" class="dev-force-button ${forcedModifierId === QUICK_FINGERS_ID ? "active" : ""}" data-force-modifier="${QUICK_FINGERS_ID}" ${isBoss ? "disabled" : ""}>
@@ -130,7 +132,13 @@ function renderDevPanel(
         <dl class="dev-config">
           ${fields.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join("")}
         </dl>
-        ${isBoss ? `<div class="dev-phrases"><span class="micro-label">Selected phrases</span>${phrases.map((phrase) => `<code>${phrase}</code>`).join("")}</div>` : ""}
+        ${isBoss ? `
+          <div class="dev-phrases">
+            <span class="micro-label">Selected segments</span>
+            ${encounter.segments.map((segment, index) => `<code>${index + 1}: ${segment}</code>`).join("")}
+            <span class="micro-label">Words and lengths</span>
+            <code>${encounter.words.map((word) => `${word} (${word.length})`).join(", ")}</code>
+          </div>` : ""}
       </div>
     </aside>`;
 }
@@ -139,7 +147,7 @@ export function renderLevelSelect(
   save,
   selectedLevel,
   devMode,
-  bossPhraseBank,
+  bossWordBank,
   forcedModifierId,
   developerSeed,
   handlers,
@@ -185,7 +193,7 @@ export function renderLevelSelect(
         ${menuButton("BACK", "back")}
       </header>
       ${devMode
-    ? renderDevPanel(selectedLevel, bossPhraseBank, forcedModifierId, developerSeed)
+    ? renderDevPanel(selectedLevel, bossWordBank, forcedModifierId, developerSeed)
     : ""}
       <div class="level-detail ${selectedModifier ? "has-modifier" : ""}">
         ${selectedModifier
@@ -452,12 +460,35 @@ export function updateHud(game) {
 
 function bossIntroLabel(game) {
   const elapsed = game.introElapsedMs;
-  if (elapsed < 650) return `BOSS NODE ${game.levelNumber}`;
-  if (elapsed < 1100) return "PHRASE PROTOCOL";
-  if (elapsed < 1550) return "3";
-  if (elapsed < 2000) return "2";
-  if (elapsed < 2450) return "1";
+  if (elapsed < 1300) return "BOSS ENCOUNTER";
+  if (elapsed < 1750) return "3";
+  if (elapsed < 2150) return "2";
+  if (elapsed < 2550) return "1";
   return "TYPE";
+}
+
+function bossDiagnosticText(config, attempt) {
+  const encounter = attempt.encounter;
+  if (!encounter) return "";
+  return [
+    `level=${config.level}`,
+    `seed=${attempt.attemptSeed}`,
+    `vocabulary=${config.vocabularySource || "dedicated"}`,
+    `profile=${config.segmentCount}x${config.wordsPerSegment},min${config.minimumWordLength},avg${config.requiredAverageWordLength},long${config.minimumLongestWord}`,
+    `words=${config.totalWordCount}`,
+    `selectedMin=${encounter.metrics.minimumSelectedWordLength}`,
+    `selectedAvg=${encounter.metrics.averageSelectedWordLength.toFixed(2)}`,
+    `selectedLongest=${encounter.metrics.longestSelectedWord}`,
+    `characters=${encounter.metrics.totalRequiredCharacters}`,
+    `targetWPM=${config.targetWPM}`,
+    `ideal=${encounter.timing.idealTypingSeconds.toFixed(2)}s`,
+    `transitions=${encounter.timing.transitionAllowanceSeconds.toFixed(2)}s`,
+    `effective=${encounter.timing.effectiveTimeLimitSec.toFixed(2)}s`,
+    `attempt=${encounter.generationAttempt}`,
+    `fallback=${encounter.fallbackUsed}`,
+    `segments=${encounter.segments.join(" | ")}`,
+    `lengths=${encounter.words.map((word) => `${word}:${word.length}`).join(",")}`,
+  ].join(" // ");
 }
 
 export function renderBossShell(levelNumber, config, devMode = false, attempt = {}) {
@@ -465,35 +496,36 @@ export function renderBossShell(levelNumber, config, devMode = false, attempt = 
     <section class="screen boss-screen">
       <header class="boss-hud">
         <div>
-          <span class="micro-label">Boss node</span>
-          <span class="boss-hud-value">${String(levelNumber).padStart(2, "0")}</span><br>
-          <span id="boss-phrase-count">PHRASE 1 / ${config.phraseCount}</span>
+          <span class="boss-hud-value">BOSS ${config.bossIndex} / 10</span><br>
+          <span id="boss-phrase-count">SEQUENCE 1 / ${config.segmentCount}</span>
+          <span>&nbsp; WORDS <span class="boss-hud-value" id="boss-word-count">0 / ${config.totalWordCount}</span></span>
         </div>
         <div class="boss-timer-wrap">
-          <span class="micro-label">Time remaining</span>
+          <span class="micro-label">Time</span>
           <strong class="boss-timer" id="boss-timer">${config.timeLimitSec.toFixed(1)}</strong>
         </div>
         <div class="boss-hud-right">
           <span>SCORE <span class="boss-hud-value" id="boss-score">0</span></span><br>
           <span>COMBO <span class="boss-hud-value" id="boss-combo">0</span></span>
+          <span>&nbsp; WPM <span class="boss-hud-value" id="boss-wpm">0</span></span>
           <span>&nbsp; ACC <span class="boss-hud-value" id="boss-accuracy">100%</span></span>
         </div>
       </header>
       ${devMode ? `
         <aside class="dev-runtime-panel boss-dev-runtime" id="dev-runtime-panel">
-          seed=${attempt.attemptSeed} // totalCharacters=${config.totalRequiredCharacters}
-          // targetWPM=${config.bossTargetWPM}
-          // ideal=${config.idealTypingSeconds.toFixed(2)}s
-          // transitions=${config.transitionAllowanceSeconds.toFixed(2)}s
-          // effective=${config.effectiveTimeLimitSec.toFixed(2)}s
-          // phrases=${attempt.phrases?.join(" | ")}
+          ${bossDiagnosticText(config, attempt)}
         </aside>` : ""}
       <div class="boss-arena">
-        <div class="boss-intro" id="boss-intro">BOSS NODE ${levelNumber}</div>
+        <div class="boss-intro" id="boss-intro">
+          <strong id="boss-intro-title">BOSS ENCOUNTER</strong>
+          <span>ADVANCED VOCABULARY</span>
+          <p>COMPLETE EVERY SEQUENCE BEFORE TIME EXPIRES</p>
+          ${config.bossIndex >= 8 ? "<small>DIFFICULTY: EXTREME</small>" : ""}
+        </div>
         <div class="boss-phrase-frame">
           <div class="boss-phrase" id="boss-phrase" aria-label="Boss phrase"></div>
           <div class="boss-progress"><div id="boss-progress-fill"></div></div>
-          <div class="boss-instruction" id="boss-instruction">TYPE THE PHRASE</div>
+          <div class="boss-instruction" id="boss-instruction">TYPE THE SEQUENCE</div>
         </div>
       </div>
     </section>`;
@@ -505,6 +537,7 @@ export function updateBossHud(game) {
     game.totalKeystrokes,
     game.missedCharacters,
   );
+  const wpm = calculateWPM(game.correctCharacters, game.elapsedMs);
   const timer = document.querySelector("#boss-timer");
   if (timer) {
     timer.textContent = (game.remainingMs / 1000).toFixed(1);
@@ -512,21 +545,28 @@ export function updateBossHud(game) {
     timer.classList.toggle("danger", game.remainingMs <= 5000);
   }
   const intro = document.querySelector("#boss-intro");
+  const introTitle = document.querySelector("#boss-intro-title");
   const frame = document.querySelector(".boss-phrase-frame");
-  if (intro) {
-    intro.textContent = bossIntroLabel(game);
-    intro.hidden = game.phase !== "INTRO";
-  }
+  if (introTitle) introTitle.textContent = bossIntroLabel(game);
+  if (intro) intro.hidden = game.phase !== "INTRO";
   if (frame) {
     frame.classList.toggle("hidden", game.phase === "INTRO");
     frame.classList.toggle("transition", game.phase === "TRANSITION");
   }
+  const completedWords = game.phrases
+    .slice(0, game.phraseIndex)
+    .reduce((sum, segment) => sum + segment.split(" ").length, 0);
+  const activePrefix = game.currentPhrase.slice(0, game.phraseCharIndex);
+  const activeCompletedWords = (activePrefix.match(/ /g) || []).length +
+    (game.phraseCharIndex >= game.currentPhrase.length && game.currentPhrase.length ? 1 : 0);
   const values = {
-    "#boss-phrase-count": `PHRASE ${Math.min(game.phraseIndex + 1, game.phrases.length)} / ${game.phrases.length}`,
+    "#boss-phrase-count": `SEQUENCE ${Math.min(game.phraseIndex + 1, game.phrases.length)} / ${game.phrases.length}`,
+    "#boss-word-count": `${Math.min(completedWords + activeCompletedWords, game.config.totalWordCount)} / ${game.config.totalWordCount}`,
     "#boss-score": game.score.toLocaleString(),
     "#boss-combo": game.combo,
+    "#boss-wpm": Math.round(wpm),
     "#boss-accuracy": `${accuracy.toFixed(1)}%`,
-    "#boss-instruction": game.phase === "TRANSITION" ? "PHRASE COMPLETE" : "TYPE THE PHRASE",
+    "#boss-instruction": game.phase === "TRANSITION" ? "SEQUENCE COMPLETE" : "TYPE THE SEQUENCE",
   };
   for (const [selector, value] of Object.entries(values)) {
     const element = document.querySelector(selector);
@@ -534,15 +574,22 @@ export function updateBossHud(game) {
   }
   const devRuntime = document.querySelector("#dev-runtime-panel");
   if (devRuntime) {
-    devRuntime.textContent = [
-      `seed=${game.attemptSeed}`,
-      `totalCharacters=${game.config.totalRequiredCharacters}`,
-      `targetWPM=${game.config.bossTargetWPM}`,
-      `ideal=${game.config.idealTypingSeconds.toFixed(2)}s`,
-      `transitions=${game.config.transitionAllowanceSeconds.toFixed(2)}s`,
-      `effective=${game.config.effectiveTimeLimitSec.toFixed(2)}s`,
-      `phrases=${game.phrases.join(" | ")}`,
-    ].join(" // ");
+    devRuntime.textContent = bossDiagnosticText(game.config, {
+      attemptSeed: game.attemptSeed,
+      encounter: {
+        generationAttempt: game.config.generationAttempt,
+        fallbackUsed: game.config.fallbackUsed,
+        segments: game.phrases,
+        words: game.config.words,
+        metrics: {
+          minimumSelectedWordLength: game.config.minimumSelectedWordLength,
+          averageSelectedWordLength: game.config.averageSelectedWordLength,
+          longestSelectedWord: game.config.longestSelectedWord,
+          totalRequiredCharacters: game.config.totalRequiredCharacters,
+        },
+        timing: game.config,
+      },
+    });
   }
 }
 
@@ -643,7 +690,7 @@ export function renderResults(result, selectedIndex, handlers) {
           <div class="stat"><span class="micro-label">Score</span><strong>${result.score.toLocaleString()}</strong></div>
           ${result.isBoss
     ? `<div class="stat"><span class="micro-label">Time remaining</span><strong>${result.timeRemaining.toFixed(1)}s</strong></div>
-          <div class="stat"><span class="micro-label">Phrases</span><strong>${result.phrasesCompleted}/${result.phraseCount}</strong></div>`
+          <div class="stat"><span class="micro-label">Sequences</span><strong>${result.phrasesCompleted}/${result.phraseCount}</strong></div>`
     : result.modifierIds?.includes(CHAIN_ID)
       ? `<div class="stat"><span class="micro-label">Chain integrity</span><strong>${result.chainBroken ? "BROKEN" : "INTACT"}</strong></div>
           <div class="stat"><span class="micro-label">Level</span><strong>${result.levelNumber}</strong></div>`

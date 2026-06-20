@@ -100,10 +100,10 @@ for (let index = 0; index < 3; index += 1) frame();
 assert.equal(game.phase, "TRANSITION");
 assert.equal(game.remainingMs, transitionStartTime);
 appState.screen = Screens.PLAYING;
-for (let index = 0; index < 5; index += 1) frame();
+while (game.phase === "TRANSITION") frame();
 assert.equal(game.phase, "ACTIVE");
 assert.equal(game.phraseIndex, 1);
-assert.ok(game.remainingMs < transitionStartTime);
+assert.equal(game.remainingMs, transitionStartTime - 350);
 assert.equal(game.combo, 1);
 
 outcome = null;

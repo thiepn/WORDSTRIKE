@@ -1,14 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import {
-  calculateBossTiming,
-  generateBossLevel,
-  generateLevel,
-} from "../js/levelGenerator.js";
-import {
-  createNormalWordAttempt,
-  selectBossPhrases,
-} from "../js/wordBank.js";
+import { generateBossEncounter } from "../js/bossGenerator.js";
+import { generateLevel } from "../js/levelGenerator.js";
+import { createNormalWordAttempt } from "../js/wordBank.js";
 import {
   createAttemptSeed,
   createSeededRandom,
@@ -20,7 +14,7 @@ const wordBank = JSON.parse(
   await readFile(new URL("../data/theme-default.json", import.meta.url), "utf8"),
 );
 const bossBank = JSON.parse(
-  await readFile(new URL("../data/bossPhrases.json", import.meta.url), "utf8"),
+  await readFile(new URL("../data/bossWords.json", import.meta.url), "utf8"),
 );
 
 const normalConfig = generateLevel(67);
@@ -40,10 +34,7 @@ assert.ok(first.selectedWords.every((word) => (
   word.length >= normalConfig.minWordLength &&
   word.length <= normalConfig.maxWordLength
 )));
-assert.deepEqual(
-  [...first.spawnQueue].sort(),
-  [...first.selectedWords].sort(),
-);
+assert.deepEqual([...first.spawnQueue].sort(), [...first.selectedWords].sort());
 
 const shuffled = shuffleSeeded(["a", "b", "c", "d"], 99);
 assert.deepEqual(shuffled, shuffleSeeded(["a", "b", "c", "d"], 99));
@@ -61,37 +52,16 @@ assert.equal(parseDeveloperSeed("?dev=1&seed=bad"), null);
 assert.ok(Number.isInteger(createAttemptSeed()));
 assert.ok(new Set(Array.from({ length: 8 }, createAttemptSeed)).size > 1);
 
-let bossSeedsDiffer = false;
-for (const level of [10, 50, 100]) {
-  const config = generateBossLevel(level);
-  const phrases = selectBossPhrases(bossBank, config, 12345);
-  const repeatPhrases = selectBossPhrases(bossBank, config, 12345);
-  const differentPhrases = selectBossPhrases(bossBank, config, 54321);
-  assert.deepEqual(phrases, repeatPhrases);
-  assert.equal(phrases.length, config.phraseCount);
-  assert.equal(new Set(phrases).size, phrases.length);
-  assert.ok(phrases.every(
-    (phrase) => phrase.split(" ").length === config.wordsPerPhrase,
-  ));
-  bossSeedsDiffer ||= phrases.join("|") !== differentPhrases.join("|");
-  const timing = calculateBossTiming(level, phrases);
-  assert.equal(
-    timing.totalRequiredCharacters,
-    phrases.reduce((sum, phrase) => sum + phrase.length, 0),
-  );
-  assert.ok(timing.effectiveTimeLimitSec >= 12);
-  assert.ok(timing.effectiveTimeLimitSec <= 38);
-  assert.ok(timing.effectiveTimeLimitSec < config.timeLimitSec);
+let differentBossSeedCount = 0;
+for (const level of [10, 30, 50, 70, 100]) {
+  const firstBoss = generateBossEncounter(bossBank, level, 12345);
+  const repeatBoss = generateBossEncounter(bossBank, level, 12345);
+  const differentBoss = generateBossEncounter(bossBank, level, 54321);
+  assert.deepEqual(firstBoss, repeatBoss);
+  if (firstBoss.segments.join("|") !== differentBoss.segments.join("|")) {
+    differentBossSeedCount += 1;
+  }
 }
-assert.equal(bossSeedsDiffer, true);
+assert.ok(differentBossSeedCount >= 4);
 
-const shortTiming = calculateBossTiming(50, ["short words"]);
-const longTiming = calculateBossTiming(50, ["a considerably longer phrase with spaces"]);
-assert.ok(longTiming.effectiveTimeLimitSec > shortTiming.effectiveTimeLimitSec);
-assert.equal(calculateBossTiming(10, ["a"]).effectiveTimeLimitSec, 12);
-assert.equal(
-  calculateBossTiming(100, ["x".repeat(1000)]).effectiveTimeLimitSec,
-  38,
-);
-
-console.log("Attempt seed, normal variation, boss variation, and content timing tests passed.");
+console.log("Attempt seed, unchanged normal variation, and seeded boss variation tests passed.");

@@ -2,7 +2,7 @@ import { appState, Screens } from "./state.js";
 import { clearBossPhrase, clearWordElements, renderBossPhrase } from "./renderer.js";
 
 const INTRO_DURATION_MS = 2800;
-const TRANSITION_DURATION_MS = 450;
+export const BOSS_TRANSITION_DURATION_MS = 350;
 
 let animationFrameId = null;
 let callbacks = {};
@@ -13,6 +13,7 @@ export function createBossGameState(levelNumber, config, phrases) {
     levelNumber,
     config,
     attemptSeed: config.attemptSeed ?? null,
+    segments: [...phrases],
     phrases: [...phrases],
     currentPhrase: phrases[0] || "",
     phraseIndex: 0,
@@ -102,17 +103,26 @@ function tick(timestamp) {
       game.wordStartElapsedMs = 0;
       renderBossPhrase(game);
     }
-  } else {
+  } else if (game.phase === "ACTIVE") {
     game.remainingMs = Math.max(0, game.remainingMs - deltaMs);
-    if (game.phase === "ACTIVE") game.elapsedMs += deltaMs;
+    game.elapsedMs += deltaMs;
     if (game.remainingMs <= 0) {
       finishBoss(game, false);
       return;
     }
-    if (game.phase === "TRANSITION") {
-      game.transitionElapsedMs += deltaMs;
-      if (game.transitionElapsedMs >= TRANSITION_DURATION_MS) beginNextPhrase(game);
+  } else if (game.phase === "TRANSITION") {
+    const transitionRemainingMs = Math.max(
+      0,
+      BOSS_TRANSITION_DURATION_MS - game.transitionElapsedMs,
+    );
+    const chargedTransitionMs = Math.min(deltaMs, transitionRemainingMs);
+    game.remainingMs = Math.max(0, game.remainingMs - chargedTransitionMs);
+    game.transitionElapsedMs += chargedTransitionMs;
+    if (game.remainingMs <= 0) {
+      finishBoss(game, false);
+      return;
     }
+    if (game.transitionElapsedMs >= BOSS_TRANSITION_DURATION_MS) beginNextPhrase(game);
   }
 
   callbacks.onUpdate?.(game);

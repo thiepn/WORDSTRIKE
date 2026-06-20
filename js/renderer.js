@@ -1,6 +1,12 @@
 const wordElements = new Map();
 let bossPhraseElement = null;
 
+export function getBossPhraseSizeClass(characterCount) {
+  if (characterCount > 110) return "boss-phrase-size-extreme";
+  if (characterCount > 75) return "boss-phrase-size-dense";
+  return "boss-phrase-size-normal";
+}
+
 function playArea() {
   return document.querySelector("#play-area");
 }
@@ -137,6 +143,12 @@ export function renderBossPhrase(game) {
   bossPhraseElement = container;
   const renderedPhrase = container.dataset?.phrase ?? container._bossPhrase;
   if (renderedPhrase !== game.currentPhrase) {
+    container.classList?.remove(
+      "boss-phrase-size-normal",
+      "boss-phrase-size-dense",
+      "boss-phrase-size-extreme",
+    );
+    container.classList?.add(getBossPhraseSizeClass(game.currentPhrase.length));
     let globalIndex = 0;
     container.innerHTML = game.currentPhrase.split(" ").map((word, wordIndex, words) => {
       const characters = [...word].map((character) => {
