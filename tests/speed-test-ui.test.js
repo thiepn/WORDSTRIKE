@@ -3,10 +3,9 @@ import { readFile } from "node:fs/promises";
 import { getSpeedTestConfig } from "../js/speedTestConfig.js";
 
 class Button {
-  constructor(action = null, config = null) {
-    this.dataset = {};
-    if (action) this.dataset.action = action;
-    if (config) this.dataset.speedConfig = config;
+  constructor(attributes = {}) {
+    this.dataset = attributes;
+    this.disabled = false;
   }
   focus() {}
 }
@@ -18,23 +17,27 @@ const app = {
     this.html = value;
     this.buttons = [
       ...[...value.matchAll(/data-action="([^"]+)"/g)].map(
-        (match) => new Button(match[1]),
+        (match) => new Button({ action: match[1] }),
       ),
       ...[...value.matchAll(/data-speed-config="([^"]+)"/g)].map(
-        (match) => new Button(null, match[1]),
+        (match) => new Button({ speedConfig: match[1] }),
+      ),
+      ...[...value.matchAll(/data-speed-category="([^"]+)"/g)].map(
+        (match) => new Button({ speedCategory: match[1] }),
       ),
     ];
   },
   querySelector(selector) {
     const action = selector.match(/data-action="([^"]+)"/)?.[1];
     if (action) return this.buttons.find((button) => button.dataset.action === action) || null;
-    const config = selector.match(/data-speed-config="([^"]+)"/)?.[1];
-    if (config) return this.buttons.find((button) => button.dataset.speedConfig === config) || null;
     return null;
   },
   querySelectorAll(selector) {
     if (selector === "[data-speed-config]") {
       return this.buttons.filter((button) => button.dataset.speedConfig);
+    }
+    if (selector === "[data-speed-category]") {
+      return this.buttons.filter((button) => button.dataset.speedCategory);
     }
     if (selector === ".speed-results-panel .arcade-button") {
       return this.buttons.filter((button) => button.dataset.action);
@@ -52,30 +55,44 @@ globalThis.document = {
 const {
   renderSpeedTestResults,
   renderSpeedTestRun,
-  renderSpeedTestSetup,
+  speedWordMarkup,
 } = await import("../js/ui.js");
 
-renderSpeedTestSetup(getSpeedTestConfig("time-60"), {
-  select() {},
-  start() {},
-});
-assert.match(app.html, /CHOOSE A TEST/);
-assert.match(app.html, /15 SECONDS/);
-assert.match(app.html, /120 SECONDS/);
-assert.match(app.html, /25 WORDS/);
-assert.match(app.html, /100 WORDS/);
-assert.match(app.html, /START 60 SECONDS/);
-
+const configCalls = [];
 renderSpeedTestRun({
-  config: getSpeedTestConfig("time-15"),
+  config: getSpeedTestConfig("time-60"),
+  phase: "PREPARING",
   words: ["word", "apple"],
   currentWordIndex: 0,
   typedBuffer: "",
-}, false);
-assert.match(app.html, /speed-test-word-current/);
-assert.match(app.html, /aria-current="true"/);
+}, false, {
+  selectConfig: (configId) => configCalls.push(configId),
+});
+assert.match(app.html, /data-speed-category="time"/);
+assert.match(app.html, /data-speed-category="words"/);
+assert.match(app.html, /data-speed-config="time-60"/);
 assert.match(app.html, /START TYPING/);
+assert.match(app.html, /speed-test-caret/);
+assert.doesNotMatch(app.html, /CHOOSE A TEST|START 60 SECONDS|CURRENT/);
 assert.doesNotMatch(app.html, /LIVES|COMBO|MODIFIER/);
+app.buttons.find((button) => button.dataset.speedCategory === "words").onclick();
+assert.equal(configCalls.at(-1), "words-50");
+
+renderSpeedTestRun({
+  config: getSpeedTestConfig("words-50"),
+  phase: "ACTIVE",
+  words: ["word"],
+  currentWordIndex: 0,
+  typedBuffer: "w",
+}, false);
+assert.match(app.html, /data-speed-category="time" disabled/);
+assert.match(app.html, /data-speed-config="words-50" disabled/);
+
+assert.match(speedWordMarkup("word", ""), /caret.*pending/s);
+assert.match(speedWordMarkup("word", "w"), /correct.*caret.*pending/s);
+assert.match(speedWordMarkup("word", "word"), /correct">d<\/span><span class="speed-test-caret"/);
+assert.match(speedWordMarkup("word", "wordx"), /speed-test-extra.*x.*speed-test-caret/s);
+assert.doesNotMatch(speedWordMarkup("word", "word", false), /speed-test-caret/);
 
 const calls = [];
 renderSpeedTestResults({
@@ -88,11 +105,13 @@ renderSpeedTestResults({
   characters: { correct: 70, incorrect: 3, missed: 2 },
   words: { completed: 15 },
   modeData: {
+    metricVersion: 2,
     durationSeconds: 15,
     targetWordCount: null,
     rawWpm: 65.4,
     extraCharacters: 1,
     backspaces: 2,
+    wordDeletes: 1,
     exactWords: 14,
     incorrectWords: 1,
   },
@@ -110,22 +129,29 @@ assert.match(app.html, /TEST COMPLETE/);
 assert.match(app.html, /60\.5/);
 assert.match(app.html, /65\.4/);
 assert.match(app.html, /NEW WPM RECORD/);
-assert.match(app.html, /NEW ACCURACY RECORD/);
+assert.match(app.html, /Characters.*70 correct \/ 3 incorrect/s);
+assert.match(app.html, /Word deletes.*1/s);
 assert.match(app.html, /RETRY SAME TEST/);
-assert.doesNotMatch(app.html, /GRADE|LIVES|BOSS|CAMPAIGN SCORE/);
+assert.doesNotMatch(app.html, /GRADE|LIVES|BOSS|CAMPAIGN SCORE|speed-test-caret/);
 app.querySelector('[data-action="retry"]').onclick();
 assert.equal(calls.at(-1), "retry");
 
 const css = await readFile(new URL("../style.css", import.meta.url), "utf8");
-assert.match(css, /\.speed-test-word-current::before/);
+assert.match(css, /\.speed-test-caret[^}]*width:\s*0/s);
+assert.match(css, /\.speed-test-caret::after[^}]*width:\s*2px/s);
 assert.match(css, /\.speed-test-char-incorrect[^}]*text-decoration/s);
 assert.match(css, /\.speed-test-word-viewport[^}]*overflow:\s*hidden/s);
 assert.match(css, /\.speed-test-word-flow[^}]*font-variant-ligatures:\s*none/s);
+assert.doesNotMatch(css, /\.speed-test-word-current::before/);
+assert.doesNotMatch(css, /\.speed-setup-/);
+
 const mainSource = await readFile(new URL("../js/main.js", import.meta.url), "utf8");
 assert.match(mainSource, /speedTestResultsReadyAt/);
 assert.match(mainSource, /isResultsInputBlocked\(/);
-assert.match(mainSource, /Screens\.SPEED_TEST_SETUP/);
-assert.match(mainSource, /Screens\.SPEED_TEST_RUN/);
-assert.match(mainSource, /Screens\.SPEED_TEST_RESULTS/);
+assert.match(mainSource, /route === "speed-test"/);
+assert.match(mainSource, /appState\.speedTestConfigId = DEFAULT_SPEED_TEST_CONFIG_ID/);
+assert.match(mainSource, /change:\s*\(\) => startSelectedSpeedTest\("change-test"\)/);
+assert.match(mainSource, /const attemptSeed = getAttemptSeed\(\)/);
+assert.doesNotMatch(mainSource, /SPEED_TEST_SETUP|openSpeedTestSetup|renderSpeedTestSetup/);
 
-console.log("Typing Test setup, stable run layout, accessible feedback, and mode-specific Results tests passed.");
+console.log("Typing Test direct-ready UI, inline controls, caret, clean viewport, and grouped Results tests passed.");

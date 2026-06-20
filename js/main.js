@@ -59,7 +59,6 @@ import {
   renderModeSelect,
   renderSpeedTestResults,
   renderSpeedTestRun,
-  renderSpeedTestSetup,
   renderDevModeIndicator,
   renderDevSessionDiagnostics,
   renderResults,
@@ -85,7 +84,7 @@ import { cleanupCurrentSession } from "./sessionCleanup.js";
 import {
   DEFAULT_SPEED_TEST_CONFIG_ID,
   getSpeedTestConfig,
-  moveSpeedTestSetupSelection,
+  moveSpeedTestConfigSelection,
   normalizeSpeedTestConfigId,
   parseDeveloperSpeedTestConfig,
 } from "./speedTestConfig.js";
@@ -140,15 +139,6 @@ function openModeSelect() {
   cleanupCampaignAttempt("mode-select");
   changeScreen(Screens.MODE_SELECT);
   appState.modeSelection = 0;
-  renderCurrentScreen();
-}
-
-function openSpeedTestSetup(reason = "change-test") {
-  cleanupCampaignAttempt(reason);
-  appState.speedTestConfigId = normalizeSpeedTestConfigId(
-    appState.speedTestConfigId,
-  );
-  changeScreen(Screens.SPEED_TEST_SETUP);
   renderCurrentScreen();
 }
 
@@ -257,12 +247,23 @@ function startSelectedSpeedTest(source = "mode-select") {
     onComplete: finishSpeedTest,
   });
   if (!state) {
-    openSpeedTestSetup("start-failed");
+    openModeSelect();
     return;
   }
   changeScreen(Screens.SPEED_TEST_RUN);
-  renderSpeedTestRun(state, appState.devMode);
+  renderSpeedTestRun(state, appState.devMode, {
+    selectConfig: changeSpeedTestConfig,
+  });
   updateSpeedTestRun(state, currentTimeMs());
+}
+
+function changeSpeedTestConfig(configId) {
+  const state = getCurrentSpeedTest();
+  if (state?.phase === "ACTIVE") return;
+  const next = normalizeSpeedTestConfigId(configId);
+  if (next === appState.speedTestConfigId) return;
+  appState.speedTestConfigId = next;
+  startSelectedSpeedTest("change-test");
 }
 
 function startBossLevel(levelNumber, legitimatelyUnlocked, source) {
@@ -400,7 +401,10 @@ function activateSelectedMode(modeId = getAllModes()[appState.modeSelection]?.id
   if (!isModeEnabled(modeId)) return false;
   const route = getAllModes().find((mode) => mode.id === modeId)?.route;
   if (route === "level-select") openLevelSelect("mode-select");
-  else if (route === "speed-test-setup") openSpeedTestSetup("mode-select");
+  else if (route === "speed-test") {
+    appState.speedTestConfigId = DEFAULT_SPEED_TEST_CONFIG_ID;
+    startSelectedSpeedTest("mode-select");
+  }
   else return false;
   return true;
 }
@@ -433,24 +437,12 @@ function renderCurrentScreen() {
       },
       activate: activateSelectedMode,
     });
-  } else if (appState.screen === Screens.SPEED_TEST_SETUP) {
-    renderSpeedTestSetup(
-      getSpeedTestConfig(appState.speedTestConfigId)
-        || getSpeedTestConfig(DEFAULT_SPEED_TEST_CONFIG_ID),
-      {
-        select: (configId) => {
-          const next = normalizeSpeedTestConfigId(configId);
-          if (next === appState.speedTestConfigId) return;
-          appState.speedTestConfigId = next;
-          renderCurrentScreen();
-        },
-        start: () => startSelectedSpeedTest("mode-select"),
-      },
-    );
   } else if (appState.screen === Screens.SPEED_TEST_RUN) {
     const state = getCurrentSpeedTest();
     if (state) {
-      renderSpeedTestRun(state, appState.devMode);
+      renderSpeedTestRun(state, appState.devMode, {
+        selectConfig: changeSpeedTestConfig,
+      });
       updateSpeedTestRun(state, currentTimeMs());
     }
   } else if (appState.screen === Screens.SPEED_TEST_RESULTS) {
@@ -460,7 +452,7 @@ function renderCurrentScreen() {
       appState.speedTestResultsIndex,
       {
         retry: () => startSelectedSpeedTest("retry"),
-        change: () => openSpeedTestSetup("change-test"),
+        change: () => startSelectedSpeedTest("change-test"),
         modes: openModeSelect,
         title: openTitle,
         select: (index) => {
@@ -538,7 +530,19 @@ function handleGlobalKeydown(event) {
   if (appState.screen === Screens.SPEED_TEST_RUN) {
     if (event.key === "Escape") {
       event.preventDefault();
-      openSpeedTestSetup("aborted");
+      openModeSelect();
+      return;
+    }
+    const state = getCurrentSpeedTest();
+    if (
+      state?.phase === "PREPARING" &&
+      ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Tab"].includes(event.key)
+    ) {
+      event.preventDefault();
+      changeSpeedTestConfig(moveSpeedTestConfigSelection(
+        appState.speedTestConfigId,
+        event.key,
+      ));
       return;
     }
     handleCurrentSpeedTestKey(event);
@@ -612,26 +616,6 @@ function handleGlobalKeydown(event) {
     return;
   }
 
-  if (appState.screen === Screens.SPEED_TEST_SETUP) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      openModeSelect();
-    } else if (
-      ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Tab"].includes(event.key)
-    ) {
-      event.preventDefault();
-      appState.speedTestConfigId = moveSpeedTestSetupSelection(
-        appState.speedTestConfigId,
-        event.key,
-      );
-      renderCurrentScreen();
-    } else if (event.key === "Enter") {
-      event.preventDefault();
-      startSelectedSpeedTest("mode-select");
-    }
-    return;
-  }
-
   if (appState.screen === Screens.SPEED_TEST_RESULTS) {
     const actions = ["retry", "change", "modes", "title"];
     if (isResultsInputBlocked(
@@ -641,7 +625,7 @@ function handleGlobalKeydown(event) {
     )) return;
     if (event.key === "Escape") {
       event.preventDefault();
-      openSpeedTestSetup("change-test");
+      startSelectedSpeedTest("change-test");
     } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
       event.preventDefault();
       const direction = event.key === "ArrowUp" ? -1 : 1;
@@ -653,7 +637,7 @@ function handleGlobalKeydown(event) {
       event.preventDefault();
       const action = actions[appState.speedTestResultsIndex];
       if (action === "retry") startSelectedSpeedTest("retry");
-      else if (action === "change") openSpeedTestSetup("change-test");
+      else if (action === "change") startSelectedSpeedTest("change-test");
       else if (action === "modes") openModeSelect();
       else openTitle();
     }

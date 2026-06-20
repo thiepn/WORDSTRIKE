@@ -97,6 +97,7 @@ export function createSpeedTestRuntime({
       newAccuracyRecord: false,
     },
     completionNotified: false,
+    currentLineIndex: 0,
   };
   ensureWordBuffer(state);
   return state;
@@ -147,7 +148,9 @@ function commitCurrentWord(state, { separator = false } = {}) {
   if (exact) state.metrics.exactWords += 1;
   else state.metrics.incorrectWords += 1;
   if (separator) {
-    state.metrics.printableKeystrokes += 1;
+    state.metrics.validSpaces += 1;
+    state.metrics.correctSpaces += 1;
+    state.metrics.correctKeystrokes += 1;
     state.metrics.rawTypedCharacters += 1;
   }
   state.committedWords.push({
@@ -172,10 +175,6 @@ function buildSpeedTestResult(state, completedAtMs) {
     typedBuffer: state.typedBuffer,
     includePartial: state.config.testType === SPEED_TEST_TYPES.TIME,
   });
-  const correctCharacters = (
-    state.metrics.committedCorrectCharacters +
-    live.partialCorrectCharacters
-  );
   const endedAt = Date.now();
   return buildSessionResult({
     sessionId: session.id,
@@ -194,10 +193,10 @@ function buildSpeedTestResult(state, completedAtMs) {
     accuracy: live.accuracy,
     wpm: live.wpm,
     characters: {
-      correct: correctCharacters,
+      correct: live.correctTestCharacters,
       incorrect: state.metrics.incorrectKeystrokes,
       missed: state.metrics.missedCharacters,
-      totalKeystrokes: state.metrics.printableKeystrokes,
+      totalKeystrokes: live.rawTestCharacters,
     },
     words: {
       completed: state.metrics.wordsCompleted,
@@ -206,12 +205,18 @@ function buildSpeedTestResult(state, completedAtMs) {
     },
     combo: { maximum: 0, final: 0 },
     modeData: {
+      metricVersion: 2,
       configId: state.config.configId,
       testType: state.config.testType,
       durationSeconds: state.config.durationSeconds,
       targetWordCount: state.config.wordCount,
       rawWpm: live.rawWpm,
+      correctTestCharacters: live.correctTestCharacters,
+      rawTestCharacters: live.rawTestCharacters,
+      correctSpaces: state.metrics.correctSpaces,
+      validSpaces: state.metrics.validSpaces,
       backspaces: state.metrics.backspaces,
+      wordDeletes: state.metrics.wordDeletes,
       extraCharacters: state.metrics.extraCharacters,
       exactWords: state.metrics.exactWords,
       incorrectWords: state.metrics.incorrectWords,
@@ -304,8 +309,13 @@ export function handleSpeedTestInput(state, event, nowMs = null) {
   if (event.key === "Backspace") {
     event.preventDefault?.();
     if (!state.typedBuffer) return false;
-    state.typedBuffer = state.typedBuffer.slice(0, -1);
     state.metrics.backspaces += 1;
+    if (event.ctrlKey || event.metaKey) {
+      state.typedBuffer = "";
+      state.metrics.wordDeletes += 1;
+    } else {
+      state.typedBuffer = state.typedBuffer.slice(0, -1);
+    }
     return true;
   }
   if (IGNORED_KEYS.has(event.key) || event.key?.startsWith("F")) return false;
@@ -426,19 +436,32 @@ export function getSpeedTestDiagnosticText(state = currentSpeedTest, nowMs = mon
     `SESSION ID=${session?.id ?? "none"}`,
     `SESSION STATE=${session?.state ?? "idle"}`,
     `CONFIG=${state.config.configId}`,
-    `SEED=${state.attemptSeed}`,
+    `ATTEMPT SEED=${state.attemptSeed}`,
+    `STREAM SEED=${state.stream.baseSeed}`,
+    `BATCH=${state.stream.lastBatchIndex}`,
+    `BATCH SEED=${state.stream.lastBatchSeed}`,
     `ACTIVE=${Math.round(getSpeedTestActiveDuration(state, nowMs))}ms`,
     `DEADLINE=${state.deadlineMs ?? "none"}`,
     `WORD INDEX=${state.currentWordIndex}`,
     `WORD=${getSpeedTestCurrentWord(state)}`,
     `BUFFER=${state.typedBuffer || "empty"}`,
+    `CARET=${state.typedBuffer.length}`,
+    `LINE=${state.currentLineIndex}`,
     `QUEUE=${state.words.length}`,
     `CORRECT=${state.metrics.correctKeystrokes}`,
+    `CORRECT TEST CHARS=${live.correctTestCharacters}`,
+    `RAW TEST CHARS=${live.rawTestCharacters}`,
+    `CORRECT SPACES=${state.metrics.correctSpaces}`,
+    `VALID SPACES=${state.metrics.validSpaces}`,
+    `PRINTABLE=${state.metrics.printableKeystrokes}`,
     `INCORRECT=${state.metrics.incorrectKeystrokes}`,
     `MISSED=${state.metrics.missedCharacters}`,
     `EXTRA=${state.metrics.extraCharacters}`,
     `BACKSPACES=${state.metrics.backspaces}`,
+    `WORD DELETES=${state.metrics.wordDeletes}`,
+    `CPM=${live.cpm.toFixed(2)}`,
     `WPM=${live.wpm.toFixed(2)}`,
+    `RAW CPM=${live.rawCpm.toFixed(2)}`,
     `RAW=${live.rawWpm.toFixed(2)}`,
     `ACCURACY=${live.accuracy.toFixed(2)}`,
     `FINALIZED=${session?.resultFinalized === true}`,

@@ -66,9 +66,11 @@ export function createSpeedTestWordStream(pool, attemptSeed, configId) {
   const baseSeed = deriveSpeedTestWordSeed(attemptSeed, configId);
   const words = [];
   let batchIndex = 0;
+  let lastBatchSeed = null;
 
   const appendBatch = () => {
     const batchSeed = mixSeed(baseSeed, Math.imul(batchIndex + 1, 0x9e3779b9));
+    lastBatchSeed = batchSeed;
     const shuffled = shuffleSeeded(validPool, batchSeed).slice(
       0,
       Math.min(SPEED_TEST_BATCH_SIZE, validPool.length),
@@ -92,6 +94,15 @@ export function createSpeedTestWordStream(pool, attemptSeed, configId) {
     },
     get batchCount() {
       return batchIndex;
+    },
+    get baseSeed() {
+      return baseSeed;
+    },
+    get lastBatchSeed() {
+      return lastBatchSeed;
+    },
+    get lastBatchIndex() {
+      return Math.max(0, batchIndex - 1);
     },
   };
 }

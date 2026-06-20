@@ -14,6 +14,11 @@ assert.equal(validation.valid, true, validation.errors.join("\n"));
 assert.ok(validation.words.length >= 500);
 assert.equal(new Set(validation.words).size, validation.words.length);
 assert.ok(validation.words.every((word) => /^[a-z]{2,10}$/.test(word)));
+assert.ok(
+  validation.words.filter((word) => word.length >= 3 && word.length <= 7).length
+    > validation.words.length / 2,
+);
+assert.ok(!validation.words.includes("electromagnetic"));
 
 const first = generateSpeedTestWords(validation.words, 12345, "time-60", 600);
 const repeat = generateSpeedTestWords(validation.words, 12345, "time-60", 600);
@@ -30,6 +35,9 @@ assert.equal(
   stream.words[199] === stream.words[200],
   false,
 );
+assert.equal(typeof stream.baseSeed, "number");
+assert.equal(typeof stream.lastBatchSeed, "number");
+assert.ok(stream.batchCount > 1);
 assert.equal(generateSpeedTestWords(validation.words, 9, "words-100", 100).length, 100);
 
 const invalid = validateSpeedTestVocabulary({

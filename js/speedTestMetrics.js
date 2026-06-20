@@ -4,7 +4,10 @@ export function createSpeedTestMetrics() {
     correctKeystrokes: 0,
     incorrectKeystrokes: 0,
     backspaces: 0,
+    wordDeletes: 0,
     rawTypedCharacters: 0,
+    validSpaces: 0,
+    correctSpaces: 0,
     committedCorrectCharacters: 0,
     missedCharacters: 0,
     extraCharacters: 0,
@@ -56,13 +59,21 @@ export function calculateSpeedTestSnapshot(
   const partialCorrect = includePartial
     ? countCorrectPositions(currentWord, typedBuffer)
     : 0;
+  const correctTestCharacters = (
+    metrics.committedCorrectCharacters +
+    metrics.correctSpaces +
+    partialCorrect
+  );
+  const rawTestCharacters = metrics.printableKeystrokes + metrics.validSpaces;
+  const activeMinutes = Math.max(0, activeDurationMs) / 60000;
   return {
     accuracy: calculateSpeedTestAccuracy(metrics, { display: true }),
-    rawWpm: calculateWpm(metrics.rawTypedCharacters, activeDurationMs),
-    wpm: calculateWpm(
-      metrics.committedCorrectCharacters + partialCorrect,
-      activeDurationMs,
-    ),
+    rawWpm: calculateWpm(rawTestCharacters, activeDurationMs),
+    wpm: calculateWpm(correctTestCharacters, activeDurationMs),
+    rawCpm: activeMinutes > 0 ? rawTestCharacters / activeMinutes : 0,
+    cpm: activeMinutes > 0 ? correctTestCharacters / activeMinutes : 0,
+    rawTestCharacters,
+    correctTestCharacters,
     partialCorrectCharacters: partialCorrect,
   };
 }

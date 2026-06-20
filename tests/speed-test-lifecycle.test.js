@@ -81,6 +81,10 @@ for (const [index, key] of [..."word"].entries()) {
 assert.equal(state.ended, true);
 assert.equal(state.metrics.wordsCompleted, 1);
 assert.equal(state.result.activeDurationMs, 3);
+assert.equal(state.result.modeData.metricVersion, 2);
+assert.equal(state.result.modeData.correctSpaces, 0);
+assert.equal(state.result.modeData.validSpaces, 0);
+assert.equal(state.result.modeData.wordDeletes, 0);
 
 state = startSpeedTest({
   config: getSpeedTestConfig("time-60"),

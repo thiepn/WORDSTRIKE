@@ -126,7 +126,14 @@ function sanitizeRecentSummary(value) {
       configId: typeof value.modeData?.configId === "string"
         ? value.modeData.configId
         : null,
+      metricVersion: finiteNonNegative(value.modeData?.metricVersion),
       rawWpm: nullableFinite(value.modeData?.rawWpm),
+      correctTestCharacters: finiteNonNegative(value.modeData?.correctTestCharacters),
+      rawTestCharacters: finiteNonNegative(value.modeData?.rawTestCharacters),
+      correctSpaces: finiteNonNegative(value.modeData?.correctSpaces),
+      validSpaces: finiteNonNegative(value.modeData?.validSpaces),
+      backspaces: finiteNonNegative(value.modeData?.backspaces),
+      wordDeletes: finiteNonNegative(value.modeData?.wordDeletes),
       completedWordCount: finiteNonNegative(value.modeData?.completedWordCount),
     },
   };

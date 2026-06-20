@@ -26,7 +26,7 @@ const MODE_DEFINITIONS = Object.freeze([
     description: "Measure your typing speed and accuracy.",
     enabled: true,
     status: "available",
-    route: "speed-test-setup",
+    route: "speed-test",
     supportsPause: false,
     supportsSeed: true,
     storesProgress: true,

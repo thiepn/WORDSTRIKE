@@ -6,8 +6,9 @@ import {
 } from "../js/speedTest.js";
 
 const pool = ["word", "apple", "river", "stone", "green"];
-const event = (key) => ({
+const event = (key, options = {}) => ({
   key,
+  ...options,
   prevented: false,
   preventDefault() { this.prevented = true; },
 });
@@ -52,7 +53,10 @@ assert.equal(state.currentWordIndex, 1);
 assert.equal(state.metrics.wordsCompleted, 1);
 assert.equal(state.metrics.exactWords, 1);
 assert.equal(state.metrics.rawTypedCharacters, 8);
-assert.equal(state.metrics.printableKeystrokes, 8);
+assert.equal(state.metrics.printableKeystrokes, 7);
+assert.equal(state.metrics.validSpaces, 1);
+assert.equal(state.metrics.correctSpaces, 1);
+assert.equal(state.metrics.correctKeystrokes, 7);
 
 handleSpeedTestInput(state, event("a"), 210);
 handleSpeedTestInput(state, event("x"), 220);
@@ -62,6 +66,36 @@ assert.equal(state.metrics.wordsCompleted, 2);
 assert.equal(state.metrics.incorrectWords, 1);
 assert.equal(state.metrics.missedCharacters, 2);
 assert.equal(state.metrics.incorrectKeystrokes, 3);
+assert.equal(state.metrics.validSpaces, 2);
+
+const historical = {
+  correct: state.metrics.correctKeystrokes,
+  incorrect: state.metrics.incorrectKeystrokes,
+  printable: state.metrics.printableKeystrokes,
+};
+handleSpeedTestInput(state, event("x"), 250);
+handleSpeedTestInput(state, event("y"), 260);
+const ctrlBackspace = event("Backspace", { ctrlKey: true });
+assert.equal(handleSpeedTestInput(state, ctrlBackspace, 270), true);
+assert.equal(ctrlBackspace.prevented, true);
+assert.equal(state.typedBuffer, "");
+assert.equal(state.metrics.backspaces, 4);
+assert.equal(state.metrics.wordDeletes, 1);
+assert.equal(state.metrics.correctKeystrokes, historical.correct);
+assert.equal(state.metrics.incorrectKeystrokes, historical.incorrect + 2);
+assert.equal(state.metrics.printableKeystrokes, historical.printable + 2);
+
+const idle = createSpeedTestRuntime({
+  config: getSpeedTestConfig("time-15"),
+  wordPool: pool,
+  attemptSeed: 3,
+});
+const idleDelete = event("Backspace", { ctrlKey: true });
+assert.equal(handleSpeedTestInput(idle, idleDelete, 10), false);
+assert.equal(idleDelete.prevented, true);
+assert.equal(idle.activeStartedAtMs, null);
+assert.equal(idle.metrics.backspaces, 0);
+assert.equal(idle.metrics.wordDeletes, 0);
 
 state = createSpeedTestRuntime({
   config: getSpeedTestConfig("time-15"),

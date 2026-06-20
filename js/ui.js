@@ -93,47 +93,6 @@ export function renderModeSelect(modes, selectedIndex, handlers) {
   app().querySelector(".mode-card.available.selected")?.focus({ preventScroll: true });
 }
 
-export function renderSpeedTestSetup(config, handlers) {
-  const timeConfigs = getSpeedTestConfigsByType(SPEED_TEST_TYPES.TIME);
-  const wordConfigs = getSpeedTestConfigsByType(SPEED_TEST_TYPES.WORDS);
-  const option = (item) => `
-    <button class="speed-config-option ${item.configId === config.configId ? "selected" : ""}"
-            data-speed-config="${item.configId}">
-      ${item.testType === SPEED_TEST_TYPES.TIME
-    ? `${item.durationSeconds} SECONDS`
-    : `${item.wordCount} WORDS`}
-    </button>`;
-  app().innerHTML = `
-    <section class="screen speed-setup-screen">
-      <div class="speed-setup-panel">
-        <div class="eyebrow">Typing Test</div>
-        <h1>CHOOSE A TEST</h1>
-        <div class="speed-config-groups">
-          <section class="speed-config-group ${config.testType === SPEED_TEST_TYPES.TIME ? "active" : ""}">
-            <h2>TIME</h2>
-            <div>${timeConfigs.map(option).join("")}</div>
-          </section>
-          <section class="speed-config-group ${config.testType === SPEED_TEST_TYPES.WORDS ? "active" : ""}">
-            <h2>WORDS</h2>
-            <div>${wordConfigs.map(option).join("")}</div>
-          </section>
-        </div>
-        <button class="arcade-button selected speed-start-button" data-action="speed-start">
-          START ${config.label.toUpperCase()}
-        </button>
-        <p class="footer-hint">← → CATEGORY &nbsp;•&nbsp; ↑ ↓ OPTION &nbsp;•&nbsp; ENTER START &nbsp;•&nbsp; ESC BACK</p>
-      </div>
-    </section>`;
-  app().querySelectorAll("[data-speed-config]").forEach((button) => {
-    button.onclick = () => handlers.select?.(button.dataset.speedConfig);
-    button.onmouseenter = () => handlers.select?.(button.dataset.speedConfig);
-  });
-  app().querySelector('[data-action="speed-start"]').onclick = handlers.start;
-  app().querySelector(`[data-speed-config="${config.configId}"]`)?.focus({
-    preventScroll: true,
-  });
-}
-
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -142,48 +101,64 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
-function speedWordMarkup(expected, typed = "") {
+export function speedWordMarkup(expected, typed = "", showCaret = true) {
+  const caretIndex = Math.min(typed.length, expected.length);
   const characters = [...expected].map((character, index) => {
     const className = index >= typed.length
       ? "speed-test-char-pending"
       : typed[index] === character
         ? "speed-test-char-correct"
         : "speed-test-char-incorrect";
-    return `<span class="${className}">${character}</span>`;
+    const caret = showCaret && index === caretIndex
+      ? '<span class="speed-test-caret" aria-hidden="true"></span>'
+      : "";
+    return `${caret}<span class="${className}">${character}</span>`;
   }).join("");
   const extra = typed.length > expected.length
     ? `<span class="speed-test-extra">${escapeHtml(typed.slice(expected.length, expected.length + 12))}${typed.length > expected.length + 12 ? "…" : ""}</span>`
     : "";
-  return `${characters}${extra}`;
+  const trailingCaret = showCaret && typed.length >= expected.length
+    ? '<span class="speed-test-caret" aria-hidden="true"></span>'
+    : "";
+  return `${characters}${extra}${trailingCaret}`;
 }
 
-export function renderSpeedTestRun(state, devMode = false) {
+function speedTestConfigMarkup(config, disabled) {
+  const options = getSpeedTestConfigsByType(config.testType);
+  const control = (label, attributes, active) => `
+    <button class="speed-config-control ${active ? "active" : ""}"
+            ${attributes} ${disabled ? "disabled" : ""}>${label}</button>`;
+  return `
+    <nav class="speed-test-config" aria-label="Typing Test configuration">
+      <div class="speed-test-categories">
+        ${control("TIME", 'data-speed-category="time"', config.testType === SPEED_TEST_TYPES.TIME)}
+        ${control("WORDS", 'data-speed-category="words"', config.testType === SPEED_TEST_TYPES.WORDS)}
+      </div>
+      <span class="speed-config-divider" aria-hidden="true"></span>
+      <div class="speed-test-values">
+        ${options.map((option) => control(
+    String(option.durationSeconds ?? option.wordCount),
+    `data-speed-config="${option.configId}"`,
+    option.configId === config.configId,
+  )).join("")}
+      </div>
+    </nav>`;
+}
+
+export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
   const isTime = state.config.testType === SPEED_TEST_TYPES.TIME;
   app().innerHTML = `
     <section class="screen speed-test-screen">
-      <header class="speed-test-hud ${isTime ? "" : "words-mode"}">
-        <div>
-          <span class="micro-label">${isTime ? "Time" : "Words"}</span>
+      <header class="speed-test-topbar">
+        ${speedTestConfigMarkup(state.config, state.phase === "ACTIVE")}
+        <div class="speed-test-hud">
           <strong id="speed-test-primary">${isTime
     ? state.config.durationSeconds.toFixed(1)
     : `0 / ${state.config.wordCount}`}</strong>
-        </div>
-        ${isTime ? "" : `
-          <div>
-            <span class="micro-label">Time</span>
-            <strong id="speed-test-elapsed">00:00</strong>
-          </div>`}
-        <div>
-          <span class="micro-label">WPM</span>
-          <strong id="speed-test-wpm">0</strong>
-        </div>
-        <div>
-          <span class="micro-label">Raw</span>
-          <strong id="speed-test-raw">0</strong>
-        </div>
-        <div>
-          <span class="micro-label">Accuracy</span>
-          <strong id="speed-test-accuracy">100%</strong>
+          <span id="speed-test-elapsed">${isTime ? "" : "00:00"}</span>
+          <span>WPM <b id="speed-test-wpm">0</b></span>
+          <span>ACC <b id="speed-test-accuracy">100%</b></span>
+          <span>RAW <b id="speed-test-raw">0</b></span>
         </div>
       </header>
       <main class="speed-test-stage">
@@ -193,13 +168,21 @@ export function renderSpeedTestRun(state, devMode = false) {
             ${state.words.map((word, index) => `
               <span class="speed-test-word ${index === 0 ? "speed-test-word-current" : ""}"
                     data-speed-word-index="${index}"
-                    aria-current="${index === 0 ? "true" : "false"}">${speedWordMarkup(word)}</span>`).join("")}
+                    aria-current="${index === 0 ? "true" : "false"}">${speedWordMarkup(word, "", index === 0)}</span>`).join("")}
           </div>
         </div>
         <p class="speed-test-hint">ESC — ABORT</p>
       </main>
       ${devMode ? `<aside class="speed-test-dev" id="speed-test-dev">${getSpeedTestDiagnosticText(state)}</aside>` : ""}
     </section>`;
+  app().querySelectorAll("[data-speed-config]").forEach((button) => {
+    button.onclick = () => handlers.selectConfig?.(button.dataset.speedConfig);
+  });
+  app().querySelectorAll("[data-speed-category]").forEach((button) => {
+    button.onclick = () => handlers.selectConfig?.(
+      button.dataset.speedCategory === SPEED_TEST_TYPES.TIME ? "time-60" : "words-50",
+    );
+  });
 }
 
 export function updateSpeedTestRun(state, nowMs) {
@@ -239,7 +222,7 @@ export function updateSpeedTestRun(state, nowMs) {
         "beforeend",
         state.words.slice(renderedCount).map((word, offset) => {
           const index = renderedCount + offset;
-          return `<span class="speed-test-word" data-speed-word-index="${index}" aria-current="false">${speedWordMarkup(word)}</span>`;
+          return `<span class="speed-test-word" data-speed-word-index="${index}" aria-current="false">${speedWordMarkup(word, "", false)}</span>`;
         }).join(""),
       );
     }
@@ -252,7 +235,7 @@ export function updateSpeedTestRun(state, nowMs) {
     element.classList.remove("speed-test-word-current");
     element.classList.add("speed-test-word-complete");
     if (!result.exact) element.classList.add("speed-test-word-error");
-    element.innerHTML = speedWordMarkup(result.expected, result.typed);
+    element.innerHTML = speedWordMarkup(result.expected, result.typed, false);
     element.dataset.committed = "true";
     element.setAttribute?.("aria-current", "false");
   }
@@ -273,14 +256,25 @@ export function updateSpeedTestRun(state, nowMs) {
       state.typedBuffer,
     );
     current.setAttribute?.("aria-current", "true");
-    if (current.dataset.lastCentered !== "true") {
-      document.querySelectorAll?.("[data-last-centered]").forEach((element) => {
-        delete element.dataset.lastCentered;
-      });
-      current.dataset.lastCentered = "true";
-      current.scrollIntoView?.({ block: "center", inline: "nearest" });
+    const lineTop = Number(current.offsetTop) || 0;
+    const lineHeight = Math.max(1, Number(current.offsetHeight) || 1);
+    const lineIndex = Math.max(0, Math.round(lineTop / lineHeight));
+    if (lineIndex !== state.currentLineIndex) {
+      state.currentLineIndex = lineIndex;
+      const viewport = document.querySelector("#speed-test-word-viewport");
+      if (viewport) {
+        const targetTop = Math.max(
+          0,
+          lineTop - (Number(viewport.clientHeight) || 0) / 2 + lineHeight / 2,
+        );
+        viewport.scrollTo?.({ top: targetTop, behavior: "smooth" });
+        if (!viewport.scrollTo) viewport.scrollTop = targetTop;
+      }
     }
   }
+  document.querySelectorAll?.(".speed-config-control").forEach((button) => {
+    button.disabled = state.phase === "ACTIVE";
+  });
   const diagnostics = document.querySelector("#speed-test-dev");
   if (diagnostics) diagnostics.textContent = getSpeedTestDiagnosticText(state, now);
 }
@@ -303,24 +297,22 @@ export function renderSpeedTestResults(result, recordFlags, selectedIndex, handl
         <h1>TEST COMPLETE</h1>
         <div class="speed-result-headline">
           <div><span>WPM</span><strong>${result.wpm.toFixed(1)}</strong></div>
-          <div><span>RAW</span><strong>${mode.rawWpm.toFixed(1)}</strong></div>
           <div><span>ACCURACY</span><strong>${result.accuracy.toFixed(1)}%</strong></div>
+          <div><span>RAW</span><strong>${mode.rawWpm.toFixed(1)}</strong></div>
         </div>
         ${(recordFlags.newWpmRecord || recordFlags.newAccuracyRecord) ? `
           <div class="speed-records">
             ${recordFlags.newWpmRecord ? "<span>NEW WPM RECORD</span>" : ""}
             ${recordFlags.newAccuracyRecord ? "<span>NEW ACCURACY RECORD</span>" : ""}
           </div>` : ""}
-        <div class="speed-result-grid">
-          <div><span>Correct characters</span><strong>${result.characters.correct}</strong></div>
-          <div><span>Incorrect characters</span><strong>${result.characters.incorrect}</strong></div>
-          <div><span>Extra characters</span><strong>${mode.extraCharacters}</strong></div>
-          <div><span>Missed characters</span><strong>${result.characters.missed}</strong></div>
+        <div class="speed-result-details">
+          <div><span>Characters</span><strong>${result.characters.correct} correct / ${result.characters.incorrect} incorrect</strong></div>
+          <div><span>Words</span><strong>${mode.exactWords} exact / ${mode.incorrectWords} incorrect</strong></div>
+          <div><span>Extras</span><strong>${mode.extraCharacters}</strong></div>
+          <div><span>Missed</span><strong>${result.characters.missed}</strong></div>
           <div><span>Backspaces</span><strong>${mode.backspaces}</strong></div>
-          <div><span>Words completed</span><strong>${result.words.completed}</strong></div>
-          <div><span>Exact words</span><strong>${mode.exactWords}</strong></div>
-          <div><span>Incorrect words</span><strong>${mode.incorrectWords}</strong></div>
-          <div><span>Active duration</span><strong>${(result.activeDurationMs / 1000).toFixed(1)}s</strong></div>
+          <div><span>Word deletes</span><strong>${mode.wordDeletes ?? 0}</strong></div>
+          <div><span>Duration</span><strong>${(result.activeDurationMs / 1000).toFixed(1)}s</strong></div>
         </div>
         <div class="menu-list">
           ${actions.map(([label, action], index) => menuButton(

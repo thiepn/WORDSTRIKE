@@ -30,8 +30,15 @@ const result = (sessionId, configId, overrides = {}) => ({
   characters: { correct: 75, incorrect: 4, missed: 1, totalKeystrokes: 80 },
   words: { completed: 15 },
   modeData: {
+    metricVersion: 2,
     configId,
     rawWpm: 64,
+    correctTestCharacters: 75,
+    rawTestCharacters: 80,
+    correctSpaces: 14,
+    validSpaces: 14,
+    backspaces: 3,
+    wordDeletes: 1,
     exactWords: 14,
     completedWordCount: 15,
   },
@@ -94,6 +101,8 @@ assert.equal(JSON.stringify(loadModeData()), beforeDeveloper);
 assert.equal(loadModeData().modes.campaign.completedSessions, 0);
 assert.equal(loadModeData().totals.failedSessions, 0);
 assert.equal(loadModeData().recentSessions[0].modeData.configId, "words-25");
+assert.equal(loadModeData().recentSessions[0].modeData.metricVersion, 2);
+assert.equal(loadModeData().recentSessions[0].modeData.wordDeletes, 1);
 
 const stored = loadModeData();
 values.set("wordstrike_mode_data_v1", JSON.stringify({

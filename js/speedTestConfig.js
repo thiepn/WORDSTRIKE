@@ -95,7 +95,7 @@ export function parseDeveloperSpeedTestConfig(search = "") {
   return normalizeSpeedTestConfigId(new URLSearchParams(search).get("test"));
 }
 
-export function moveSpeedTestSetupSelection(configId, key) {
+export function moveSpeedTestConfigSelection(configId, key) {
   const current = getSpeedTestConfig(normalizeSpeedTestConfigId(configId));
   if (["ArrowLeft", "ArrowRight", "Tab"].includes(key)) {
     return current.testType === SPEED_TEST_TYPES.TIME ? "words-50" : "time-60";
