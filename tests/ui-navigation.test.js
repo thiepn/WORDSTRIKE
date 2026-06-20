@@ -34,6 +34,8 @@ const abandonedAttempt = {
   wordQueue: ["charge"],
   modifierRuntime: { quickFingers: {} },
   blackoutStats: { wordsHidden: 1 },
+  chainRuntime: { active: true, broken: true },
+  failureReason: "chain-broken",
   abandonedWordCount: 2,
   abandonedCharacters: 7,
 };
@@ -44,6 +46,8 @@ assert.deepEqual(abandonedAttempt.words, []);
 assert.deepEqual(abandonedAttempt.wordQueue, []);
 assert.equal(abandonedAttempt.modifierRuntime, null);
 assert.equal(abandonedAttempt.blackoutStats, undefined);
+assert.equal(abandonedAttempt.chainRuntime, undefined);
+assert.equal(abandonedAttempt.failureReason, undefined);
 assert.equal(abandonedAttempt.abandonedWordCount, 0);
 
 const bossAttempt = {
@@ -105,7 +109,13 @@ globalThis.document = {
   createElement() { return new Container(); },
 };
 
-const { showPauseOverlay } = await import("../js/ui.js");
+const {
+  getChainBreakCauseLabel,
+  renderGameplayShell,
+  renderLevelSelect,
+  renderResults,
+  showPauseOverlay,
+} = await import("../js/ui.js");
 const calls = [];
 showPauseOverlay(0, {
   resume: () => calls.push("resume"),
@@ -127,5 +137,68 @@ overlay.buttons[3].onmouseenter();
 assert.equal(calls.at(-1), "select:3");
 overlay.buttons[3].onclick();
 assert.equal(calls.at(-1), "title");
+
+assert.equal(getChainBreakCauseLabel("wrong-key-idle"), "WRONG KEY");
+assert.equal(
+  getChainBreakCauseLabel("wrong-key-ambiguous"),
+  "AMBIGUOUS PREFIX FAILED",
+);
+renderResults(
+  {
+    grade: "Fail",
+    wpm: 20,
+    accuracy: 50,
+    maxCombo: 4,
+    score: 120,
+    levelNumber: 82,
+    isBoss: false,
+    modifierIds: ["chain"],
+    chainBroken: true,
+    chainBreakCause: "wrong-key-locked",
+    chainComboAtBreak: 4,
+    livesRemaining: 3,
+    startingLives: 3,
+  },
+  0,
+  {
+    retry() {},
+    next() {},
+    levels() {},
+  },
+);
+assert.match(app.html, /CHAIN BROKEN/);
+assert.match(app.html, /MODIFIER: CHAIN/);
+assert.match(app.html, /TARGET MISTYPED/);
+assert.match(app.html, /COMBO AT BREAK: 4/);
+assert.doesNotMatch(app.html, /Lives/);
+
+renderGameplayShell(
+  82,
+  3,
+  { modifiers: ["chain"] },
+  false,
+  false,
+  {},
+);
+assert.match(app.html, /Chain integrity/i);
+assert.match(app.html, /◇ INTACT/);
+assert.match(app.html, /ZERO MISTAKES ALLOWED/);
+assert.match(app.html, /ONE MISTAKE ENDS THE RUN/);
+assert.doesNotMatch(app.html, /◆◆◆/);
+
+renderLevelSelect(
+  { currentFurthestLevel: 100, levels: {} },
+  82,
+  false,
+  { phrases: [] },
+  null,
+  null,
+  {
+    back() {},
+    select() {},
+  },
+);
+assert.match(app.html, /title="Chain">CH</);
+assert.match(app.html, /One wrong key or missed word immediately ends the level/);
 
 console.log("Pause actions and results default-selection tests passed.");

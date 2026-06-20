@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   BLACKOUT_ID,
+  CHAIN_ID,
   NO_BACKSPACE_ID,
   QUICK_FINGERS_ID,
 } from "../js/modifiers.js";
@@ -171,6 +172,56 @@ assert.deepEqual(game.blackoutStats, {
   wordsMissedAfterFade: 0,
 });
 assert.equal(game.words.length, 0);
+stopGameLoop();
+
+let chainOutcome = null;
+game = startLevelLoop(
+  82,
+  {
+    ...config,
+    lives: 3,
+    wordCount: 1,
+    maxSimultaneousWords: 1,
+    wordSpeedPxPerSec: 100,
+    modifiers: [CHAIN_ID],
+  },
+  ["cat"],
+  { onEnd: (_game, success) => { chainOutcome = success; } },
+  { attemptSeed: 12345, selectedWords: ["cat"] },
+);
+assert.equal(game.chainRuntime.active, true);
+assert.equal(game.modifierRuntime, null);
+assert.equal(game.attemptSeed, 12345);
+while (game.phase === "MODIFIER_BRIEFING") frame();
+frame();
+const chainElapsedBeforePause = game.elapsedMs;
+const chainTargetingBeforePause = game.targetingState.mode;
+appState.screen = Screens.PAUSED;
+for (let index = 0; index < 5; index += 1) frame();
+assert.equal(game.elapsedMs, chainElapsedBeforePause);
+assert.equal(game.targetingState.mode, chainTargetingBeforePause);
+assert.equal(game.chainRuntime.broken, false);
+assert.equal(game.attemptSeed, 12345);
+appState.screen = Screens.PLAYING;
+while (chainOutcome === null) frame();
+assert.equal(chainOutcome, false);
+assert.equal(game.failureReason, "chain-broken");
+assert.equal(game.lives, 3);
+assert.equal(game.chainRuntime.breakCause, "word-reached-core");
+assert.equal(frames.size, 0);
+
+game = startLevelLoop(
+  82,
+  {
+    ...config,
+    wordCount: 1,
+    modifiers: [CHAIN_ID],
+  },
+  ["cat"],
+  {},
+);
+assert.equal(game.chainRuntime.broken, false);
+assert.equal(game.failureReason, null);
 stopGameLoop();
 
 let outcome = null;

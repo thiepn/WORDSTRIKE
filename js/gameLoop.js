@@ -3,6 +3,7 @@ import {
   clearWordElements,
   clearBossPhrase,
   createWordElement,
+  flashChainBreak,
   flashDamage,
   removeWordElement,
   updateWordElement,
@@ -10,14 +11,19 @@ import {
 } from "./renderer.js";
 import {
   BLACKOUT_ID,
+  CHAIN_BREAK_CAUSES,
+  CHAIN_FAILURE_REASON,
+  CHAIN_ID,
   getBlackoutVisibility,
   getEffectiveSpawnInterval,
   getQuickFingersPhase,
+  hasChainModifier,
+  markChainBroken,
   NO_BACKSPACE_ID,
   QUICK_FINGERS_ID,
 } from "./modifiers.js";
 import { createSeededRandom, mixSeed } from "./random.js";
-import { reconcileTargetingState } from "./input.js";
+import { reconcileTargetingState, resetTargetingState } from "./input.js";
 
 let animationFrameId = null;
 let callbacks = {};
@@ -38,9 +44,13 @@ function createModifierRuntime(config) {
 
 export function createGameState(levelNumber, config, words, attempt = {}) {
   const hasModifier = config.modifiers?.some((id) => (
-    id === QUICK_FINGERS_ID || id === NO_BACKSPACE_ID || id === BLACKOUT_ID
+    id === QUICK_FINGERS_ID ||
+    id === NO_BACKSPACE_ID ||
+    id === BLACKOUT_ID ||
+    id === CHAIN_ID
   ));
   const hasBlackout = config.modifiers?.includes(BLACKOUT_ID);
+  const hasChain = hasChainModifier(config);
   return {
     mode: "normal",
     levelNumber,
@@ -73,6 +83,17 @@ export function createGameState(levelNumber, config, words, attempt = {}) {
     phase: hasModifier ? "MODIFIER_BRIEFING" : "ACTIVE",
     briefingElapsedMs: 0,
     modifierRuntime: createModifierRuntime(config),
+    ...(hasChain ? {
+      chainRuntime: {
+        active: true,
+        broken: false,
+        breakCause: null,
+        brokenAtActiveMs: null,
+        comboAtBreak: 0,
+        failedWordId: null,
+      },
+      failureReason: null,
+    } : {}),
     abandonedWordCount: 0,
     abandonedCharacters: 0,
     ...(hasBlackout ? {
@@ -167,8 +188,17 @@ function spawnWord(game, dimensions) {
 }
 
 export function processWordCoreArrival(game, word) {
-  if (word.coreArrivalProcessed) return false;
+  if (game.ended || word.coreArrivalProcessed) return false;
   word.coreArrivalProcessed = true;
+  if (hasChainModifier(game.config)) {
+    registerMissedWord(game, word);
+    game.words = game.words.filter((candidate) => candidate.id !== word.id);
+    removeWordElement(word);
+    if (markChainBroken(game, CHAIN_BREAK_CAUSES.WORD_REACHED_CORE, word.id)) {
+      finalizeChainFailure(game);
+    }
+    return true;
+  }
   if (
     game.config.modifiers?.includes(BLACKOUT_ID) &&
     word.blackoutPhase !== "visible" &&
@@ -293,6 +323,22 @@ function finish(game, success) {
   callbacks.onEnd?.(game, success);
 }
 
+export function finalizeChainFailure(game) {
+  if (
+    !game ||
+    game.ended ||
+    game.failureReason !== CHAIN_FAILURE_REASON ||
+    !game.chainRuntime?.broken
+  ) {
+    return false;
+  }
+  resetTargetingState(game);
+  flashChainBreak();
+  callbacks.onHudUpdate?.(game);
+  finish(game, false);
+  return true;
+}
+
 function tick(timestamp) {
   const game = appState.game;
   if (!game || game.ended) return;
@@ -362,6 +408,7 @@ function tick(timestamp) {
     word.y += word.vy * deltaSeconds;
     if (Math.hypot(word.x - game.coreX, word.y - game.coreY) <= 42) {
       processWordCoreArrival(game, word);
+      if (game.ended || game.failureReason === CHAIN_FAILURE_REASON) return;
       if (game.lives <= 0) {
         finish(game, false);
         return;
@@ -375,7 +422,11 @@ function tick(timestamp) {
   }
 
   callbacks.onHudUpdate?.(game);
-  if (game.spawnedCount >= game.config.wordCount && game.words.length === 0) {
+  if (
+    !game.failureReason &&
+    game.spawnedCount >= game.config.wordCount &&
+    game.words.length === 0
+  ) {
     finish(game, true);
     return;
   }

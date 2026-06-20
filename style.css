@@ -245,6 +245,12 @@ button {
   text-shadow: 0 0 8px var(--primary);
 }
 
+.modifier-mark.chain {
+  color: var(--secondary);
+  font-size: 9px;
+  text-shadow: 0 0 8px var(--danger);
+}
+
 .level-detail {
   z-index: 2;
   display: flex;
@@ -384,6 +390,50 @@ button {
 .modifier-hud.blackout strong {
   color: var(--primary);
   text-shadow: 0 0 9px rgb(0 255 242 / 38%);
+}
+
+.modifier-hud.chain {
+  border-color: rgb(255 60 172 / 55%);
+  color: var(--secondary);
+}
+
+.modifier-hud.chain strong,
+.chain-mode .modifier-briefing strong {
+  color: var(--secondary);
+  text-shadow: 0 0 12px rgb(255 60 172 / 62%), 0 0 20px rgb(255 71 87 / 28%);
+}
+
+.modifier-hud.chain.broken {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.chain-integrity {
+  color: var(--success);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-shadow: 0 0 9px rgb(76 255 142 / 55%);
+}
+
+.chain-break-flash::before {
+  content: "CHAIN BROKEN";
+  position: absolute;
+  z-index: 48;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border: 5px solid var(--danger);
+  background: rgb(255 71 87 / 10%);
+  color: var(--danger);
+  font-size: clamp(32px, 7vw, 76px);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  pointer-events: none;
+  animation: chain-break 220ms ease-out forwards;
+}
+
+@keyframes chain-break {
+  to { opacity: 0; }
 }
 
 .blackout-mode .modifier-briefing strong {
@@ -900,6 +950,15 @@ button {
 
 .result-modifier.blackout {
   color: var(--primary);
+}
+
+.result-modifier.chain {
+  color: var(--secondary);
+}
+
+.results-screen:has(.result-modifier.chain.danger) .results-panel {
+  border-color: var(--danger);
+  box-shadow: 0 0 40px rgb(255 71 87 / 18%);
 }
 
 .boss-screen {

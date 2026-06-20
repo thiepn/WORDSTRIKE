@@ -26,16 +26,25 @@ export const MODIFIERS = Object.freeze({
   CHAIN: Object.freeze({
     id: "chain",
     name: "Chain",
-    shortLabel: "CHAIN",
-    description: "Losing the combo ends the level.",
+    shortLabel: "CH",
+    description: "One wrong key or missed word immediately ends the level.",
     unlockLevel: 80,
-    implemented: false,
+    implemented: true,
   }),
 });
 
 export const QUICK_FINGERS_ID = MODIFIERS.QUICK_FINGERS.id;
 export const NO_BACKSPACE_ID = MODIFIERS.NO_BACKSPACE.id;
 export const BLACKOUT_ID = MODIFIERS.BLACKOUT.id;
+export const CHAIN_ID = MODIFIERS.CHAIN.id;
+export const CHAIN_FAILURE_REASON = "chain-broken";
+export const CHAIN_BREAK_CAUSES = Object.freeze({
+  WRONG_KEY_IDLE: "wrong-key-idle",
+  WRONG_KEY_AMBIGUOUS: "wrong-key-ambiguous",
+  WRONG_KEY_LOCKED: "wrong-key-locked",
+  WORD_REACHED_CORE: "word-reached-core",
+  OTHER_MISS: "other-miss",
+});
 export const BLACKOUT_VISIBLE_MS = 1600;
 export const BLACKOUT_FADE_MS = 400;
 export const BLACKOUT_HIDDEN_AT_MS = BLACKOUT_VISIBLE_MS + BLACKOUT_FADE_MS;
@@ -58,8 +67,13 @@ export function getModifiersForLevel(level) {
     const slotIndex = Math.floor((level - 42) / 5);
     return [slotIndex % 2 === 0 ? NO_BACKSPACE_ID : QUICK_FINGERS_ID];
   }
-  const cycle = [BLACKOUT_ID, QUICK_FINGERS_ID, NO_BACKSPACE_ID];
-  const slotIndex = Math.floor((level - 62) / 5);
+  if (level < MODIFIERS.CHAIN.unlockLevel) {
+    const cycle = [BLACKOUT_ID, QUICK_FINGERS_ID, NO_BACKSPACE_ID];
+    const slotIndex = Math.floor((level - 62) / 5);
+    return [cycle[slotIndex % cycle.length]];
+  }
+  const cycle = [CHAIN_ID, NO_BACKSPACE_ID, BLACKOUT_ID, QUICK_FINGERS_ID];
+  const slotIndex = Math.floor((level - 82) / 5);
   return [cycle[slotIndex % cycle.length]];
 }
 
@@ -118,13 +132,28 @@ export function getBlackoutVisibility(wordAgeMs) {
   return { phase: "hidden", textOpacity: 0, hidden: true };
 }
 
+export function hasChainModifier(config) {
+  return config?.modifiers?.includes(CHAIN_ID) === true;
+}
+
+export function markChainBroken(game, cause, failedWordId = null) {
+  if (!game?.chainRuntime?.active || game.chainRuntime.broken) return false;
+  game.chainRuntime.broken = true;
+  game.chainRuntime.breakCause = cause;
+  game.chainRuntime.brokenAtActiveMs = game.elapsedMs;
+  game.chainRuntime.comboAtBreak = game.combo;
+  game.chainRuntime.failedWordId = failedWordId;
+  game.failureReason = CHAIN_FAILURE_REASON;
+  return true;
+}
+
 export function applyForcedModifier(level, modifiers, forcedModifierId) {
   const assigned = Array.isArray(modifiers) ? [...modifiers] : [];
   const forcedModifier = getModifierById(forcedModifierId);
   if (
     level % 10 === 0 ||
     !forcedModifier?.implemented ||
-    ![QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID].includes(forcedModifierId)
+    ![QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID, CHAIN_ID].includes(forcedModifierId)
   ) {
     return assigned;
   }
@@ -133,7 +162,7 @@ export function applyForcedModifier(level, modifiers, forcedModifierId) {
 
 export function isForcedModifierRequested(search = "") {
   const requested = new URLSearchParams(search).get("modifier");
-  return [QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID].includes(requested)
+  return [QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID, CHAIN_ID].includes(requested)
     ? requested
     : null;
 }

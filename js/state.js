@@ -61,6 +61,8 @@ export function clearAttemptRuntime(game) {
     if (Array.isArray(game.wordQueue)) game.wordQueue.length = 0;
     game.modifierRuntime = null;
     delete game.blackoutStats;
+    delete game.chainRuntime;
+    delete game.failureReason;
     game.abandonedWordCount = 0;
     game.abandonedCharacters = 0;
   } else if (game.mode === "boss") {

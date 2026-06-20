@@ -114,6 +114,15 @@ export function flashDamage(screenShake = true) {
   window.setTimeout(() => area.classList.remove("damage-flash"), 260);
 }
 
+export function flashChainBreak() {
+  const screen = document.querySelector(".game-screen");
+  if (!screen) return;
+  screen.classList.remove("chain-break-flash");
+  void screen.offsetWidth;
+  screen.classList.add("chain-break-flash");
+  window.setTimeout(() => screen.classList.remove("chain-break-flash"), 220);
+}
+
 export function clearBossPhrase() {
   if (bossPhraseElement) {
     bossPhraseElement.innerHTML = "";

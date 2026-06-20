@@ -51,6 +51,33 @@ const { loadSave, updateLevelResult } = await import("../js/storage.js");
 const save = loadSave();
 assert.equal(save.currentFurthestLevel, 12);
 
+const chainProgress = {
+  currentFurthestLevel: 82,
+  levels: {},
+  settings: { screenShake: true, particles: true, strictMode: false },
+};
+updateLevelResult(chainProgress, 82, {
+  grade: "S",
+  accuracy: 100,
+  wpm: 70,
+  score: 1200,
+  maxCombo: 20,
+  isBoss: false,
+});
+assert.equal(chainProgress.currentFurthestLevel, 83);
+assert.equal(chainProgress.levels["82"].grade, "S");
+const chainClearSnapshot = JSON.stringify(chainProgress);
+updateLevelResult(chainProgress, 82, {
+  grade: "Fail",
+  accuracy: 90,
+  wpm: 100,
+  score: 9999,
+  maxCombo: 99,
+  isBoss: false,
+  failureReason: "chain-broken",
+});
+assert.equal(JSON.stringify(chainProgress), chainClearSnapshot);
+
 const bossProgress = {
   currentFurthestLevel: 10,
   levels: {},

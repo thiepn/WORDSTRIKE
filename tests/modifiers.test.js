@@ -5,6 +5,7 @@ import {
   BLACKOUT_HIDDEN_AT_MS,
   BLACKOUT_ID,
   BLACKOUT_VISIBLE_MS,
+  CHAIN_ID,
   getEffectiveSpawnInterval,
   getBlackoutVisibility,
   getModifiersForLevel,
@@ -36,7 +37,7 @@ assert.deepEqual(getModifiersForLevel(67), [QUICK_FINGERS_ID]);
 assert.deepEqual(getModifiersForLevel(72), [NO_BACKSPACE_ID]);
 assert.deepEqual(getModifiersForLevel(77), [BLACKOUT_ID]);
 assert.deepEqual(getModifiersForLevel(80), []);
-assert.deepEqual(getModifiersForLevel(82), [QUICK_FINGERS_ID]);
+assert.deepEqual(getModifiersForLevel(82), [CHAIN_ID]);
 assert.deepEqual(getModifiersForLevel(87), [NO_BACKSPACE_ID]);
 assert.deepEqual(getModifiersForLevel(92), [BLACKOUT_ID]);
 assert.deepEqual(getModifiersForLevel(97), [QUICK_FINGERS_ID]);
@@ -57,6 +58,7 @@ assert.ok(
     ),
   )),
 );
+assert.ok(Object.values(MODIFIERS).every((modifier) => modifier.implemented));
 
 const phases = [
   [0, "waiting", false, 6000, 0],
@@ -118,6 +120,7 @@ assert.equal(generateBossLevel(20).modifiers, undefined);
 assert.deepEqual(applyForcedModifier(21, [], QUICK_FINGERS_ID), [QUICK_FINGERS_ID]);
 assert.deepEqual(applyForcedModifier(21, [], NO_BACKSPACE_ID), [NO_BACKSPACE_ID]);
 assert.deepEqual(applyForcedModifier(21, [], BLACKOUT_ID), [BLACKOUT_ID]);
+assert.deepEqual(applyForcedModifier(21, [], CHAIN_ID), [CHAIN_ID]);
 assert.deepEqual(
   applyForcedModifier(47, [QUICK_FINGERS_ID], NO_BACKSPACE_ID),
   [NO_BACKSPACE_ID],
@@ -128,11 +131,13 @@ assert.deepEqual(getModifiersForLevel(21), []);
 assert.equal(isForcedModifierRequested("?dev=1&modifier=no-backspace"), NO_BACKSPACE_ID);
 assert.equal(isForcedModifierRequested("?dev=1&modifier=quick-fingers"), QUICK_FINGERS_ID);
 assert.equal(isForcedModifierRequested("?dev=1&modifier=blackout"), BLACKOUT_ID);
+assert.equal(isForcedModifierRequested("?dev=1&modifier=chain"), CHAIN_ID);
 
 const gradeInputs = [
   { accuracy: 86.1 },
   { accuracy: 86.1, modifier: QUICK_FINGERS_ID, burstCount: 99, actualWPM: 200 },
   { accuracy: 86.1, modifier: BLACKOUT_ID, hiddenWordsCompleted: 99 },
+  { accuracy: 86.1, modifier: CHAIN_ID, chainMaintained: true },
   { accuracy: 86.1, score: 999999, combo: 100, livesRemaining: 1 },
 ];
 assert.ok(gradeInputs.every((input) => calculateGrade(input) === "C"));

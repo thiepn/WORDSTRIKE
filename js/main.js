@@ -26,7 +26,12 @@ import {
 } from "./wordBank.js";
 import { calculateAccuracy, calculateGrade, calculateWPM } from "./scoring.js";
 import { handleBossKey, handleGameplayKey } from "./input.js";
-import { resumeGameLoop, startLevelLoop, stopGameLoop } from "./gameLoop.js";
+import {
+  finalizeChainFailure,
+  resumeGameLoop,
+  startLevelLoop,
+  stopGameLoop,
+} from "./gameLoop.js";
 import {
   completeBossPhrase,
   resumeBossLoop,
@@ -36,6 +41,7 @@ import {
 import {
   applyForcedModifier,
   BLACKOUT_ID,
+  CHAIN_ID,
   isForcedModifierRequested,
   NO_BACKSPACE_ID,
   QUICK_FINGERS_ID,
@@ -124,7 +130,7 @@ function startLevel(levelNumber) {
   const config = { ...baseConfig, modifiers };
   const forcedModifier = (
     appState.devMode &&
-    [QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID].includes(appState.forcedModifierId) &&
+    [QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID, CHAIN_ID].includes(appState.forcedModifierId) &&
     safeLevel % 10 !== 0
   );
   const attemptSeed = getAttemptSeed();
@@ -207,6 +213,11 @@ function finishLevel(game, success) {
     wordsHidden: isBoss ? 0 : game.blackoutStats?.wordsHidden || 0,
     hiddenWordsCompleted: isBoss ? 0 : game.blackoutStats?.hiddenWordsCompleted || 0,
     wordsMissedAfterFade: isBoss ? 0 : game.blackoutStats?.wordsMissedAfterFade || 0,
+    failureReason: isBoss ? null : game.failureReason || null,
+    chainBroken: isBoss ? false : game.chainRuntime?.broken === true,
+    chainBreakCause: isBoss ? null : game.chainRuntime?.breakCause || null,
+    chainComboAtBreak: isBoss ? 0 : game.chainRuntime?.comboAtBreak || 0,
+    chainFailedWordId: isBoss ? null : game.chainRuntime?.failedWordId ?? null,
   };
   if (success && game.persistResult) {
     updateLevelResult(appState.save, game.levelNumber, appState.results);
@@ -344,7 +355,13 @@ function handleGlobalKeydown(event) {
       handleBossKey(event, appState.game, appState.save.settings, completeBossPhrase);
       updateBossHud(appState.game);
     } else {
-      handleGameplayKey(event, appState.game, appState.save.settings, updateHud);
+      handleGameplayKey(
+        event,
+        appState.game,
+        appState.save.settings,
+        updateHud,
+        finalizeChainFailure,
+      );
       updateHud(appState.game);
     }
     return;

@@ -8,7 +8,13 @@ import {
   renderBossPhrase,
   updateWordElement,
 } from "./renderer.js";
-import { BLACKOUT_ID, NO_BACKSPACE_ID } from "./modifiers.js";
+import {
+  BLACKOUT_ID,
+  CHAIN_BREAK_CAUSES,
+  hasChainModifier,
+  markChainBroken,
+  NO_BACKSPACE_ID,
+} from "./modifiers.js";
 
 const IGNORED_KEYS = new Set([
   "Shift", "Control", "Alt", "Meta", "CapsLock", "Tab", "Escape", "Enter",
@@ -127,6 +133,18 @@ function abandonTarget(game, target) {
   flashWordCorruption(target.id);
 }
 
+function breakChainFromInput(
+  game,
+  cause,
+  failedWordId,
+  onChainBreak,
+) {
+  if (!markChainBroken(game, cause, failedWordId)) return false;
+  resetTargetingState(game);
+  onChainBreak?.(game);
+  return true;
+}
+
 function completeTarget(game, target, settings, onWordCompleted) {
   if (
     game.config.modifiers?.includes(BLACKOUT_ID) &&
@@ -149,20 +167,43 @@ function completeTarget(game, target, settings, onWordCompleted) {
   onWordCompleted?.(game, target);
 }
 
-export function handleGameplayKey(event, game, settings, onWordCompleted) {
+export function handleGameplayKey(
+  event,
+  game,
+  settings,
+  onWordCompleted,
+  onChainBreak,
+) {
+  const chain = hasChainModifier(game.config);
   if (
     event.key === "Backspace" &&
-    game.config.modifiers?.includes(NO_BACKSPACE_ID)
+    (game.config.modifiers?.includes(NO_BACKSPACE_ID) || chain)
   ) {
     event.preventDefault();
     return true;
   }
-  if (game.phase !== "ACTIVE" || game.ended) return false;
+  if (game.phase !== "ACTIVE" || game.ended || game.failureReason) return false;
   if (IGNORED_KEYS.has(event.key) || event.key.length !== 1) return false;
   const key = event.key.toLowerCase();
   const noBackspace = game.config.modifiers?.includes(NO_BACKSPACE_ID);
   const state = ensureTargetingState(game);
   if (!/^[a-z]$/.test(key)) {
+    if (chain) {
+      event.preventDefault();
+      game.totalKeystrokes += 1;
+      const cause = state.mode === "ambiguous"
+        ? CHAIN_BREAK_CAUSES.WRONG_KEY_AMBIGUOUS
+        : state.mode === "locked"
+          ? CHAIN_BREAK_CAUSES.WRONG_KEY_LOCKED
+          : CHAIN_BREAK_CAUSES.WRONG_KEY_IDLE;
+      breakChainFromInput(
+        game,
+        cause,
+        state.activeTargetId,
+        onChainBreak,
+      );
+      return true;
+    }
     if (!noBackspace) return false;
     event.preventDefault();
     game.totalKeystrokes += 1;
@@ -186,6 +227,15 @@ export function handleGameplayKey(event, game, settings, onWordCompleted) {
       (word) => state.candidateIds.includes(word.id) && word.text.startsWith(nextPrefix),
     );
     if (!candidates.length) {
+      if (chain) {
+        breakChainFromInput(
+          game,
+          CHAIN_BREAK_CAUSES.WRONG_KEY_AMBIGUOUS,
+          null,
+          onChainBreak,
+        );
+        return true;
+      }
       if (settings.strictMode) game.combo = 0;
       flashCandidateWrong(state.candidateIds);
       return true;
@@ -212,6 +262,15 @@ export function handleGameplayKey(event, game, settings, onWordCompleted) {
       .filter((word) => word.text.startsWith(key))
       .sort((a, b) => distanceToCore(a, game) - distanceToCore(b, game));
     if (!candidates.length) {
+      if (chain) {
+        breakChainFromInput(
+          game,
+          CHAIN_BREAK_CAUSES.WRONG_KEY_IDLE,
+          null,
+          onChainBreak,
+        );
+        return true;
+      }
       if (settings.strictMode) game.combo = 0;
       return true;
     }
@@ -241,6 +300,15 @@ export function handleGameplayKey(event, game, settings, onWordCompleted) {
     return true;
   }
   if (target.text[target.typedIndex] !== key) {
+    if (chain) {
+      breakChainFromInput(
+        game,
+        CHAIN_BREAK_CAUSES.WRONG_KEY_LOCKED,
+        target.id,
+        onChainBreak,
+      );
+      return true;
+    }
     if (settings.strictMode) game.combo = 0;
     if (noBackspace) abandonTarget(game, target);
     else flashWrong(target.id);

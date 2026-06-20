@@ -9,6 +9,8 @@ import {
   BLACKOUT_FADE_MS,
   BLACKOUT_ID,
   BLACKOUT_VISIBLE_MS,
+  CHAIN_BREAK_CAUSES,
+  CHAIN_ID,
   getModifierById,
   getModifiersForLevel,
   NO_BACKSPACE_ID,
@@ -106,7 +108,7 @@ function renderDevPanel(
           <button type="button" data-dev-action="launch">LAUNCH</button>
         </div>
         <div class="dev-quick-buttons">
-          ${[62, 77, 92, 42, 52, 72, 22, 47, 87, 10, 50, 100].map((level) => `<button type="button" data-dev-level="${level}">${level}</button>`).join("")}
+          ${[82, 45, 99, 62, 77, 92, 42, 52, 72, 22, 10, 100].map((level) => `<button type="button" data-dev-level="${level}">${level}</button>`).join("")}
         </div>
         <div class="dev-force-options">
           <button type="button" class="dev-force-button ${forcedModifierId === QUICK_FINGERS_ID ? "active" : ""}" data-force-modifier="${QUICK_FINGERS_ID}" ${isBoss ? "disabled" : ""}>
@@ -117,6 +119,9 @@ function renderDevPanel(
           </button>
           <button type="button" class="dev-force-button ${forcedModifierId === BLACKOUT_ID ? "active" : ""}" data-force-modifier="${BLACKOUT_ID}" ${isBoss ? "disabled" : ""}>
             FORCE BLACKOUT
+          </button>
+          <button type="button" class="dev-force-button ${forcedModifierId === CHAIN_ID ? "active" : ""}" data-force-modifier="${CHAIN_ID}" ${isBoss ? "disabled" : ""}>
+            FORCE CHAIN
           </button>
         </div>
         ${forcedModifierId && !isBoss ? `<span class="forced-modifier-label">FORCED MODIFIER: ${getModifierById(forcedModifierId)?.name.toUpperCase()}</span>` : ""}
@@ -141,7 +146,7 @@ export function renderLevelSelect(
 ) {
   const selectedModifiers = getModifiersForLevel(selectedLevel);
   if (
-    [QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID].includes(forcedModifierId) &&
+    [QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID, CHAIN_ID].includes(forcedModifierId) &&
     selectedLevel % 10 !== 0 &&
     !selectedModifiers.includes(forcedModifierId)
   ) {
@@ -157,6 +162,7 @@ export function renderLevelSelect(
     const quickFingers = modifiers.includes(QUICK_FINGERS_ID);
     const noBackspace = modifiers.includes(NO_BACKSPACE_ID);
     const blackout = modifiers.includes(BLACKOUT_ID);
+    const chain = modifiers.includes(CHAIN_ID);
     return `
       <button class="level-tile ${locked ? "locked" : ""} ${locked && devMode ? "dev-access" : ""} ${boss ? "boss" : ""} ${level === selectedLevel ? "selected" : ""}"
         data-level="${level}" ${locked && !devMode ? "disabled" : ""}>
@@ -166,6 +172,7 @@ export function renderLevelSelect(
         ${quickFingers ? '<span class="modifier-mark" title="Quick Fingers">Q</span>' : ""}
         ${noBackspace ? '<span class="modifier-mark no-backspace" title="No Backspace">NB</span>' : ""}
         ${blackout ? '<span class="modifier-mark blackout" title="Blackout">BLK</span>' : ""}
+        ${chain ? '<span class="modifier-mark chain" title="Chain">CH</span>' : ""}
       </button>`;
   }).join("");
   app().innerHTML = `
@@ -235,10 +242,11 @@ export function renderGameplayShell(
   const quickFingers = config.modifiers?.includes(QUICK_FINGERS_ID);
   const noBackspace = config.modifiers?.includes(NO_BACKSPACE_ID);
   const blackout = config.modifiers?.includes(BLACKOUT_ID);
-  const hasModifier = quickFingers || noBackspace || blackout;
+  const chain = config.modifiers?.includes(CHAIN_ID);
+  const hasModifier = quickFingers || noBackspace || blackout || chain;
   const modifier = getModifierById(config.modifiers?.[0]);
   app().innerHTML = `
-    <section class="screen game-screen ${hasModifier ? "has-modifier" : ""} ${noBackspace ? "no-backspace-mode" : ""} ${blackout ? "blackout-mode" : ""}">
+    <section class="screen game-screen ${hasModifier ? "has-modifier" : ""} ${noBackspace ? "no-backspace-mode" : ""} ${blackout ? "blackout-mode" : ""} ${chain ? "chain-mode" : ""}">
       <header class="hud">
         <div>
           <span class="micro-label">Level</span>
@@ -247,8 +255,8 @@ export function renderGameplayShell(
           <span>&nbsp; ACC <span class="hud-value" id="hud-accuracy">100%</span></span>
         </div>
         <div class="hud-center">
-          <span class="micro-label">Core integrity</span><br>
-          <span class="lives" id="hud-lives">${"◆".repeat(lives)}</span>
+          <span class="micro-label">${chain ? "Chain integrity" : "Core integrity"}</span><br>
+          <span class="${chain ? "chain-integrity" : "lives"}" id="hud-lives">${chain ? "◇ INTACT" : "◆".repeat(lives)}</span>
         </div>
         <div class="hud-right">
           <span class="micro-label">Score</span>
@@ -257,13 +265,15 @@ export function renderGameplayShell(
         </div>
       </header>
       ${hasModifier ? `
-        <div class="modifier-hud ${noBackspace ? "no-backspace" : ""} ${blackout ? "blackout" : ""}" id="modifier-hud">
+        <div class="modifier-hud ${noBackspace ? "no-backspace" : ""} ${blackout ? "blackout" : ""} ${chain ? "chain" : ""}" id="modifier-hud">
           <strong>${modifier.name.toUpperCase()}${forcedModifier ? " // FORCED MODIFIER" : ""}</strong>
           <span id="modifier-phase">${quickFingers
     ? "BRIEFING"
     : blackout
       ? "MEMORIZE THE WORDS"
-      : "ZERO RECOVERY"}</span>
+      : chain
+        ? "ZERO MISTAKES ALLOWED"
+        : "ZERO RECOVERY"}</span>
           ${noBackspace ? '<span id="abandoned-count">LOST WORDS: 0</span>' : ""}
           ${blackout ? '<span id="blackout-counts">VISIBLE 0 // FADING 0 // HIDDEN 0</span>' : ""}
           ${devMode ? '<small id="modifier-runtime-details"></small>' : ""}
@@ -284,7 +294,9 @@ export function renderGameplayShell(
     ? "<p>SPAWN RATE SURGES IN BURSTS</p>"
     : noBackspace
       ? "<p>ONE WRONG KEY CORRUPTS THE TARGET<br>CORRUPTED WORDS CANNOT BE RECOVERED</p>"
-      : "<p>WORDS VANISH AFTER TWO SECONDS<br>REMEMBER THEM BEFORE THEY DISAPPEAR</p>"}
+      : blackout
+        ? "<p>WORDS VANISH AFTER TWO SECONDS<br>REMEMBER THEM BEFORE THEY DISAPPEAR</p>"
+        : "<p>ONE MISTAKE ENDS THE RUN<br>KEEP THE CHAIN ALIVE</p>"}
         </div>` : ""}
     </section>`;
 }
@@ -300,7 +312,9 @@ export function updateHud(game) {
   const values = {
     "#hud-wpm": Math.round(wpm),
     "#hud-accuracy": `${accuracy.toFixed(0)}%`,
-    "#hud-lives": "◆".repeat(Math.max(0, game.lives)),
+    "#hud-lives": game.chainRuntime
+      ? game.chainRuntime.broken ? "◇ BROKEN" : "◇ INTACT"
+      : "◆".repeat(Math.max(0, game.lives)),
     "#hud-score": game.score.toLocaleString(),
     "#hud-combo": `x${multiplier.toFixed(1)}`,
   };
@@ -386,6 +400,31 @@ export function updateHud(game) {
       ].join(" // ");
     }
   }
+  if (game.config.modifiers?.includes(CHAIN_ID) && modifierHud) {
+    modifierHud.classList.toggle("broken", game.chainRuntime.broken);
+    const phaseElement = document.querySelector("#modifier-phase");
+    if (phaseElement) {
+      phaseElement.textContent = game.phase === "MODIFIER_BRIEFING"
+        ? "BRIEFING"
+        : game.chainRuntime.broken
+          ? "CHAIN BROKEN"
+          : "ZERO MISTAKES ALLOWED";
+    }
+    const details = document.querySelector("#modifier-runtime-details");
+    if (details) {
+      details.textContent = [
+        `active=${game.chainRuntime.active}`,
+        `broken=${game.chainRuntime.broken}`,
+        `cause=${game.chainRuntime.breakCause || "none"}`,
+        `comboAtBreak=${game.chainRuntime.comboAtBreak}`,
+        `failedWord=${game.chainRuntime.failedWordId ?? "none"}`,
+        `targeting=${game.targetingState.mode}`,
+        `candidates=${game.targetingState.candidateIds.join(",") || "none"}`,
+        `target=${game.targetingState.activeTargetId ?? "none"}`,
+        `words=${game.words.length}`,
+      ].join(" // ");
+    }
+  }
   const devRuntime = document.querySelector("#dev-runtime-panel");
   if (devRuntime) {
     const state = game.targetingState;
@@ -400,6 +439,11 @@ export function updateHud(game) {
       `candidateIds=${state.candidateIds.join(",") || "none"}`,
       `candidateTexts=${candidateWords.map((word) => word.text).join(",") || "none"}`,
       `activeTarget=${state.activeTargetId ?? "none"}`,
+      `chainActive=${game.chainRuntime?.active === true}`,
+      `chainBroken=${game.chainRuntime?.broken === true}`,
+      `chainCause=${game.chainRuntime?.breakCause || "none"}`,
+      `comboAtBreak=${game.chainRuntime?.comboAtBreak ?? 0}`,
+      `failedWord=${game.chainRuntime?.failedWordId ?? "none"}`,
       `offsets=${game.words.map((word) => `${word.id}:${(word.separationX || 0).toFixed(1)},${(word.separationY || 0).toFixed(1)}`).join("|") || "none"}`,
       `visibility=${candidateWords.map((word) => `${word.id}:${word.blackoutPhase || "visible"}`).join("|") || "none"}`,
     ].join(" // ");
@@ -538,6 +582,17 @@ export function hidePauseOverlay() {
   document.querySelector(".pause-overlay")?.remove();
 }
 
+export function getChainBreakCauseLabel(cause) {
+  const labels = {
+    [CHAIN_BREAK_CAUSES.WRONG_KEY_IDLE]: "WRONG KEY",
+    [CHAIN_BREAK_CAUSES.WRONG_KEY_AMBIGUOUS]: "AMBIGUOUS PREFIX FAILED",
+    [CHAIN_BREAK_CAUSES.WRONG_KEY_LOCKED]: "TARGET MISTYPED",
+    [CHAIN_BREAK_CAUSES.WORD_REACHED_CORE]: "WORD REACHED CORE",
+    [CHAIN_BREAK_CAUSES.OTHER_MISS]: "CHAIN MISSED",
+  };
+  return labels[cause] || "CHAIN BROKEN";
+}
+
 export function renderResults(result, selectedIndex, handlers) {
   const cleared = result.grade !== "Fail";
   const canAdvance = cleared && result.levelNumber < 100;
@@ -550,7 +605,11 @@ export function renderResults(result, selectedIndex, handlers) {
   app().innerHTML = `
     <section class="screen results-screen">
       <div class="results-panel">
-        <div class="eyebrow">${result.isBoss ? `BOSS ${result.levelNumber} ${cleared ? "CLEARED" : "FAILED"}` : `Level ${String(result.levelNumber).padStart(2, "0")} // ${cleared ? "Core secured" : "Core breached"}`}</div>
+        <div class="eyebrow">${result.chainBroken
+    ? "CHAIN BROKEN"
+    : result.isBoss
+      ? `BOSS ${result.levelNumber} ${cleared ? "CLEARED" : "FAILED"}`
+      : `Level ${String(result.levelNumber).padStart(2, "0")} // ${cleared ? "Core secured" : "Core breached"}`}</div>
         <div class="grade ${cleared ? `grade-${result.grade.toLowerCase()}` : "fail"}">${result.grade}</div>
         ${result.modifierIds?.includes(QUICK_FINGERS_ID) ? `
           <div class="result-modifier">
@@ -570,6 +629,13 @@ export function renderResults(result, selectedIndex, handlers) {
             HIDDEN WORDS COMPLETED: ${result.hiddenWordsCompleted}<br>
             WORDS MISSED AFTER FADE: ${result.wordsMissedAfterFade}
           </div>` : ""}
+        ${result.modifierIds?.includes(CHAIN_ID) ? `
+          <div class="result-modifier chain ${result.chainBroken ? "danger" : ""}">
+            MODIFIER: CHAIN<br>
+            ${result.chainBroken
+    ? `BREAK CAUSE: ${getChainBreakCauseLabel(result.chainBreakCause)}<br>COMBO AT BREAK: ${result.chainComboAtBreak}`
+    : "CHAIN MAINTAINED"}
+          </div>` : ""}
         <div class="stats-grid">
           <div class="stat"><span class="micro-label">WPM</span><strong>${Math.round(result.wpm)}</strong></div>
           <div class="stat"><span class="micro-label">Accuracy</span><strong>${result.accuracy.toFixed(1)}%</strong></div>
@@ -578,7 +644,10 @@ export function renderResults(result, selectedIndex, handlers) {
           ${result.isBoss
     ? `<div class="stat"><span class="micro-label">Time remaining</span><strong>${result.timeRemaining.toFixed(1)}s</strong></div>
           <div class="stat"><span class="micro-label">Phrases</span><strong>${result.phrasesCompleted}/${result.phraseCount}</strong></div>`
-    : `<div class="stat"><span class="micro-label">Lives</span><strong>${result.livesRemaining}/${result.startingLives}</strong></div>
+    : result.modifierIds?.includes(CHAIN_ID)
+      ? `<div class="stat"><span class="micro-label">Chain integrity</span><strong>${result.chainBroken ? "BROKEN" : "INTACT"}</strong></div>
+          <div class="stat"><span class="micro-label">Level</span><strong>${result.levelNumber}</strong></div>`
+      : `<div class="stat"><span class="micro-label">Lives</span><strong>${result.livesRemaining}/${result.startingLives}</strong></div>
           <div class="stat"><span class="micro-label">Level</span><strong>${result.levelNumber}</strong></div>`}
         </div>
         <div class="menu-list">
