@@ -7,10 +7,12 @@ class ClassList {
 }
 const phrase = { innerHTML: "" };
 const progress = { style: {} };
+const sequenceCount = { textContent: "" };
 globalThis.document = {
   querySelector(selector) {
     if (selector === "#boss-phrase") return phrase;
     if (selector === "#boss-progress-fill") return progress;
+    if (selector === "#boss-phrase-count") return sequenceCount;
     return null;
   },
 };
@@ -31,6 +33,7 @@ const {
   startBossLoop,
   stopBossLoop,
 } = await import("../js/bossLoop.js");
+const { updateBossHud } = await import("../js/ui.js");
 const { startLevelLoop, stopGameLoop } = await import("../js/gameLoop.js");
 const { handleBossKey } = await import("../js/input.js");
 
@@ -54,6 +57,8 @@ let game = startBossLoop(
 for (let index = 0; index < 30 && game.phase === "INTRO"; index += 1) frame();
 assert.equal(game.phase, "ACTIVE");
 assert.equal(game.remainingMs, 1000);
+updateBossHud(game);
+assert.equal(sequenceCount.textContent, "SEQUENCE 1 / 1");
 
 const remainingBeforePause = game.remainingMs;
 appState.screen = Screens.PAUSED;
@@ -87,6 +92,8 @@ game = startBossLoop(
   { onEnd: (_game, success) => { outcome = success; } },
 );
 for (let index = 0; index < 30 && game.phase === "INTRO"; index += 1) frame();
+updateBossHud(game);
+assert.equal(sequenceCount.textContent, "SEQUENCE 1 / 2");
 handleBossKey(
   { key: "a", preventDefault() {} },
   game,
@@ -94,15 +101,21 @@ handleBossKey(
   completeBossPhrase,
 );
 assert.equal(game.phase, "TRANSITION");
+updateBossHud(game);
+assert.equal(sequenceCount.textContent, "SEQUENCE 1 / 2");
 const transitionStartTime = game.remainingMs;
 appState.screen = Screens.PAUSED;
 for (let index = 0; index < 3; index += 1) frame();
 assert.equal(game.phase, "TRANSITION");
 assert.equal(game.remainingMs, transitionStartTime);
+updateBossHud(game);
+assert.equal(sequenceCount.textContent, "SEQUENCE 1 / 2");
 appState.screen = Screens.PLAYING;
 while (game.phase === "TRANSITION") frame();
 assert.equal(game.phase, "ACTIVE");
 assert.equal(game.phraseIndex, 1);
+updateBossHud(game);
+assert.equal(sequenceCount.textContent, "SEQUENCE 2 / 2");
 assert.equal(game.remainingMs, transitionStartTime - 350);
 assert.equal(game.combo, 1);
 
@@ -126,6 +139,8 @@ assert.equal(game.missedCharacters, missedOnce);
 startBossLoop(10, { timeLimitSec: 1 }, ["a"], {});
 startBossLoop(10, { timeLimitSec: 1 }, ["a"], {});
 assert.equal(frames.size, 1);
+updateBossHud(appState.game);
+assert.equal(sequenceCount.textContent, "SEQUENCE 1 / 1");
 stopBossLoop();
 assert.equal(frames.size, 0);
 
@@ -160,5 +175,36 @@ startLevelLoop(
 );
 assert.equal(frames.size, 1);
 stopGameLoop();
+
+const threeSequenceGame = startBossLoop(
+  60,
+  { timeLimitSec: 10, totalWordCount: 3 },
+  ["a", "b", "c"],
+  {},
+);
+for (let index = 0; index < 30 && threeSequenceGame.phase === "INTRO"; index += 1) frame();
+updateBossHud(threeSequenceGame);
+assert.equal(sequenceCount.textContent, "SEQUENCE 1 / 3");
+threeSequenceGame.displayedSequenceNumber = 0;
+updateBossHud(threeSequenceGame);
+assert.equal(sequenceCount.textContent, "SEQUENCE 1 / 3");
+threeSequenceGame.displayedSequenceNumber = 99;
+updateBossHud(threeSequenceGame);
+assert.equal(sequenceCount.textContent, "SEQUENCE 3 / 3");
+threeSequenceGame.displayedSequenceNumber = 1;
+for (const [key, expected] of [["a", "SEQUENCE 2 / 3"], ["b", "SEQUENCE 3 / 3"]]) {
+  handleBossKey(
+    { key, preventDefault() {} },
+    threeSequenceGame,
+    { strictMode: false },
+    completeBossPhrase,
+  );
+  updateBossHud(threeSequenceGame);
+  assert.doesNotMatch(sequenceCount.textContent, /SEQUENCE 0|SEQUENCE 4|undefined/);
+  while (threeSequenceGame.phase === "TRANSITION") frame();
+  updateBossHud(threeSequenceGame);
+  assert.equal(sequenceCount.textContent, expected);
+}
+stopBossLoop();
 
 console.log("Boss intro, pause, final-key priority, timeout, retry, and mode-switch tests passed.");

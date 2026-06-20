@@ -2,7 +2,16 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { generateBossEncounter } from "../js/bossGenerator.js";
 
-const app = { innerHTML: "" };
+const app = {
+  innerHTML: "",
+  querySelector() {
+    return {
+      onclick: null,
+      addEventListener() {},
+    };
+  },
+  querySelectorAll() { return []; },
+};
 globalThis.document = {
   querySelector(selector) {
     if (selector === "#app") return app;
@@ -10,7 +19,7 @@ globalThis.document = {
   },
 };
 
-const { renderBossShell } = await import("../js/ui.js");
+const { renderBossShell, renderResults } = await import("../js/ui.js");
 const bank = JSON.parse(
   await readFile(new URL("../data/bossWords.json", import.meta.url), "utf8"),
 );
@@ -36,6 +45,33 @@ assert.match(app.innerHTML, /DIFFICULTY: EXTREME/);
 for (const segment of encounter.segments) {
   assert.equal(app.innerHTML.includes(segment), false, "ordinary UI must not preview segments");
 }
+
+const level10Encounter = generateBossEncounter(bank, 10, 12345);
+renderBossShell(10, {
+  ...level10Encounter.profile,
+  timeLimitSec: level10Encounter.timing.effectiveTimeLimitSec,
+  ...level10Encounter.metrics,
+  ...level10Encounter.timing,
+}, false, { attemptSeed: 12345, encounter: level10Encounter });
+assert.match(app.innerHTML, /SEQUENCE 1 \/ 1/);
+assert.doesNotMatch(app.innerHTML, /SEQUENCE 0|undefined/);
+renderResults({
+  grade: "A",
+  wpm: 40,
+  accuracy: 98,
+  maxCombo: 4,
+  score: 1000,
+  levelNumber: 10,
+  isBoss: true,
+  timeRemaining: 1,
+  phrasesCompleted: 1,
+  phraseCount: 1,
+}, 0, {
+  retry() {},
+  next() {},
+  levels() {},
+});
+assert.doesNotMatch(app.innerHTML, /boss-phrase-count|SEQUENCE 1 \/ 1/);
 
 renderBossShell(100, config, true, { attemptSeed: 12345, encounter });
 for (const requiredDiagnostic of [

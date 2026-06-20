@@ -17,6 +17,7 @@ export function createBossGameState(levelNumber, config, phrases) {
     phrases: [...phrases],
     currentPhrase: phrases[0] || "",
     phraseIndex: 0,
+    displayedSequenceNumber: 1,
     phraseCharIndex: 0,
     phrasesCompleted: 0,
     phase: "INTRO",
@@ -73,6 +74,10 @@ export function completeBossPhrase(game) {
 
 function beginNextPhrase(game) {
   game.phraseIndex += 1;
+  game.displayedSequenceNumber = Math.min(
+    game.phraseIndex + 1,
+    Math.max(1, game.phrases.length),
+  );
   game.currentPhrase = game.phrases[game.phraseIndex] || "";
   game.phraseCharIndex = 0;
   game.wordStartIndex = 0;

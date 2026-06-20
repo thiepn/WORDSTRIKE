@@ -559,8 +559,18 @@ export function updateBossHud(game) {
   const activePrefix = game.currentPhrase.slice(0, game.phraseCharIndex);
   const activeCompletedWords = (activePrefix.match(/ /g) || []).length +
     (game.phraseCharIndex >= game.currentPhrase.length && game.currentPhrase.length ? 1 : 0);
+  const totalSequences = Math.max(1, game.phrases.length);
+  const displayedSequenceNumber = Math.max(
+    1,
+    Math.min(
+      totalSequences,
+      Number.isInteger(game.displayedSequenceNumber)
+        ? game.displayedSequenceNumber
+        : game.phraseIndex + 1,
+    ),
+  );
   const values = {
-    "#boss-phrase-count": `SEQUENCE ${Math.min(game.phraseIndex + 1, game.phrases.length)} / ${game.phrases.length}`,
+    "#boss-phrase-count": `SEQUENCE ${displayedSequenceNumber} / ${totalSequences}`,
     "#boss-word-count": `${Math.min(completedWords + activeCompletedWords, game.config.totalWordCount)} / ${game.config.totalWordCount}`,
     "#boss-score": game.score.toLocaleString(),
     "#boss-combo": game.combo,

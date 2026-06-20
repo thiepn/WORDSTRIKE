@@ -9,7 +9,7 @@ export const BOSS_BANNED_WORDS = new Set([
 ]);
 
 const PROFILE_ROWS = [
-  [10, 1, 4, 6, 7.5, 9, 55],
+  [10, 1, 4, 6, 7.5, 9, 40],
   [20, 1, 5, 7, 8.5, 10, 60],
   [30, 2, 4, 7, 9.0, 11, 65],
   [40, 2, 5, 8, 9.8, 12, 70],
@@ -55,6 +55,24 @@ const COMMON_SUFFIXES = [
   "izations", "ization", "ational", "ations", "ation", "ingly", "ments",
   "ment", "tions", "tion", "ness", "ists", "ist", "ing", "edly", "ed", "ly", "s",
 ];
+
+const BOSS_WORD_ORDER_LABEL = "boss-word-order";
+
+function hashSeedLabel(label) {
+  let hash = 0x811c9dc5;
+  for (const character of label) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+function deriveBossWordOrderSeed(attemptSeed, level) {
+  return mixSeed(
+    mixSeed(attemptSeed, Math.imul(level, 104729)),
+    hashSeedLabel(BOSS_WORD_ORDER_LABEL),
+  );
+}
 
 export const EMERGENCY_BOSS_WORDS = Object.freeze([
   "electromagnetic", "intercontinental", "misinterpretation", "multidimensional",
@@ -290,16 +308,42 @@ function selectWords(entries, profile, seed, strongest = false) {
   return selected;
 }
 
-function buildSegments(selected, profile, seed) {
-  const sorted = [...selected].sort((first, second) => (
-    second.word.length - first.word.length || first.word.localeCompare(second.word)
-  ));
+function validateSelectedWordSet(selected, profile) {
+  if (!Array.isArray(selected) || selected.length !== profile.totalWordCount) return false;
+  const words = selected.map((entry) => entry?.word);
+  if (words.some((word) => typeof word !== "string" || !/^[a-z]+$/.test(word))) return false;
+  if (new Set(words).size !== words.length) return false;
+  if (words.some((word) => (
+    BOSS_BANNED_WORDS.has(word) || word.length < profile.minimumWordLength
+  ))) {
+    return false;
+  }
+  const totalCharacters = words.reduce((sum, word) => sum + word.length, 0);
+  if (totalCharacters / words.length + Number.EPSILON < profile.requiredAverageWordLength) {
+    return false;
+  }
+  if (Math.max(...words.map((word) => word.length)) < profile.minimumLongestWord) {
+    return false;
+  }
+  return !hasRootSimilarity(words);
+}
+
+function buildSegments(selected, profile, orderSeed, orderAttempt) {
+  const stageSeed = mixSeed(orderSeed, orderAttempt);
+  const independentlyShuffled = shuffleSeeded(selected, stageSeed);
+  const balanced = independentlyShuffled
+    .map((entry, orderIndex) => ({ entry, orderIndex }))
+    .sort((first, second) => (
+      second.entry.word.length - first.entry.word.length ||
+      first.orderIndex - second.orderIndex
+    ))
+    .map(({ entry }) => entry);
   const segmentWords = Array.from({ length: profile.segmentCount }, () => []);
-  for (const [index, entry] of sorted.entries()) {
+  for (const [index, entry] of balanced.entries()) {
     segmentWords[index % profile.segmentCount].push(entry.word);
   }
   return segmentWords.map((words, index) => (
-    shuffleSeeded(words, mixSeed(seed, 0x9e3779b9 + index)).join(" ")
+    shuffleSeeded(words, mixSeed(stageSeed, 0x9e3779b9 + index)).join(" ")
   ));
 }
 
@@ -350,14 +394,15 @@ export function generateBossEncounter(source, level, attemptSeed) {
   if (!profile) return null;
   const normalized = normalizeBossVocabulary(source);
   const entries = normalized.length ? normalized : EMERGENCY_BOSS_WORDS;
+  const orderSeed = deriveBossWordOrderSeed(attemptSeed, level);
   for (let generationAttempt = 1; generationAttempt <= MAX_BOSS_GENERATION_ATTEMPTS; generationAttempt += 1) {
     const seed = mixSeed(
       attemptSeed,
       Math.imul(level, 104729) ^ Math.imul(generationAttempt, 0x45d9f3b),
     );
     const selected = selectWords(entries, profile, seed);
-    if (!selected) continue;
-    const segments = buildSegments(selected, profile, seed);
+    if (!selected || !validateSelectedWordSet(selected, profile)) continue;
+    const segments = buildSegments(selected, profile, orderSeed, generationAttempt);
     const encounter = createEncounterResult(profile, segments, generationAttempt, false);
     if (encounter) return encounter;
   }
@@ -367,10 +412,15 @@ export function generateBossEncounter(source, level, attemptSeed) {
   for (let fallbackAttempt = 1; fallbackAttempt <= MAX_BOSS_GENERATION_ATTEMPTS; fallbackAttempt += 1) {
     const seed = mixSeed(attemptSeed, 0xf411ba11 ^ Math.imul(level, fallbackAttempt));
     const selected = selectWords(fallbackEntries, profile, seed, fallbackAttempt === 1);
-    if (!selected) continue;
+    if (!selected || !validateSelectedWordSet(selected, profile)) continue;
     const encounter = createEncounterResult(
       profile,
-      buildSegments(selected, profile, seed),
+      buildSegments(
+        selected,
+        profile,
+        orderSeed,
+        MAX_BOSS_GENERATION_ATTEMPTS + fallbackAttempt,
+      ),
       MAX_BOSS_GENERATION_ATTEMPTS + fallbackAttempt,
       true,
     );

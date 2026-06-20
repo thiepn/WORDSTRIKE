@@ -15,7 +15,7 @@ const bank = JSON.parse(
   await readFile(new URL("../data/bossWords.json", import.meta.url), "utf8"),
 );
 const expected = {
-  10: [1, 4, 6, 7.5, 9, 55],
+  10: [1, 4, 6, 7.5, 9, 40],
   20: [1, 5, 7, 8.5, 10, 60],
   30: [2, 4, 7, 9.0, 11, 65],
   40: [2, 5, 8, 9.8, 12, 70],
@@ -94,6 +94,30 @@ for (let level = 10; level <= 100; level += 10) {
 }
 assert.ok(differentSeeds >= 9);
 
+const fixedSetBank = {
+  words: [
+    { word: "framework", tier: 1 },
+    { word: "velocity", tier: 1 },
+    { word: "quantum", tier: 1 },
+    { word: "signal", tier: 1 },
+  ],
+};
+const fixedSetOrders = new Set();
+for (let seed = 1; seed <= 12; seed += 1) {
+  const encounter = generateBossEncounter(fixedSetBank, 10, seed);
+  assert.deepEqual(
+    [...encounter.words].sort(),
+    fixedSetBank.words.map(({ word }) => word).sort(),
+  );
+  assert.equal(new Set(encounter.words).size, encounter.words.length);
+  assert.equal(
+    validateBossEncounter(encounter.segments, getBossDifficultyProfile(10)).valid,
+    true,
+  );
+  fixedSetOrders.add(encounter.words.join("|"));
+}
+assert.ok(fixedSetOrders.size > 1, "independent order seed should reorder a fixed word set");
+
 const early = generateBossEncounter(bank, 10, 12345);
 const late = generateBossEncounter(bank, 100, 12345);
 assert.equal(early.metrics.totalWordCount, 4);
@@ -129,6 +153,15 @@ for (const [levelText, [minimum, maximum]] of Object.entries(fixedSeedRanges)) {
   assert.equal(encounter.timing.transitionAllowanceSeconds, expectedAllowance);
   assert.equal(encounter.timing.effectiveTimeLimitSec, expectedTime);
 }
+const fixedLevel10 = generateBossEncounter(bank, 10, 12345);
+assert.equal(fixedLevel10.metrics.totalRequiredCharacters, 33);
+assert.equal(fixedLevel10.profile.targetWPM, 40);
+assert.equal(fixedLevel10.timing.idealTypingSeconds, 9.899999999999999);
+assert.equal(fixedLevel10.timing.effectiveTimeLimitSec, 10.691999999999998);
+assert.equal(
+  fixedLevel10.timing.totalRequiredCharacters,
+  fixedLevel10.segments.reduce((sum, segment) => sum + segment.length, 0),
+);
 assert.equal(calculateBossTiming(10, ["a"]).effectiveTimeLimitSec, 9);
 assert.equal(calculateBossTiming(100, ["x".repeat(1000)]).effectiveTimeLimitSec, 50);
 assert.ok(late.timing.effectiveTimeLimitSec > 38);
