@@ -10,6 +10,7 @@ import {
 
 assert.equal(getModeDefinition(MODE_IDS.CAMPAIGN).enabled, true);
 assert.equal(getModeDefinition(MODE_IDS.SPEED_TEST).enabled, true);
+assert.equal(getModeDefinition(MODE_IDS.SPEED_TEST).supportsPause, true);
 assert.equal(getModeDefinition(MODE_IDS.ENDLESS).enabled, true);
 assert.equal(getModeDefinition(MODE_IDS.DAILY).enabled, false);
 assert.equal(getModeDefinition(MODE_IDS.PRACTICE).enabled, false);

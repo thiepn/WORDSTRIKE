@@ -449,8 +449,12 @@ button {
 }
 
 .speed-test-word-viewport {
+  --speed-test-line-height: clamp(34px, 3.64vw, 53px);
   align-self: center;
-  height: min(250px, 40vh);
+  height: min(
+    calc(var(--speed-test-line-height) * 3 + 30px),
+    42vh
+  );
   overflow: hidden;
   border-block: 1px solid rgb(129 144 158 / 18%);
   scroll-behavior: smooth;
@@ -461,11 +465,13 @@ button {
   flex-wrap: wrap;
   align-content: flex-start;
   gap: 15px 20px;
-  padding: 84px 10px;
+  padding: 0 10px;
   font-size: clamp(24px, 2.6vw, 38px);
   font-weight: 600;
-  line-height: 1.25;
+  line-height: var(--speed-test-line-height);
   font-variant-ligatures: none;
+  transform: translateY(0);
+  transition: transform 120ms ease;
 }
 
 .speed-test-word {
@@ -508,6 +514,10 @@ button {
   background: var(--primary);
   box-shadow: 0 0 7px rgb(0 255 242 / 70%);
   animation: speed-caret-blink 900ms ease-in-out infinite alternate;
+}
+
+.speed-test-screen.paused .speed-test-caret::after {
+  animation-play-state: paused;
 }
 
 @keyframes speed-caret-blink {

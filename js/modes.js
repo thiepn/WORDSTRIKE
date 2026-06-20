@@ -27,7 +27,7 @@ const MODE_DEFINITIONS = Object.freeze([
     enabled: true,
     status: "available",
     route: "speed-test",
-    supportsPause: false,
+    supportsPause: true,
     supportsSeed: true,
     storesProgress: true,
   }),

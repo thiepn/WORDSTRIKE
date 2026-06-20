@@ -48,6 +48,8 @@ const app = {
 globalThis.document = {
   querySelector(selector) {
     if (selector === "#app") return app;
+    if (selector === "#speed-test-word-viewport") return globalThis.layoutViewport || null;
+    if (selector === "#speed-test-word-flow") return globalThis.layoutFlow || null;
     return null;
   },
 };
@@ -55,6 +57,7 @@ globalThis.document = {
 const {
   renderSpeedTestResults,
   renderSpeedTestRun,
+  measureSpeedTestLayout,
   speedWordMarkup,
 } = await import("../js/ui.js");
 
@@ -71,12 +74,40 @@ renderSpeedTestRun({
 assert.match(app.html, /data-speed-category="time"/);
 assert.match(app.html, /data-speed-category="words"/);
 assert.match(app.html, /data-speed-config="time-60"/);
+assert.match(app.html, /tabindex="-1"/);
 assert.match(app.html, /START TYPING/);
 assert.match(app.html, /speed-test-caret/);
 assert.doesNotMatch(app.html, /CHOOSE A TEST|START 60 SECONDS|CURRENT/);
 assert.doesNotMatch(app.html, /LIVES|COMBO|MODIFIER/);
 app.buttons.find((button) => button.dataset.speedCategory === "words").onclick();
 assert.equal(configCalls.at(-1), "words-50");
+
+const wordNodes = [0, 0, 50, 50, 100, 100, 150].map((offsetTop, index) => ({
+  offsetTop,
+  dataset: { speedWordIndex: String(index) },
+}));
+globalThis.layoutViewport = { clientHeight: 130, scrollTop: 99 };
+globalThis.layoutFlow = {
+  scrollHeight: 220,
+  style: {},
+  querySelectorAll() { return wordNodes; },
+};
+const layoutState = {
+  currentWordIndex: 0,
+  currentLineIndex: 0,
+  previousLineIndex: 0,
+  lineMap: [],
+  verticalTranslation: 99,
+};
+assert.equal(measureSpeedTestLayout(layoutState).verticalTranslation, 0);
+assert.equal(layoutState.currentLineIndex, 0);
+assert.equal(globalThis.layoutViewport.scrollTop, 0);
+layoutState.currentWordIndex = 4;
+assert.equal(measureSpeedTestLayout(layoutState).verticalTranslation, 50);
+layoutState.currentWordIndex = 6;
+assert.equal(measureSpeedTestLayout(layoutState).verticalTranslation, 90);
+delete globalThis.layoutViewport;
+delete globalThis.layoutFlow;
 
 renderSpeedTestRun({
   config: getSpeedTestConfig("words-50"),
@@ -142,16 +173,23 @@ assert.match(css, /\.speed-test-caret::after[^}]*width:\s*2px/s);
 assert.match(css, /\.speed-test-char-incorrect[^}]*text-decoration/s);
 assert.match(css, /\.speed-test-word-viewport[^}]*overflow:\s*hidden/s);
 assert.match(css, /\.speed-test-word-flow[^}]*font-variant-ligatures:\s*none/s);
+assert.match(css, /\.speed-test-word-flow[^}]*padding:\s*0 10px/s);
 assert.doesNotMatch(css, /\.speed-test-word-current::before/);
 assert.doesNotMatch(css, /\.speed-setup-/);
 
 const mainSource = await readFile(new URL("../js/main.js", import.meta.url), "utf8");
+const uiSource = await readFile(new URL("../js/ui.js", import.meta.url), "utf8");
 assert.match(mainSource, /speedTestResultsReadyAt/);
 assert.match(mainSource, /isResultsInputBlocked\(/);
 assert.match(mainSource, /route === "speed-test"/);
 assert.match(mainSource, /appState\.speedTestConfigId = DEFAULT_SPEED_TEST_CONFIG_ID/);
-assert.match(mainSource, /change:\s*\(\) => startSelectedSpeedTest\("change-test"\)/);
+assert.match(mainSource, /change:\s*\(\) => resetSpeedTestAttempt\("change-test"\)/);
 assert.match(mainSource, /const attemptSeed = getAttemptSeed\(\)/);
+assert.match(mainSource, /event\.key === "Tab"[\s\S]*resetSpeedTestAttempt\("tab-reset"\)/);
+assert.match(mainSource, /pauseTypingTest\(\)/);
+assert.match(mainSource, /quit:\s*\(\) => resetSpeedTestAttempt\("quit-test"\)/);
+assert.match(uiSource, /RESUME[\s\S]*RETRY[\s\S]*QUIT TEST[\s\S]*MAIN MENU/);
+assert.doesNotMatch(mainSource, /moveSpeedTestConfigSelection/);
 assert.doesNotMatch(mainSource, /SPEED_TEST_SETUP|openSpeedTestSetup|renderSpeedTestSetup/);
 
 console.log("Typing Test direct-ready UI, inline controls, caret, clean viewport, and grouped Results tests passed.");

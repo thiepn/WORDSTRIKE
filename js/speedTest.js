@@ -10,6 +10,8 @@ import {
   getCurrentSession,
   markSessionActive,
   markSessionResultPersisted,
+  pauseSession,
+  resumeSession,
   SESSION_STATES,
   setSessionState,
 } from "./sessionManager.js";
@@ -86,8 +88,12 @@ export function createSpeedTestRuntime({
     committedWords: [],
     metrics: createSpeedTestMetrics(),
     activeStartedAtMs: null,
+    accumulatedActiveMs: 0,
     completedAtMs: null,
     deadlineMs: null,
+    remainingDurationMs: safeConfig.durationSeconds == null
+      ? null
+      : safeConfig.durationSeconds * 1000,
     activeDurationMs: 0,
     ended: false,
     result: null,
@@ -98,6 +104,13 @@ export function createSpeedTestRuntime({
     },
     completionNotified: false,
     currentLineIndex: 0,
+    previousLineIndex: 0,
+    lineMap: [],
+    verticalTranslation: 0,
+    layoutDirty: true,
+    layoutFrameId: null,
+    lastLayoutWordIndex: -1,
+    resumePhase: "PREPARING",
   };
   ensureWordBuffer(state);
   return state;
@@ -108,9 +121,12 @@ export function getSpeedTestCurrentWord(state) {
 }
 
 export function getSpeedTestActiveDuration(state, nowMs = monotonicNow()) {
-  if (!state || state.activeStartedAtMs == null) return 0;
-  const end = state.completedAtMs ?? nowMs;
-  return Math.max(0, end - state.activeStartedAtMs);
+  if (!state) return 0;
+  const currentSegment = (
+    state.phase === "ACTIVE" &&
+    state.activeStartedAtMs != null
+  ) ? Math.max(0, nowMs - state.activeStartedAtMs) : 0;
+  return Math.max(0, state.accumulatedActiveMs + currentSegment);
 }
 
 export function getSpeedTestLiveMetrics(state, nowMs = monotonicNow(), includePartial = true) {
@@ -130,7 +146,7 @@ function beginActiveTyping(state, nowMs) {
   state.phase = "ACTIVE";
   state.activeStartedAtMs = nowMs;
   state.deadlineMs = state.config.testType === SPEED_TEST_TYPES.TIME
-    ? nowMs + state.config.durationSeconds * 1000
+    ? nowMs + state.remainingDurationMs
     : null;
   markSessionActive({ monotonicMs: nowMs, epochMs: Date.now() });
 }
@@ -169,7 +185,7 @@ function commitCurrentWord(state, { separator = false } = {}) {
 function buildSpeedTestResult(state, completedAtMs) {
   const session = getCurrentSession();
   if (!session || session.modeId !== MODE_IDS.SPEED_TEST) return null;
-  const activeDurationMs = Math.max(0, completedAtMs - state.activeStartedAtMs);
+  const activeDurationMs = state.activeDurationMs;
   const live = calculateSpeedTestSnapshot(state.metrics, activeDurationMs, {
     currentWord: getSpeedTestCurrentWord(state),
     typedBuffer: state.typedBuffer,
@@ -235,10 +251,13 @@ export function completeSpeedTest(state, completedAtMs = monotonicNow()) {
   ) {
     return null;
   }
+  const activeDurationMs = getSpeedTestActiveDuration(state, completedAtMs);
   state.ended = true;
   state.phase = "COMPLETE";
   state.completedAtMs = Math.max(state.activeStartedAtMs, completedAtMs);
-  state.activeDurationMs = state.completedAtMs - state.activeStartedAtMs;
+  state.activeDurationMs = activeDurationMs;
+  state.accumulatedActiveMs = state.activeDurationMs;
+  state.activeStartedAtMs = null;
   const result = buildSpeedTestResult(state, state.completedAtMs);
   if (!result) return null;
   setSessionState(SESSION_STATES.RESULTS, {
@@ -291,7 +310,7 @@ function processCharacter(state, character, nowMs) {
 }
 
 export function handleSpeedTestInput(state, event, nowMs = null) {
-  if (!state || state.ended) return false;
+  if (!state || state.ended || state.phase === "PAUSED") return false;
   const eventNow = Number.isFinite(nowMs)
     ? nowMs
     : Number.isFinite(event?.timeStamp)
@@ -403,14 +422,55 @@ export function handleCurrentSpeedTestKey(event) {
   return handled;
 }
 
+export function pauseSpeedTest(nowMs = monotonicNow()) {
+  const state = currentSpeedTest;
+  if (!state || state.ended || state.phase === "PAUSED") return false;
+  if (!["PREPARING", "ACTIVE"].includes(state.phase)) return false;
+  state.resumePhase = state.phase;
+  if (state.phase === "ACTIVE") {
+    state.accumulatedActiveMs = getSpeedTestActiveDuration(state, nowMs);
+    state.activeStartedAtMs = null;
+    if (state.deadlineMs != null) {
+      state.remainingDurationMs = Math.max(0, state.deadlineMs - nowMs);
+      state.deadlineMs = null;
+    }
+  }
+  state.phase = "PAUSED";
+  stopSpeedTestLoop();
+  return pauseSession({ monotonicMs: nowMs, epochMs: Date.now() });
+}
+
+export function resumeSpeedTest(nowMs = monotonicNow()) {
+  const state = currentSpeedTest;
+  if (!state || state.ended || state.phase !== "PAUSED") return false;
+  state.phase = state.resumePhase === "ACTIVE" ? "ACTIVE" : "PREPARING";
+  if (state.phase === "ACTIVE") {
+    state.activeStartedAtMs = nowMs;
+    if (state.config.testType === SPEED_TEST_TYPES.TIME) {
+      state.deadlineMs = nowMs + state.remainingDurationMs;
+    }
+  }
+  if (!resumeSession({ monotonicMs: nowMs, epochMs: Date.now() })) return false;
+  resumeSpeedTestLoop();
+  return true;
+}
+
 export function stopSpeedTestLoop() {
   cancelFrame(animationFrameId);
   animationFrameId = null;
 }
 
+export function resumeSpeedTestLoop() {
+  if (animationFrameId == null && currentSpeedTest && !currentSpeedTest.ended) {
+    animationFrameId = requestFrame(tick);
+  }
+}
+
 export function clearSpeedTestRuntime() {
   stopSpeedTestLoop();
   if (currentSpeedTest) {
+    cancelFrame(currentSpeedTest.layoutFrameId);
+    currentSpeedTest.layoutFrameId = null;
     currentSpeedTest.words.length = 0;
     currentSpeedTest.committedWords.length = 0;
     currentSpeedTest.typedBuffer = "";

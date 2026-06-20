@@ -30,6 +30,16 @@ import { ENDLESS_CONFIG } from "./endlessConfig.js";
 import { getEndlessDiagnosticText } from "./endlessMode.js";
 
 const app = () => document.querySelector("#app");
+let speedTestLayoutObserver = null;
+
+function disconnectSpeedTestLayoutObserver() {
+  speedTestLayoutObserver?.disconnect?.();
+  speedTestLayoutObserver = null;
+}
+
+export function clearSpeedTestLayout() {
+  disconnectSpeedTestLayoutObserver();
+}
 
 function menuButton(label, action, selected = false, extraClass = "") {
   return `<button class="arcade-button ${selected ? "selected" : ""} ${extraClass}" data-action="${action}">${label}</button>`;
@@ -190,7 +200,7 @@ function speedTestConfigMarkup(config, disabled) {
   const options = getSpeedTestConfigsByType(config.testType);
   const control = (label, attributes, active) => `
     <button class="speed-config-control ${active ? "active" : ""}"
-            ${attributes} ${disabled ? "disabled" : ""}>${label}</button>`;
+            tabindex="-1" ${attributes} ${disabled ? "disabled" : ""}>${label}</button>`;
   return `
     <nav class="speed-test-config" aria-label="Typing Test configuration">
       <div class="speed-test-categories">
@@ -209,6 +219,7 @@ function speedTestConfigMarkup(config, disabled) {
 }
 
 export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
+  disconnectSpeedTestLayoutObserver();
   const isTime = state.config.testType === SPEED_TEST_TYPES.TIME;
   app().innerHTML = `
     <section class="screen speed-test-screen">
@@ -234,7 +245,7 @@ export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
                     aria-current="${index === 0 ? "true" : "false"}">${speedWordMarkup(word, "", index === 0)}</span>`).join("")}
           </div>
         </div>
-        <p class="speed-test-hint">ESC — ABORT</p>
+        <p class="speed-test-hint">TAB — RETRY &nbsp;•&nbsp; ESC — PAUSE</p>
       </main>
       ${devMode ? `<aside class="speed-test-dev" id="speed-test-dev">${getSpeedTestDiagnosticText(state)}</aside>` : ""}
     </section>`;
@@ -245,6 +256,59 @@ export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
     button.onclick = () => handlers.selectConfig?.(
       button.dataset.speedCategory === SPEED_TEST_TYPES.TIME ? "time-60" : "words-50",
     );
+  });
+  const viewport = document.querySelector("#speed-test-word-viewport");
+  if (viewport && globalThis.ResizeObserver) {
+    speedTestLayoutObserver = new ResizeObserver(() => {
+      state.layoutDirty = true;
+      scheduleSpeedTestLayout(state);
+    });
+    speedTestLayoutObserver.observe(viewport);
+  }
+  state.layoutDirty = true;
+  scheduleSpeedTestLayout(state);
+}
+
+export function measureSpeedTestLayout(state) {
+  const viewport = document.querySelector("#speed-test-word-viewport");
+  const flow = document.querySelector("#speed-test-word-flow");
+  if (!state || !viewport || !flow) return null;
+  const words = [...(flow.querySelectorAll?.("[data-speed-word-index]") || [])];
+  const lineTops = [];
+  const wordLines = new Map();
+  for (const word of words) {
+    const top = Number(word.offsetTop) || 0;
+    let lineIndex = lineTops.findIndex((lineTop) => Math.abs(lineTop - top) < 1);
+    if (lineIndex < 0) {
+      lineIndex = lineTops.length;
+      lineTops.push(top);
+    }
+    wordLines.set(Number(word.dataset.speedWordIndex), lineIndex);
+  }
+  const currentLineIndex = wordLines.get(state.currentWordIndex) ?? 0;
+  const topLineIndex = currentLineIndex >= 2 ? currentLineIndex - 1 : 0;
+  const desiredTranslation = topLineIndex > 0 ? lineTops[topLineIndex] : 0;
+  const maximumTranslation = Math.max(
+    0,
+    (Number(flow.scrollHeight) || 0) - (Number(viewport.clientHeight) || 0),
+  );
+  state.previousLineIndex = state.currentLineIndex;
+  state.currentLineIndex = currentLineIndex;
+  state.lineMap = words.map((word) => wordLines.get(Number(word.dataset.speedWordIndex)) ?? 0);
+  state.verticalTranslation = Math.max(0, Math.min(desiredTranslation, maximumTranslation));
+  state.lastLayoutWordIndex = state.currentWordIndex;
+  state.layoutDirty = false;
+  viewport.scrollTop = 0;
+  flow.style.transform = `translateY(-${state.verticalTranslation}px)`;
+  return { currentLineIndex, lineTops, verticalTranslation: state.verticalTranslation };
+}
+
+export function scheduleSpeedTestLayout(state) {
+  if (!state || state.layoutFrameId != null) return;
+  const schedule = globalThis.requestAnimationFrame || ((callback) => callback());
+  state.layoutFrameId = schedule(() => {
+    state.layoutFrameId = null;
+    measureSpeedTestLayout(state);
   });
 }
 
@@ -288,6 +352,7 @@ export function updateSpeedTestRun(state, nowMs) {
           return `<span class="speed-test-word" data-speed-word-index="${index}" aria-current="false">${speedWordMarkup(word, "", false)}</span>`;
         }).join(""),
       );
+      state.layoutDirty = true;
     }
   }
 
@@ -319,22 +384,12 @@ export function updateSpeedTestRun(state, nowMs) {
       state.typedBuffer,
     );
     current.setAttribute?.("aria-current", "true");
-    const lineTop = Number(current.offsetTop) || 0;
-    const lineHeight = Math.max(1, Number(current.offsetHeight) || 1);
-    const lineIndex = Math.max(0, Math.round(lineTop / lineHeight));
-    if (lineIndex !== state.currentLineIndex) {
-      state.currentLineIndex = lineIndex;
-      const viewport = document.querySelector("#speed-test-word-viewport");
-      if (viewport) {
-        const targetTop = Math.max(
-          0,
-          lineTop - (Number(viewport.clientHeight) || 0) / 2 + lineHeight / 2,
-        );
-        viewport.scrollTo?.({ top: targetTop, behavior: "smooth" });
-        if (!viewport.scrollTo) viewport.scrollTop = targetTop;
-      }
-    }
+    if (
+      state.lineMap[state.currentWordIndex] == null ||
+      state.lastLayoutWordIndex !== state.currentWordIndex
+    ) state.layoutDirty = true;
   }
+  if (state.layoutDirty) scheduleSpeedTestLayout(state);
   document.querySelectorAll?.(".speed-config-control").forEach((button) => {
     button.disabled = state.phase === "ACTIVE";
   });
@@ -1023,6 +1078,35 @@ export function showEndlessPauseOverlay(selectedIndex, handlers) {
   });
 }
 
+export function showSpeedTestPauseOverlay(selectedIndex, handlers) {
+  document.querySelector(".pause-overlay")?.remove();
+  document.querySelector(".speed-test-screen")?.classList.add("paused");
+  const actions = [
+    ["RESUME", "resume"],
+    ["RETRY", "retry"],
+    ["QUIT TEST", "quit"],
+    ["MAIN MENU", "title"],
+  ];
+  const overlay = document.createElement("div");
+  overlay.className = "pause-overlay";
+  overlay.innerHTML = `
+    <div class="pause-panel">
+      <div class="eyebrow">Typing Test suspended</div>
+      <h2>PAUSED</h2>
+      <div class="menu-list">${actions.map(([label, action], index) => (
+    menuButton(label, action, index === selectedIndex)
+  )).join("")}</div>
+      <p class="footer-hint">ESC RESUME</p>
+    </div>`;
+  document.querySelector(".speed-test-screen")?.append(overlay);
+  for (const [, action] of actions) {
+    overlay.querySelector(`[data-action="${action}"]`).onclick = handlers[action];
+  }
+  overlay.querySelectorAll(".arcade-button").forEach((button, index) => {
+    button.onmouseenter = () => handlers.select?.(index);
+  });
+}
+
 export function renderEndlessResults(result, selectedIndex, handlers) {
   const data = result.modeData;
   const actions = [
@@ -1069,6 +1153,7 @@ export function renderEndlessResults(result, selectedIndex, handlers) {
 
 export function hidePauseOverlay() {
   document.querySelector(".pause-overlay")?.remove();
+  document.querySelector(".speed-test-screen")?.classList.remove("paused");
 }
 
 export function getChainBreakCauseLabel(cause) {

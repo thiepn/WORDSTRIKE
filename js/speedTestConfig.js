@@ -94,15 +94,3 @@ export function normalizeSpeedTestConfigId(configId) {
 export function parseDeveloperSpeedTestConfig(search = "") {
   return normalizeSpeedTestConfigId(new URLSearchParams(search).get("test"));
 }
-
-export function moveSpeedTestConfigSelection(configId, key) {
-  const current = getSpeedTestConfig(normalizeSpeedTestConfigId(configId));
-  if (["ArrowLeft", "ArrowRight", "Tab"].includes(key)) {
-    return current.testType === SPEED_TEST_TYPES.TIME ? "words-50" : "time-60";
-  }
-  const options = getSpeedTestConfigsByType(current.testType);
-  const currentIndex = options.findIndex((option) => option.configId === current.configId);
-  const direction = key === "ArrowUp" ? -1 : key === "ArrowDown" ? 1 : 0;
-  if (!direction) return current.configId;
-  return options[(currentIndex + direction + options.length) % options.length].configId;
-}

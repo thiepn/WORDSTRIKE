@@ -5,9 +5,10 @@ const LENGTH_PROFILES = Object.freeze([
   [6, 3, 7, 5],
   [10, 4, 8, 5.7],
   [15, 4, 9, 6.2],
-  [20, 5, 10, 6.8],
-  [30, 5, 12, 7.5],
-  [Infinity, 6, 14, 8.2],
+  [20, 5, 10, 6.6],
+  [25, 5, 12, 7],
+  [30, 5, 12, 7.3],
+  [Infinity, 6, 14, 7.8],
 ]);
 
 export function getEndlessVocabularyWeights(stage) {
@@ -37,10 +38,9 @@ export function getEndlessDifficulty(inputStage) {
     stage,
     movementMultiplier,
     movementSpeed: ENDLESS_CONFIG.movementSpeedCapPxPerSec * movementMultiplier,
-    spawnIntervalMs: Math.max(
-      ENDLESS_CONFIG.minimumSpawnIntervalMs,
-      Math.round(ENDLESS_CONFIG.initialSpawnIntervalMs * Math.pow(0.92, stage - 1)),
-    ),
+    spawnIntervalMs: stage <= 10
+      ? Math.round(ENDLESS_CONFIG.initialSpawnIntervalMs * Math.pow(0.92, stage - 1))
+      : ENDLESS_CONFIG.lateGameSpawnIntervalMs,
     activeWordCap: getEndlessActiveWordCap(stage),
     minimumWordLength: profile[1],
     maximumWordLength: profile[2],
@@ -53,6 +53,22 @@ export function getEndlessDifficulty(inputStage) {
 export function getEndlessQuickFingersInterval(stage) {
   return Math.max(
     ENDLESS_CONFIG.quickFingersMinimumSpawnIntervalMs,
-    getEndlessDifficulty(stage).spawnIntervalMs * 0.5,
+    Math.round(
+      getEndlessDifficulty(stage).spawnIntervalMs *
+      ENDLESS_CONFIG.quickFingersSpawnMultiplier,
+    ),
   );
+}
+
+export function estimateRequiredWpm({
+  targetAverageWordLength,
+  spawnIntervalMs,
+} = {}) {
+  const length = Number.isFinite(targetAverageWordLength)
+    ? Math.max(0, targetAverageWordLength)
+    : 0;
+  const interval = Number.isFinite(spawnIntervalMs)
+    ? Math.max(1, spawnIntervalMs)
+    : 1;
+  return (length / (interval / 1000)) * 60 / 5;
 }

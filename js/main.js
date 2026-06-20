@@ -52,6 +52,7 @@ import {
 } from "./modifiers.js";
 import { createAttemptSeed, parseDeveloperSeed } from "./random.js";
 import {
+  clearSpeedTestLayout,
   hidePauseOverlay,
   renderBossShell,
   renderEndlessReady,
@@ -69,6 +70,7 @@ import {
   renderTitle,
   showPauseOverlay,
   showEndlessPauseOverlay,
+  showSpeedTestPauseOverlay,
   updateEndlessHud,
   updateBossHud,
   updateHud,
@@ -89,7 +91,6 @@ import { cleanupCurrentSession } from "./sessionCleanup.js";
 import {
   DEFAULT_SPEED_TEST_CONFIG_ID,
   getSpeedTestConfig,
-  moveSpeedTestConfigSelection,
   normalizeSpeedTestConfigId,
   parseDeveloperSpeedTestConfig,
 } from "./speedTestConfig.js";
@@ -97,6 +98,8 @@ import {
   clearSpeedTestRuntime,
   getCurrentSpeedTest,
   handleCurrentSpeedTestKey,
+  pauseSpeedTest,
+  resumeSpeedTest,
   startSpeedTest,
   stopSpeedTestLoop,
 } from "./speedTest.js";
@@ -121,6 +124,7 @@ function stopActiveLoops() {
 
 function discardActiveAttempt() {
   clearAttemptRuntime(appState.game);
+  clearSpeedTestLayout();
   clearSpeedTestRuntime();
   clearEndlessRuntime();
 }
@@ -253,10 +257,15 @@ function finishSpeedTest(state, result) {
   renderCurrentScreen();
 }
 
-function startSelectedSpeedTest(source = "mode-select") {
+function resetSpeedTestAttempt(source = "mode-select") {
   const config = getSpeedTestConfig(appState.speedTestConfigId)
     || getSpeedTestConfig(DEFAULT_SPEED_TEST_CONFIG_ID);
   cleanupCampaignAttempt(source === "retry" ? "retry" : "new-session");
+  appState.speedTestResult = null;
+  appState.speedTestRecordFlags = null;
+  appState.speedTestResultsIndex = 0;
+  appState.speedTestResultsReadyAt = 0;
+  appState.pauseIndex = 0;
   const attemptSeed = getAttemptSeed();
   const state = startSpeedTest({
     config,
@@ -291,7 +300,7 @@ function startEndless(source = "mode-select") {
   cleanupCampaignAttempt(["retry", "restart"].includes(source) ? source : "new-session");
   const forcedModifier = (
     appState.devMode &&
-    [QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID].includes(appState.forcedModifierId)
+    [QUICK_FINGERS_ID, BLACKOUT_ID].includes(appState.forcedModifierId)
   ) ? appState.forcedModifierId : null;
   const game = startEndlessRun({
     seed: getAttemptSeed(),
@@ -323,7 +332,15 @@ function changeSpeedTestConfig(configId) {
   const next = normalizeSpeedTestConfigId(configId);
   if (next === appState.speedTestConfigId) return;
   appState.speedTestConfigId = next;
-  startSelectedSpeedTest("change-test");
+  resetSpeedTestAttempt("change-test");
+}
+
+function pauseTypingTest() {
+  if (appState.screen !== Screens.SPEED_TEST_RUN) return;
+  if (!pauseSpeedTest(currentTimeMs())) return;
+  changeScreen(Screens.PAUSED);
+  appState.pauseIndex = 0;
+  renderPauseOverlay();
 }
 
 function startBossLevel(levelNumber, legitimatelyUnlocked, source) {
@@ -434,6 +451,16 @@ function retryCurrentLevel() {
 }
 
 function renderPauseOverlay() {
+  if (getCurrentSpeedTest()?.phase === "PAUSED") {
+    showSpeedTestPauseOverlay(appState.pauseIndex, {
+      resume: resumeGame,
+      retry: () => resetSpeedTestAttempt("retry"),
+      quit: () => resetSpeedTestAttempt("quit-test"),
+      title: openTitle,
+      select: (index) => { appState.pauseIndex = index; },
+    });
+    return;
+  }
   if (appState.game?.mode === "endless") {
     showEndlessPauseOverlay(appState.pauseIndex, {
       resume: resumeGame,
@@ -456,6 +483,12 @@ function renderPauseOverlay() {
 function resumeGame() {
   if (appState.screen !== Screens.PAUSED) return;
   hidePauseOverlay();
+  if (getCurrentSpeedTest()?.phase === "PAUSED") {
+    changeScreen(Screens.SPEED_TEST_RUN);
+    resumeSpeedTest(currentTimeMs());
+    updateSpeedTestRun(getCurrentSpeedTest(), currentTimeMs());
+    return;
+  }
   changeScreen(Screens.PLAYING);
   resumeSession();
   if (appState.game?.mode === "boss") resumeBossLoop();
@@ -475,7 +508,7 @@ function activateSelectedMode(modeId = getAllModes()[appState.modeSelection]?.id
   if (route === "level-select") openLevelSelect("mode-select");
   else if (route === "speed-test") {
     appState.speedTestConfigId = DEFAULT_SPEED_TEST_CONFIG_ID;
-    startSelectedSpeedTest("mode-select");
+    resetSpeedTestAttempt("mode-select");
   }
   else if (route === "endless-ready") openEndlessReady("mode-select");
   else return false;
@@ -540,8 +573,8 @@ function renderCurrentScreen() {
       appState.speedTestRecordFlags,
       appState.speedTestResultsIndex,
       {
-        retry: () => startSelectedSpeedTest("retry"),
-        change: () => startSelectedSpeedTest("change-test"),
+        retry: () => resetSpeedTestAttempt("retry"),
+        change: () => resetSpeedTestAttempt("change-test"),
         modes: openModeSelect,
         title: openTitle,
         select: (index) => {
@@ -619,19 +652,12 @@ function handleGlobalKeydown(event) {
   if (appState.screen === Screens.SPEED_TEST_RUN) {
     if (event.key === "Escape") {
       event.preventDefault();
-      openModeSelect();
+      pauseTypingTest();
       return;
     }
-    const state = getCurrentSpeedTest();
-    if (
-      state?.phase === "PREPARING" &&
-      ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Tab"].includes(event.key)
-    ) {
+    if (event.key === "Tab") {
       event.preventDefault();
-      changeSpeedTestConfig(moveSpeedTestConfigSelection(
-        appState.speedTestConfigId,
-        event.key,
-      ));
+      resetSpeedTestAttempt("tab-reset");
       return;
     }
     handleCurrentSpeedTestKey(event);
@@ -675,7 +701,14 @@ function handleGlobalKeydown(event) {
       appState.pauseIndex = (appState.pauseIndex + direction + 4) % 4;
       renderPauseOverlay();
     } else if (event.key === "Enter") {
-      if (appState.game?.mode === "endless") {
+      if (getCurrentSpeedTest()?.phase === "PAUSED") {
+        [
+          resumeGame,
+          () => resetSpeedTestAttempt("retry"),
+          () => resetSpeedTestAttempt("quit-test"),
+          openTitle,
+        ][appState.pauseIndex]();
+      } else if (appState.game?.mode === "endless") {
         [resumeGame, () => startEndless("restart"), openModeSelect, openTitle][appState.pauseIndex]();
       } else {
         [resumeGame, retryCurrentLevel, openLevelSelect, openTitle][appState.pauseIndex]();
@@ -749,9 +782,12 @@ function handleGlobalKeydown(event) {
       currentTimeMs(),
       appState.speedTestResultsReadyAt,
     )) return;
-    if (event.key === "Escape") {
+    if (event.key === "Tab") {
       event.preventDefault();
-      startSelectedSpeedTest("change-test");
+      resetSpeedTestAttempt("retry");
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      resetSpeedTestAttempt("change-test");
     } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
       event.preventDefault();
       const direction = event.key === "ArrowUp" ? -1 : 1;
@@ -762,8 +798,8 @@ function handleGlobalKeydown(event) {
     } else if (event.key === "Enter") {
       event.preventDefault();
       const action = actions[appState.speedTestResultsIndex];
-      if (action === "retry") startSelectedSpeedTest("retry");
-      else if (action === "change") startSelectedSpeedTest("change-test");
+      if (action === "retry") resetSpeedTestAttempt("retry");
+      else if (action === "change") resetSpeedTestAttempt("change-test");
       else if (action === "modes") openModeSelect();
       else openTitle();
     }
@@ -840,7 +876,7 @@ async function bootstrap() {
     appState.speedTestConfigId = parseDeveloperSpeedTestConfig(
       window.location.search,
     );
-    startSelectedSpeedTest("developer");
+    resetSpeedTestAttempt("developer");
   } else if (appState.devMode && search.get("mode") === MODE_IDS.ENDLESS) {
     openEndlessReady("developer");
   } else {

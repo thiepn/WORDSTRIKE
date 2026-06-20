@@ -1,6 +1,7 @@
 import { appState, Screens } from "./state.js";
 import { ENDLESS_CONFIG, isStandardEndlessConfiguration } from "./endlessConfig.js";
 import {
+  estimateRequiredWpm,
   getEndlessDifficulty,
   getEndlessQuickFingersInterval,
 } from "./endlessDifficulty.js";
@@ -18,7 +19,6 @@ import { createEndlessWordGenerator } from "./endlessWords.js";
 import {
   BLACKOUT_ID,
   getBlackoutVisibility,
-  NO_BACKSPACE_ID,
   QUICK_FINGERS_ID,
 } from "./modifiers.js";
 import { handleGameplayKey, reconcileTargetingState, resetTargetingState } from "./input.js";
@@ -633,6 +633,12 @@ export function getEndlessDiagnosticText(game = currentEndless) {
     `CAP=${game.words.length}/${game.difficulty.activeWordCap}`,
     `LENGTH=${game.difficulty.minimumWordLength}-${game.difficulty.maximumWordLength}`,
     `TARGET AVG=${game.difficulty.targetAverageLength}`,
+    `REQUIRED WPM=${estimateRequiredWpm({
+      targetAverageWordLength: game.difficulty.targetAverageLength,
+      spawnIntervalMs: game.activeModifier === QUICK_FINGERS_ID
+        ? getEndlessQuickFingersInterval(game.stage)
+        : game.difficulty.spawnIntervalMs,
+    }).toFixed(1)}`,
     `WEIGHTS=${JSON.stringify(game.difficulty.vocabularyWeights)}`,
     `MODIFIER=${game.activeModifier || "none"}`,
     `NEXT MODIFIER=${getNextEndlessModifierStage(game.stage)}`,

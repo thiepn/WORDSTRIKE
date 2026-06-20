@@ -23,6 +23,7 @@ const TRANSITIONS = Object.freeze({
   [SESSION_STATES.PREPARING]: new Set([
     SESSION_STATES.BRIEFING,
     SESSION_STATES.ACTIVE,
+    SESSION_STATES.PAUSED,
     SESSION_STATES.ABORTED,
   ]),
   [SESSION_STATES.BRIEFING]: new Set([
@@ -38,6 +39,7 @@ const TRANSITIONS = Object.freeze({
     SESSION_STATES.ABORTED,
   ]),
   [SESSION_STATES.PAUSED]: new Set([
+    SESSION_STATES.PREPARING,
     SESSION_STATES.BRIEFING,
     SESSION_STATES.ACTIVE,
     SESSION_STATES.TRANSITIONING,
@@ -189,6 +191,7 @@ export function pauseSession(timing = {}) {
     !currentSession ||
     ![
       SESSION_STATES.ACTIVE,
+      SESSION_STATES.PREPARING,
       SESSION_STATES.BRIEFING,
       SESSION_STATES.TRANSITIONING,
     ].includes(currentSession.state)

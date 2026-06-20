@@ -5,6 +5,8 @@ import {
   getCurrentSpeedTest,
   getSpeedTestLoopActive,
   handleCurrentSpeedTestKey,
+  pauseSpeedTest,
+  resumeSpeedTest,
   startSpeedTest,
   stopSpeedTestLoop,
 } from "../js/speedTest.js";
@@ -85,6 +87,45 @@ assert.equal(state.result.modeData.metricVersion, 2);
 assert.equal(state.result.modeData.correctSpaces, 0);
 assert.equal(state.result.modeData.validSpaces, 0);
 assert.equal(state.result.modeData.wordDeletes, 0);
+
+state = startSpeedTest({
+  config: getSpeedTestConfig("time-60"),
+  wordPool: pool,
+  attemptSeed: 777,
+});
+state.words[0] = "word";
+handleCurrentSpeedTestKey(event("w", 1000));
+assert.equal(state.typedBuffer, "w");
+assert.equal(pauseSpeedTest(11000), true);
+assert.equal(state.phase, "PAUSED");
+assert.equal(state.accumulatedActiveMs, 10000);
+assert.equal(state.remainingDurationMs, 50000);
+assert.equal(state.deadlineMs, null);
+assert.equal(getCurrentSession().state, SESSION_STATES.PAUSED);
+assert.equal(handleCurrentSpeedTestKey(event("o", 21000)), false);
+assert.equal(state.typedBuffer, "w");
+assert.equal(resumeSpeedTest(31000), true);
+assert.equal(state.phase, "ACTIVE");
+assert.equal(state.deadlineMs, 81000);
+assert.equal(getCurrentSession().state, SESSION_STATES.ACTIVE);
+assert.equal(state.typedBuffer, "w");
+abortSession("test-reset");
+clearSpeedTestRuntime();
+clearSession();
+
+state = startSpeedTest({
+  config: getSpeedTestConfig("time-60"),
+  wordPool: pool,
+  attemptSeed: 778,
+});
+assert.equal(pauseSpeedTest(100), true);
+assert.equal(state.resumePhase, "PREPARING");
+assert.equal(resumeSpeedTest(10000), true);
+assert.equal(state.phase, "PREPARING");
+assert.equal(state.activeStartedAtMs, null);
+abortSession("test-reset");
+clearSpeedTestRuntime();
+clearSession();
 
 state = startSpeedTest({
   config: getSpeedTestConfig("time-60"),
