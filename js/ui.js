@@ -1,8 +1,10 @@
 import { calculateAccuracy, calculateWPM } from "./scoring.js";
 import {
   generateBossLevel,
+  generateLegacyLevel,
   generateLevel,
 } from "./levelGenerator.js";
+import { getCampaignDifficultyLevel } from "./campaignDifficulty.js";
 import { generateBossEncounter } from "./bossGenerator.js";
 import {
   BLACKOUT_FADE_MS,
@@ -457,13 +459,16 @@ function renderDevPanel(
 ) {
   const isBoss = selectedLevel % 10 === 0;
   const config = isBoss ? generateBossLevel(selectedLevel) : generateLevel(selectedLevel);
+  const legacyConfig = isBoss ? null : generateLegacyLevel(selectedLevel);
   const previewSeed = developerSeed || selectedLevel * 104729;
   const encounter = isBoss
     ? generateBossEncounter(bossWordBank, selectedLevel, previewSeed)
     : null;
   const fields = isBoss
     ? [
-      ["level", selectedLevel],
+      ["actualLevel", selectedLevel],
+      ["bossLevel", true],
+      ["virtualDifficultyLevel", `${getCampaignDifficultyLevel(selectedLevel).toFixed(2)} (ignored)`],
       ["bossIndex", config.bossIndex],
       ["segmentCount", config.segmentCount],
       ["wordsPerSegment", config.wordsPerSegment],
@@ -484,19 +489,26 @@ function renderDevPanel(
       ["fallbackUsed", encounter.fallbackUsed],
     ]
     : [
-      ["level", selectedLevel],
-      ["isBoss", config.isBoss],
+      ["actualLevel", selectedLevel],
+      ["bossLevel", config.isBoss],
+      ["virtualDifficultyLevel", config.virtualDifficultyLevel.toFixed(2)],
       ["wordCount", config.wordCount],
-      ["minWordLength", config.minWordLength],
-      ["maxWordLength", config.maxWordLength],
-      ["spawnIntervalMs", config.spawnIntervalMs],
-      ["wordSpeedPxPerSec", config.wordSpeedPxPerSec],
-      ["maxSimultaneousWords", config.maxSimultaneousWords],
+      ["newWordLengthRange", `${config.minWordLength}-${config.maxWordLength}`],
+      ["targetAverageWordLength", config.targetAverageWordLength.toFixed(2)],
+      ["newSpawnIntervalMs", config.spawnIntervalMs.toFixed(2)],
+      ["newWordSpeedPxPerSec", config.wordSpeedPxPerSec.toFixed(2)],
+      ["newActiveWordCap", config.maxSimultaneousWords],
+      ["newVocabularyTier", config.wordTier],
+      ["legacyWordLengthRange", `${legacyConfig.minWordLength}-${legacyConfig.maxWordLength}`],
+      ["legacySpawnIntervalMs", legacyConfig.spawnIntervalMs.toFixed(2)],
+      ["legacyWordSpeedPxPerSec", legacyConfig.wordSpeedPxPerSec.toFixed(2)],
+      ["legacyActiveWordCap", legacyConfig.maxSimultaneousWords],
+      ["legacyVocabularyTier", legacyConfig.wordTier],
       ["lives", config.lives],
       ["targetWPM", config.targetWPM],
-      ["wordTier", config.wordTier],
       ["world", config.world],
-      ["modifiers", config.modifiers.join(", ") || "none"],
+      ["modifier", config.modifiers.join(", ") || "none"],
+      ["attemptSeed", previewSeed],
       ["forcedModifier", forcedModifierId && !isBoss ? forcedModifierId : "none"],
       ["blackoutVisibleMs", BLACKOUT_VISIBLE_MS],
       ["blackoutFadeMs", BLACKOUT_FADE_MS],
@@ -695,7 +707,16 @@ export function renderGameplayShell(
         </div>` : ""}
       ${devMode ? `
         <aside class="dev-runtime-panel" id="dev-runtime-panel">
-          seed=${attempt.attemptSeed} // selected=${attempt.selectedWords?.join(",")}
+          actual=${levelNumber} // boss=${config.isBoss === true}
+          // virtual=${Number(config.virtualDifficultyLevel).toFixed(2)}
+          // words=${config.wordCount} // speed=${Number(config.wordSpeedPxPerSec).toFixed(2)}px/s
+          // spawn=${Number(config.spawnIntervalMs).toFixed(2)}ms
+          // cap=${config.maxSimultaneousWords}
+          // range=${config.minWordLength}-${config.maxWordLength}
+          // avg=${Number(config.targetAverageWordLength).toFixed(2)}
+          // tier=${config.wordTier}
+          // modifier=${config.modifiers?.join(",") || "none"}
+          // seed=${attempt.attemptSeed} // selected=${attempt.selectedWords?.join(",")}
           // queue=${attempt.spawnQueue?.join(",")} // ${getSessionDiagnosticText()}
         </aside>` : ""}
       <div class="play-area" id="play-area">
@@ -845,6 +866,17 @@ export function updateHud(game) {
     const state = game.targetingState;
     const candidateWords = game.words.filter((word) => state.candidateIds.includes(word.id));
     devRuntime.textContent = [
+      `actual=${game.levelNumber}`,
+      `boss=${game.config.isBoss === true}`,
+      `virtual=${Number(game.config.virtualDifficultyLevel).toFixed(2)}`,
+      `wordCount=${game.config.wordCount}`,
+      `speed=${Number(game.config.wordSpeedPxPerSec).toFixed(2)}px/s`,
+      `spawn=${Number(game.config.spawnIntervalMs).toFixed(2)}ms`,
+      `cap=${game.config.maxSimultaneousWords}`,
+      `range=${game.config.minWordLength}-${game.config.maxWordLength}`,
+      `targetAvg=${Number(game.config.targetAverageWordLength).toFixed(2)}`,
+      `tier=${game.config.wordTier}`,
+      `modifier=${game.config.modifiers?.join(",") || "none"}`,
       `seed=${game.attemptSeed}`,
       `selected=${game.selectedWords.join(",")}`,
       `queue=${game.wordQueue.join(",")}`,
@@ -880,6 +912,9 @@ function bossDiagnosticText(config, attempt) {
   if (!encounter) return "";
   return [
     `level=${config.level}`,
+    `actual=${config.level}`,
+    "boss=true",
+    `virtual=${getCampaignDifficultyLevel(config.level).toFixed(2)} (ignored)`,
     `seed=${attempt.attemptSeed}`,
     `vocabulary=${config.vocabularySource || "dedicated"}`,
     `profile=${config.segmentCount}x${config.wordsPerSegment},min${config.minimumWordLength},avg${config.requiredAverageWordLength},long${config.minimumLongestWord}`,

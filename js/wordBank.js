@@ -2,7 +2,7 @@ import {
   EMERGENCY_BOSS_WORDS,
   validateBossVocabulary,
 } from "./bossGenerator.js";
-import { mixSeed, shuffleSeeded } from "./random.js";
+import { createSeededRandom, mixSeed, shuffleSeeded } from "./random.js";
 
 const FALLBACK_WORDS = [
   "arc", "bit", "code", "dash", "echo", "flux", "glow", "grid", "laser", "neon",
@@ -68,7 +68,7 @@ export function createNormalWordAttempt(bank, config, attemptSeed) {
   );
   const pool = [];
   const seen = new Set();
-  const addWords = (words, requireLength = true) => {
+  const addWords = (words, tier, requireLength = true) => {
     for (const word of words || []) {
       if (
         isValidWord(word) &&
@@ -76,27 +76,52 @@ export function createNormalWordAttempt(bank, config, attemptSeed) {
         !seen.has(word)
       ) {
         seen.add(word);
-        pool.push(word);
+        pool.push({ word, tier });
       }
     }
   };
 
   for (const tier of orderedTiers) {
-    addWords(bank.tiers[String(tier)] || bank.tiers[tier]);
-    if (pool.length >= config.wordCount) break;
+    addWords(bank.tiers[String(tier)] || bank.tiers[tier], tier);
   }
   if (pool.length < config.wordCount) {
     for (const tier of orderedTiers) {
-      addWords(bank.tiers[String(tier)] || bank.tiers[tier], false);
+      addWords(bank.tiers[String(tier)] || bank.tiers[tier], tier, false);
       if (pool.length >= config.wordCount) break;
     }
   }
-  if (!pool.length) addWords(FALLBACK_WORDS, false);
+  if (!pool.length) addWords(FALLBACK_WORDS, config.wordTier, false);
 
-  const selectionOrder = shuffleSeeded(pool, mixSeed(attemptSeed, 0x51ec7));
+  const targetLength = Number.isFinite(config.targetAverageWordLength)
+    ? config.targetAverageWordLength
+    : (config.minWordLength + config.maxWordLength) / 2;
+  const random = createSeededRandom(mixSeed(attemptSeed, 0x51ec7));
+  const available = [...pool];
   const selectedWords = [];
-  for (let index = 0; index < config.wordCount; index += 1) {
-    selectedWords.push(selectionOrder[index % selectionOrder.length]);
+  while (selectedWords.length < config.wordCount && available.length) {
+    const weights = available.map(({ word, tier }) => {
+      const lengthDistance = Math.abs(word.length - targetLength);
+      const tierDistanceFromTarget = Math.abs(tier - config.wordTier);
+      return (
+        1 / (1 + lengthDistance * lengthDistance * 0.55)
+      ) * (
+        1 / (1 + tierDistanceFromTarget * 1.5)
+      );
+    });
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    let roll = random() * totalWeight;
+    let selectedIndex = weights.length - 1;
+    for (let index = 0; index < weights.length; index += 1) {
+      roll -= weights[index];
+      if (roll <= 0) {
+        selectedIndex = index;
+        break;
+      }
+    }
+    selectedWords.push(available.splice(selectedIndex, 1)[0].word);
+  }
+  while (selectedWords.length < config.wordCount) {
+    selectedWords.push(pool[selectedWords.length % pool.length].word);
   }
   const spawnQueue = shuffleSeeded(
     selectedWords,

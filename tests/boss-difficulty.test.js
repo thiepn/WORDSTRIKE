@@ -9,7 +9,10 @@ import {
   getBossDifficultyProfile,
   validateBossEncounter,
 } from "../js/bossGenerator.js";
-import { generateBossLevel, generateLevel } from "../js/levelGenerator.js";
+import {
+  generateBossLevel,
+  generateLegacyLevel,
+} from "../js/levelGenerator.js";
 
 const bank = JSON.parse(
   await readFile(new URL("../data/bossWords.json", import.meta.url), "utf8"),
@@ -176,8 +179,8 @@ assert.equal(validateBossEncounter(
   getBossDifficultyProfile(100),
 ).valid, true);
 
-assert.equal(generateLevel(10).spawnIntervalMs, 1560);
-assert.equal(generateLevel(100).wordSpeedPxPerSec, 90);
+assert.equal(generateLegacyLevel(10).spawnIntervalMs, 1560);
+assert.equal(generateLegacyLevel(100).wordSpeedPxPerSec, 90);
 
 const sourceFiles = await Promise.all([
   "js/main.js", "js/gameLoop.js", "js/bossLoop.js", "js/input.js",
