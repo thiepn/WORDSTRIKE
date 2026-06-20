@@ -1,5 +1,6 @@
 export const Screens = Object.freeze({
   TITLE: "TITLE",
+  MODE_SELECT: "MODE_SELECT",
   LEVEL_SELECT: "LEVEL_SELECT",
   PLAYING: "PLAYING",
   PAUSED: "PAUSED",
@@ -20,6 +21,7 @@ export const appState = {
   game: null,
   results: null,
   menuIndex: 0,
+  modeSelection: 0,
   levelSelection: 1,
   pauseIndex: 0,
   resultsIndex: 0,

@@ -79,6 +79,8 @@ export function createGameState(levelNumber, config, words, attempt = {}) {
     totalKeystrokes: 0,
     missedCharacters: 0,
     correctCharacters: 0,
+    completedWordCount: 0,
+    missedWordCount: 0,
     elapsedMs: 0,
     phase: hasModifier ? "MODIFIER_BRIEFING" : "ACTIVE",
     briefingElapsedMs: 0,
@@ -208,6 +210,7 @@ export function processWordCoreArrival(game, word) {
     game.blackoutStats.wordsMissedAfterFade += 1;
   }
   registerMissedWord(game, word);
+  game.missedWordCount += 1;
   game.words = game.words.filter((candidate) => candidate.id !== word.id);
   reconcileTargetingState(game);
   game.lives -= 1;

@@ -160,6 +160,7 @@ function completeTarget(game, target, settings, onWordCompleted) {
   );
   game.score += calculateWordScore(target.text.length, actualTimeSeconds, game.combo);
   game.combo += 1;
+  game.completedWordCount = (game.completedWordCount || 0) + 1;
   game.maxCombo = Math.max(game.maxCombo, game.combo);
   game.words = game.words.filter((word) => word.id !== target.id);
   resetTargetingState(game);
@@ -357,6 +358,7 @@ export function handleBossKey(event, game, settings, onPhraseCompleted) {
       const actualTimeSeconds = Math.max((game.elapsedMs - game.wordStartElapsedMs) / 1000, 0.05);
       game.score += calculateWordScore(wordLength, actualTimeSeconds, game.combo);
       game.combo += 1;
+      game.completedWordCount = (game.completedWordCount || 0) + 1;
       game.maxCombo = Math.max(game.maxCombo, game.combo);
     }
     game.wordStartIndex = game.phraseCharIndex;

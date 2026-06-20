@@ -15,6 +15,7 @@ import {
   NO_BACKSPACE_ID,
   QUICK_FINGERS_ID,
 } from "./modifiers.js";
+import { getSessionDiagnosticText } from "./campaignSession.js";
 
 const app = () => document.querySelector("#app");
 
@@ -24,8 +25,7 @@ function menuButton(label, action, selected = false, extraClass = "") {
 
 export function renderTitle(menuIndex, handlers) {
   const items = [
-    ["START", "start"],
-    ["LEVEL SELECT", "levels"],
+    ["START", "modes"],
     ["SETTINGS", "settings"],
   ];
   app().innerHTML = `
@@ -44,9 +44,43 @@ export function renderTitle(menuIndex, handlers) {
         <p class="footer-hint">↑ ↓ SELECT &nbsp;•&nbsp; ENTER CONFIRM</p>
       </div>
     </section>`;
-  app().querySelector('[data-action="start"]').onclick = handlers.start;
-  app().querySelector('[data-action="levels"]').onclick = handlers.levels;
+  app().querySelector('[data-action="modes"]').onclick = handlers.modes;
   app().querySelector('[data-action="settings"]').onclick = handlers.settings;
+}
+
+export function renderModeSelect(modes, selectedIndex, handlers) {
+  app().innerHTML = `
+    <section class="screen mode-screen">
+      <div class="mode-panel">
+        <div class="eyebrow">Select simulation</div>
+        <h1>MODE SELECT</h1>
+        <div class="mode-grid">
+          ${modes.map((mode, index) => mode.enabled
+    ? `<button class="mode-card available ${index === selectedIndex ? "selected" : ""}"
+                data-mode-id="${mode.id}" data-mode-index="${index}">
+              <strong>${mode.name}</strong>
+              <span>${mode.shortLabel}</span>
+              <small>AVAILABLE</small>
+            </button>`
+    : `<article class="mode-card coming-soon ${index === selectedIndex ? "selected" : ""}"
+                data-mode-id="${mode.id}" data-mode-index="${index}" aria-disabled="true">
+              <strong>${mode.name}</strong>
+              <span>${mode.shortLabel}</span>
+              <small>COMING SOON</small>
+            </article>`).join("")}
+        </div>
+        <p class="mode-description">${modes[selectedIndex]?.description || ""}</p>
+        <p class="footer-hint">↑ ↓ SELECT &nbsp;•&nbsp; ENTER CONFIRM &nbsp;•&nbsp; ESC BACK</p>
+      </div>
+    </section>`;
+  app().querySelectorAll("[data-mode-index]").forEach((card) => {
+    const index = Number(card.dataset.modeIndex);
+    card.onmouseenter = () => handlers.select?.(index);
+    if (card.matches?.("button")) {
+      card.onclick = () => handlers.activate?.(card.dataset.modeId);
+    }
+  });
+  app().querySelector(".mode-card.available.selected")?.focus({ preventScroll: true });
 }
 
 function renderDevPanel(
@@ -239,6 +273,13 @@ export function renderDevModeIndicator() {
   document.body.append(indicator);
 }
 
+export function renderDevSessionDiagnostics() {
+  const diagnostics = document.createElement("aside");
+  diagnostics.className = "dev-session-diagnostics";
+  diagnostics.textContent = getSessionDiagnosticText();
+  document.body.append(diagnostics);
+}
+
 export function renderGameplayShell(
   levelNumber,
   lives,
@@ -289,7 +330,7 @@ export function renderGameplayShell(
       ${devMode ? `
         <aside class="dev-runtime-panel" id="dev-runtime-panel">
           seed=${attempt.attemptSeed} // selected=${attempt.selectedWords?.join(",")}
-          // queue=${attempt.spawnQueue?.join(",")}
+          // queue=${attempt.spawnQueue?.join(",")} // ${getSessionDiagnosticText()}
         </aside>` : ""}
       <div class="play-area" id="play-area">
         <div class="core" aria-label="Central core"></div>
@@ -454,6 +495,7 @@ export function updateHud(game) {
       `failedWord=${game.chainRuntime?.failedWordId ?? "none"}`,
       `offsets=${game.words.map((word) => `${word.id}:${(word.separationX || 0).toFixed(1)},${(word.separationY || 0).toFixed(1)}`).join("|") || "none"}`,
       `visibility=${candidateWords.map((word) => `${word.id}:${word.blackoutPhase || "visible"}`).join("|") || "none"}`,
+      getSessionDiagnosticText(),
     ].join(" // ");
   }
 }
@@ -488,6 +530,7 @@ function bossDiagnosticText(config, attempt) {
     `fallback=${encounter.fallbackUsed}`,
     `segments=${encounter.segments.join(" | ")}`,
     `lengths=${encounter.words.map((word) => `${word}:${word.length}`).join(",")}`,
+    getSessionDiagnosticText(),
   ].join(" // ");
 }
 

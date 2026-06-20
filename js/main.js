@@ -23,7 +23,11 @@ import {
   loadWordBank,
   createNormalWordAttempt,
 } from "./wordBank.js";
-import { calculateAccuracy, calculateGrade, calculateWPM } from "./scoring.js";
+import { calculateGrade } from "./scoring.js";
+import {
+  calculateSessionAccuracy,
+  calculateSessionWpm,
+} from "./sessionMetrics.js";
 import { handleBossKey, handleGameplayKey } from "./input.js";
 import {
   finalizeChainFailure,
@@ -51,7 +55,9 @@ import {
   renderBossShell,
   renderGameplayShell,
   renderLevelSelect,
+  renderModeSelect,
   renderDevModeIndicator,
+  renderDevSessionDiagnostics,
   renderResults,
   renderSettings,
   renderTitle,
@@ -59,8 +65,20 @@ import {
   updateBossHud,
   updateHud,
 } from "./ui.js";
+import { getAllModes, isModeEnabled, MODE_IDS } from "./modes.js";
+import {
+  beginCampaignSession,
+  finalizeCampaignSession,
+  syncCampaignSession,
+} from "./campaignSession.js";
+import {
+  clearSession,
+  pauseSession,
+  resumeSession,
+} from "./sessionManager.js";
+import { cleanupCurrentSession } from "./sessionCleanup.js";
 
-const titleActions = ["start", "levels", "settings"];
+const titleActions = ["modes", "settings"];
 const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
 
 function stopActiveLoops() {
@@ -72,6 +90,18 @@ function discardActiveAttempt() {
   clearAttemptRuntime(appState.game);
 }
 
+function cleanupCampaignAttempt(reason, { clearSessionState = true } = {}) {
+  cleanupCurrentSession({
+    reason,
+    stopGameplay: stopActiveLoops,
+    hidePause: hidePauseOverlay,
+    clearRuntime: discardActiveAttempt,
+    clearSessionState,
+  });
+  appState.game = null;
+  appState.pauseIndex = 0;
+}
+
 function getAttemptSeed() {
   return appState.devMode && appState.developerSeed
     ? appState.developerSeed
@@ -79,20 +109,21 @@ function getAttemptSeed() {
 }
 
 function openTitle() {
-  stopActiveLoops();
-  discardActiveAttempt();
-  appState.game = null;
-  appState.pauseIndex = 0;
+  cleanupCampaignAttempt("main-menu");
   changeScreen(Screens.TITLE);
   appState.menuIndex = 0;
   renderCurrentScreen();
 }
 
-function openLevelSelect() {
-  stopActiveLoops();
-  discardActiveAttempt();
-  appState.game = null;
-  appState.pauseIndex = 0;
+function openModeSelect() {
+  cleanupCampaignAttempt("mode-select");
+  changeScreen(Screens.MODE_SELECT);
+  appState.modeSelection = 0;
+  renderCurrentScreen();
+}
+
+function openLevelSelect(reason = "level-select") {
+  cleanupCampaignAttempt(reason);
   changeScreen(Screens.LEVEL_SELECT);
   const selectionLimit = appState.devMode ? 100 : appState.save.currentFurthestLevel;
   appState.levelSelection = Math.min(appState.currentLevel || 1, selectionLimit, 100);
@@ -110,14 +141,14 @@ function backFromSettings() {
   renderCurrentScreen();
 }
 
-function startLevel(levelNumber) {
+function startLevel(levelNumber, source = "level-select") {
   const safeLevel = Math.max(1, Math.min(100, levelNumber));
   const legitimatelyUnlocked = safeLevel <= appState.save.currentFurthestLevel;
   if (!canLaunchLevel(appState.devMode, appState.save.currentFurthestLevel, safeLevel)) return;
-  stopActiveLoops();
+  cleanupCampaignAttempt(source === "retry" ? "retry" : "new-session");
   appState.currentLevel = safeLevel;
   if (safeLevel % 10 === 0) {
-    startBossLevel(safeLevel, legitimatelyUnlocked);
+    startBossLevel(safeLevel, legitimatelyUnlocked, source);
     return;
   }
   const baseConfig = generateLevel(safeLevel);
@@ -134,6 +165,15 @@ function startLevel(levelNumber) {
   );
   const attemptSeed = getAttemptSeed();
   const attempt = createNormalWordAttempt(appState.wordBank, config, attemptSeed);
+  beginCampaignSession({
+    level: safeLevel,
+    isBoss: false,
+    seed: attemptSeed,
+    source: appState.devMode ? "developer" : source,
+    developerMode: appState.devMode,
+    modifierId: config.modifiers?.[0] || null,
+    difficultyData: config,
+  });
   changeScreen(Screens.PLAYING);
   renderGameplayShell(
     safeLevel,
@@ -148,7 +188,10 @@ function startLevel(levelNumber) {
     config,
     attempt.spawnQueue,
     {
-      onHudUpdate: updateHud,
+      onHudUpdate: (currentGame) => {
+        syncCampaignSession(currentGame);
+        updateHud(currentGame);
+      },
       onEnd: finishLevel,
     },
     { attemptSeed, selectedWords: attempt.selectedWords },
@@ -156,9 +199,10 @@ function startLevel(levelNumber) {
   game.persistResult = shouldPersistLevelResult(appState.devMode, legitimatelyUnlocked);
   game.forcedModifier = forcedModifier;
   game.devMode = appState.devMode;
+  syncCampaignSession(game);
 }
 
-function startBossLevel(levelNumber, legitimatelyUnlocked) {
+function startBossLevel(levelNumber, legitimatelyUnlocked, source) {
   const baseConfig = generateBossLevel(levelNumber);
   const attemptSeed = getAttemptSeed();
   const encounter = generateBossEncounter(
@@ -177,13 +221,24 @@ function startBossLevel(levelNumber, legitimatelyUnlocked) {
     ...encounter.metrics,
     ...encounter.timing,
   };
+  beginCampaignSession({
+    level: levelNumber,
+    isBoss: true,
+    seed: attemptSeed,
+    source: appState.devMode ? "developer" : source,
+    developerMode: appState.devMode,
+    difficultyData: config,
+  });
   changeScreen(Screens.PLAYING);
   renderBossShell(levelNumber, config, appState.devMode, {
     attemptSeed,
     encounter,
   });
   const game = startBossLoop(levelNumber, config, phrases, {
-    onUpdate: updateBossHud,
+    onUpdate: (currentGame) => {
+      syncCampaignSession(currentGame);
+      updateBossHud(currentGame);
+    },
     onEnd: finishLevel,
   });
   game.persistResult = shouldPersistLevelResult(appState.devMode, legitimatelyUnlocked);
@@ -191,12 +246,15 @@ function startBossLevel(levelNumber, legitimatelyUnlocked) {
 }
 
 function finishLevel(game, success) {
-  const wpm = calculateWPM(game.correctCharacters, game.elapsedMs);
-  const accuracy = calculateAccuracy(
-    game.correctKeystrokes,
-    game.totalKeystrokes,
-    game.missedCharacters,
-  );
+  const wpm = calculateSessionWpm({
+    characterCount: game.correctCharacters,
+    activeDurationMs: game.elapsedMs,
+  });
+  const accuracy = calculateSessionAccuracy({
+    correctKeystrokes: game.correctKeystrokes,
+    totalKeystrokes: game.totalKeystrokes,
+    missedCharacters: game.missedCharacters,
+  });
   const grade = calculateGrade({
     accuracy,
     failed: !success,
@@ -228,6 +286,7 @@ function finishLevel(game, success) {
     chainComboAtBreak: isBoss ? 0 : game.chainRuntime?.comboAtBreak || 0,
     chainFailedWordId: isBoss ? null : game.chainRuntime?.failedWordId ?? null,
   };
+  finalizeCampaignSession(game, appState.results, success);
   if (success && game.persistResult) {
     updateLevelResult(appState.save, game.levelNumber, appState.results);
   }
@@ -240,12 +299,13 @@ function finishLevel(game, success) {
 function pauseGame() {
   if (appState.screen !== Screens.PLAYING) return;
   changeScreen(Screens.PAUSED);
+  pauseSession();
   appState.pauseIndex = 0;
   renderPauseOverlay();
 }
 
 function retryCurrentLevel() {
-  startLevel(appState.currentLevel);
+  startLevel(appState.currentLevel, "retry");
 }
 
 function renderPauseOverlay() {
@@ -262,15 +322,24 @@ function resumeGame() {
   if (appState.screen !== Screens.PAUSED) return;
   hidePauseOverlay();
   changeScreen(Screens.PLAYING);
+  resumeSession();
   if (appState.game?.mode === "boss") resumeBossLoop();
   else resumeGameLoop();
 }
 
 function activateTitleAction() {
   const action = titleActions[appState.menuIndex];
-  if (action === "start") startLevel(appState.save.currentFurthestLevel);
-  if (action === "levels") openLevelSelect();
+  if (action === "modes") openModeSelect();
   if (action === "settings") openSettings();
+}
+
+function activateSelectedMode(modeId = getAllModes()[appState.modeSelection]?.id) {
+  if (!isModeEnabled(modeId)) return false;
+  if (modeId === MODE_IDS.CAMPAIGN) {
+    openLevelSelect("mode-select");
+    return true;
+  }
+  return false;
 }
 
 function toggleSetting(key) {
@@ -289,9 +358,17 @@ function confirmReset() {
 function renderCurrentScreen() {
   if (appState.screen === Screens.TITLE) {
     renderTitle(appState.menuIndex, {
-      start: () => startLevel(appState.save.currentFurthestLevel),
-      levels: openLevelSelect,
+      modes: openModeSelect,
       settings: openSettings,
+    });
+  } else if (appState.screen === Screens.MODE_SELECT) {
+    renderModeSelect(getAllModes(), appState.modeSelection, {
+      select: (index) => {
+        if (appState.modeSelection === index) return;
+        appState.modeSelection = index;
+        renderCurrentScreen();
+      },
+      activate: activateSelectedMode,
     });
   } else if (appState.screen === Screens.LEVEL_SELECT) {
     renderLevelSelect(
@@ -302,17 +379,17 @@ function renderCurrentScreen() {
       appState.forcedModifierId,
       appState.developerSeed,
       {
-      back: openTitle,
-      select: startLevel,
+      back: openModeSelect,
+      select: (level) => startLevel(level, "level-select"),
       devInspect: inspectDevLevel,
-      devLaunch: startLevel,
+      devLaunch: (level) => startLevel(level, "developer"),
       devForceModifier: setForcedModifier,
       },
     );
   } else if (appState.screen === Screens.RESULTS) {
     renderResults(appState.results, appState.resultsIndex, {
-      retry: () => startLevel(appState.results.levelNumber),
-      next: () => startLevel(appState.results.levelNumber + 1),
+      retry: () => startLevel(appState.results.levelNumber, "retry"),
+      next: () => startLevel(appState.results.levelNumber + 1, "next-level"),
       levels: openLevelSelect,
       select: (index) => { appState.resultsIndex = index; },
     });
@@ -324,7 +401,11 @@ function renderCurrentScreen() {
     });
   }
   document.querySelector(".dev-mode-indicator")?.remove();
-  if (appState.devMode) renderDevModeIndicator();
+  document.querySelector(".dev-session-diagnostics")?.remove();
+  if (appState.devMode) {
+    renderDevModeIndicator();
+    renderDevSessionDiagnostics();
+  }
 }
 
 function setForcedModifier(modifierId) {
@@ -404,10 +485,27 @@ function handleGlobalKeydown(event) {
     return;
   }
 
+  if (appState.screen === Screens.MODE_SELECT) {
+    if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+      appState.modeSelection = (
+        appState.modeSelection - 1 + getAllModes().length
+      ) % getAllModes().length;
+      renderCurrentScreen();
+    } else if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+      appState.modeSelection = (appState.modeSelection + 1) % getAllModes().length;
+      renderCurrentScreen();
+    } else if (event.key === "Enter") {
+      activateSelectedMode();
+    } else if (event.key === "Escape") {
+      openTitle();
+    }
+    return;
+  }
+
   if (appState.screen === Screens.LEVEL_SELECT) {
     if (event.key.startsWith("Arrow")) moveLevelSelection(event.key);
     if (event.key === "Enter") startLevel(appState.levelSelection);
-    if (event.key === "Escape") openTitle();
+    if (event.key === "Escape") openModeSelect();
     return;
   }
 
@@ -424,8 +522,8 @@ function handleGlobalKeydown(event) {
       renderCurrentScreen();
     } else if (event.key === "Enter") {
       const action = actions[appState.resultsIndex];
-      if (action === "retry") startLevel(appState.results.levelNumber);
-      else if (action === "next") startLevel(appState.results.levelNumber + 1);
+      if (action === "retry") startLevel(appState.results.levelNumber, "retry");
+      else if (action === "next") startLevel(appState.results.levelNumber + 1, "next-level");
       else openLevelSelect();
     }
     return;
@@ -448,6 +546,7 @@ function handleGlobalKeydown(event) {
 }
 
 async function bootstrap() {
+  clearSession();
   appState.devMode = isDevelopmentMode(window.location.search);
   appState.developerSeed = appState.devMode
     ? parseDeveloperSeed(window.location.search)

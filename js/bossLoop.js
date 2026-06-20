@@ -32,6 +32,8 @@ export function createBossGameState(levelNumber, config, phrases) {
     totalKeystrokes: 0,
     correctCharacters: 0,
     missedCharacters: 0,
+    completedWordCount: 0,
+    missedWordCount: 0,
     wordStartIndex: 0,
     wordStartElapsedMs: 0,
     lastTimestamp: null,
@@ -48,6 +50,10 @@ export function addBossTimeoutMisses(game) {
     missed += game.phrases[index].length;
   }
   game.missedCharacters += missed;
+  game.missedWordCount = Math.max(
+    0,
+    (game.config.totalWordCount || 0) - game.completedWordCount,
+  );
   return missed;
 }
 
