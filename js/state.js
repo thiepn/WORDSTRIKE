@@ -1,6 +1,8 @@
 export const Screens = Object.freeze({
   TITLE: "TITLE",
   MODE_SELECT: "MODE_SELECT",
+  ENDLESS_READY: "ENDLESS_READY",
+  ENDLESS_RESULTS: "ENDLESS_RESULTS",
   SPEED_TEST_RUN: "SPEED_TEST_RUN",
   SPEED_TEST_RESULTS: "SPEED_TEST_RESULTS",
   LEVEL_SELECT: "LEVEL_SELECT",
@@ -30,6 +32,10 @@ export const appState = {
   speedTestResultsReadyAt: 0,
   speedTestResult: null,
   speedTestRecordFlags: null,
+  endlessResult: null,
+  endlessResultsIndex: 0,
+  endlessResultsReadyAt: 0,
+  endlessStartStage: 1,
   levelSelection: 1,
   pauseIndex: 0,
   resultsIndex: 0,
@@ -75,6 +81,19 @@ export function clearAttemptRuntime(game) {
     delete game.failureReason;
     game.abandonedWordCount = 0;
     game.abandonedCharacters = 0;
+  } else if (game.mode === "endless") {
+    if (Array.isArray(game.words)) game.words.length = 0;
+    if (Array.isArray(game.rollingEvents)) game.rollingEvents.length = 0;
+    game.targetingState = {
+      mode: "idle",
+      prefix: "",
+      candidateIds: [],
+      activeTargetId: null,
+      startedAtActiveMs: null,
+    };
+    game.activeModifier = null;
+    game.bannerText = "";
+    game.immunityUntilMs = 0;
   } else if (game.mode === "boss") {
     if (Array.isArray(game.segments)) game.segments.length = 0;
     if (Array.isArray(game.phrases)) game.phrases.length = 0;

@@ -26,6 +26,8 @@ import {
   getSpeedTestDiagnosticText,
   getSpeedTestLiveMetrics,
 } from "./speedTest.js";
+import { ENDLESS_CONFIG } from "./endlessConfig.js";
+import { getEndlessDiagnosticText } from "./endlessMode.js";
 
 const app = () => document.querySelector("#app");
 
@@ -91,6 +93,67 @@ export function renderModeSelect(modes, selectedIndex, handlers) {
     }
   });
   app().querySelector(".mode-card.available.selected")?.focus({ preventScroll: true });
+}
+
+export function renderEndlessReady(handlers = {}) {
+  app().innerHTML = `
+    <section class="screen endless-ready-screen">
+      <div class="endless-ready-panel">
+        <div class="eyebrow">Standard survival protocol</div>
+        <h1>ENDLESS MODE</h1>
+        <p class="endless-ready-lead">SURVIVE ESCALATING STAGES</p>
+        <div class="endless-ready-rules">
+          <span>${ENDLESS_CONFIG.startingIntegrity} CORE INTEGRITY</span>
+          <span>${ENDLESS_CONFIG.wordsPerStage} WORDS PER STAGE</span>
+        </div>
+        <button class="arcade-button selected" data-action="endless-start">
+          PRESS ENTER TO BEGIN
+        </button>
+        <p class="footer-hint">ENTER BEGIN &nbsp;•&nbsp; ESC MODE SELECT</p>
+      </div>
+    </section>`;
+  app().querySelector('[data-action="endless-start"]').onclick = handlers.start;
+}
+
+export function renderEndlessShell(game, devMode = false) {
+  app().innerHTML = `
+    <section class="screen game-screen endless-screen">
+      <header class="endless-hud">
+        <div><strong>STAGE <span id="endless-stage">${game.stage}</span></strong>
+          <span id="endless-progress">${game.stageWordsCompleted} / ${ENDLESS_CONFIG.wordsPerStage}</span></div>
+        <div>SCORE <strong id="endless-score">0</strong></div>
+        <div>CORE <strong class="endless-integrity" id="endless-integrity">${"◇".repeat(game.integrity)}</strong></div>
+        <span class="endless-modifier-label" id="endless-modifier">${game.activeModifier ? getModifierById(game.activeModifier)?.name.toUpperCase() : ""}</span>
+      </header>
+      ${devMode ? `<aside class="dev-runtime-panel" id="dev-runtime-panel">${getEndlessDiagnosticText(game)}</aside>` : ""}
+      <div class="play-area" id="play-area">
+        <div class="core" aria-label="Central core"></div>
+        <div class="endless-stage-banner" id="endless-stage-banner" hidden></div>
+      </div>
+    </section>`;
+}
+
+export function updateEndlessHud(game) {
+  const values = {
+    "#endless-stage": game.stage,
+    "#endless-progress": `${game.stageWordsCompleted} / ${ENDLESS_CONFIG.wordsPerStage}`,
+    "#endless-score": game.score.toLocaleString(),
+    "#endless-integrity": "◇".repeat(Math.max(0, game.integrity)),
+    "#endless-modifier": game.activeModifier
+      ? getModifierById(game.activeModifier)?.name.toUpperCase() || ""
+      : "",
+  };
+  for (const [selector, value] of Object.entries(values)) {
+    const element = document.querySelector(selector);
+    if (element) element.textContent = value;
+  }
+  const banner = document.querySelector("#endless-stage-banner");
+  if (banner) {
+    banner.hidden = game.elapsedMs >= game.bannerUntilMs || !game.bannerText;
+    banner.textContent = game.bannerText;
+  }
+  const diagnostics = document.querySelector("#dev-runtime-panel");
+  if (diagnostics) diagnostics.textContent = getEndlessDiagnosticText(game);
 }
 
 function escapeHtml(value) {
@@ -923,6 +986,84 @@ export function showPauseOverlay(selectedIndex, handlers) {
       button.classList.add("selected");
       handlers.select?.(index);
     };
+  });
+}
+
+export function showEndlessPauseOverlay(selectedIndex, handlers) {
+  document.querySelector(".pause-overlay")?.remove();
+  const actions = [
+    ["RESUME", "resume"],
+    ["RESTART", "restart"],
+    ["MODE SELECT", "modes"],
+    ["MAIN MENU", "title"],
+  ];
+  const overlay = document.createElement("div");
+  overlay.className = "pause-overlay";
+  overlay.innerHTML = `
+    <div class="pause-panel">
+      <div class="eyebrow">Endless run suspended</div>
+      <h2>PAUSED</h2>
+      <div class="menu-list">${actions.map(([label, action], index) => (
+    menuButton(label, action, index === selectedIndex)
+  )).join("")}</div>
+      <p class="footer-hint">ESC RESUME</p>
+    </div>`;
+  document.querySelector(".endless-screen")?.append(overlay);
+  for (const [, action] of actions) {
+    overlay.querySelector(`[data-action="${action}"]`).onclick = handlers[action];
+  }
+  overlay.querySelectorAll(".arcade-button").forEach((button, index) => {
+    button.onmouseenter = () => {
+      overlay.querySelectorAll(".arcade-button").forEach(
+        (item) => item.classList.remove("selected"),
+      );
+      button.classList.add("selected");
+      handlers.select?.(index);
+    };
+  });
+}
+
+export function renderEndlessResults(result, selectedIndex, handlers) {
+  const data = result.modeData;
+  const actions = [
+    ["RETRY", "retry"],
+    ["MODE SELECT", "modes"],
+    ["MAIN MENU", "title"],
+  ];
+  app().innerHTML = `
+    <section class="screen endless-results-screen">
+      <div class="endless-results-panel">
+        <div class="eyebrow">Endless mode</div>
+        <h1>RUN OVER</h1>
+        <div class="endless-result-headline">
+          <div><span>Highest stage</span><strong>${data.highestStage}</strong></div>
+          <div><span>Score</span><strong>${result.score.toLocaleString()}</strong></div>
+          <div><span>Survival time</span><strong>${(data.survivalTimeMs / 1000).toFixed(1)}s</strong></div>
+        </div>
+        <div class="endless-result-details">
+          <div><span>Words completed</span><strong>${data.wordsCompleted}</strong></div>
+          <div><span>Stage progress</span><strong>${data.stageProgress} / ${ENDLESS_CONFIG.wordsPerStage}</strong></div>
+          <div><span>Accuracy</span><strong>${result.accuracy.toFixed(1)}%</strong></div>
+          <div><span>Average WPM</span><strong>${result.wpm.toFixed(1)}</strong></div>
+          <div><span>Peak WPM</span><strong>${data.peakWpm.toFixed(1)}</strong></div>
+          <div><span>Final rolling WPM</span><strong>${data.finalRollingWpm.toFixed(1)}</strong></div>
+          <div><span>Maximum combo</span><strong>${data.maximumCombo}</strong></div>
+          <div><span>Maximum perfect streak</span><strong>${data.maximumPerfectStreak}</strong></div>
+          <div><span>Core hits / breaches</span><strong>${data.coreHits} / ${data.coreBreaches}</strong></div>
+          <div><span>Modifier stages survived</span><strong>${data.modifiersSurvived}</strong></div>
+          <div><span>Score breakdown</span><strong>${data.survivalPoints} + ${data.wordPoints} + ${data.stageBonusPoints}</strong></div>
+          <div><span>Attempt seed</span><strong>${data.attemptSeed}</strong></div>
+        </div>
+        <div class="menu-list">${actions.map(([label, action], index) => (
+    menuButton(label, action, index === selectedIndex)
+  )).join("")}</div>
+      </div>
+    </section>`;
+  for (const [, action] of actions) {
+    app().querySelector(`[data-action="${action}"]`).onclick = handlers[action];
+  }
+  app().querySelectorAll(".endless-results-panel .arcade-button").forEach((button, index) => {
+    button.onmouseenter = () => handlers.select?.(index);
   });
 }
 

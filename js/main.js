@@ -54,6 +54,9 @@ import { createAttemptSeed, parseDeveloperSeed } from "./random.js";
 import {
   hidePauseOverlay,
   renderBossShell,
+  renderEndlessReady,
+  renderEndlessResults,
+  renderEndlessShell,
   renderGameplayShell,
   renderLevelSelect,
   renderModeSelect,
@@ -65,6 +68,8 @@ import {
   renderSettings,
   renderTitle,
   showPauseOverlay,
+  showEndlessPauseOverlay,
+  updateEndlessHud,
   updateBossHud,
   updateHud,
   updateSpeedTestRun,
@@ -95,6 +100,14 @@ import {
   startSpeedTest,
   stopSpeedTestLoop,
 } from "./speedTest.js";
+import { createEndlessVocabulary } from "./endlessWords.js";
+import {
+  clearEndlessRuntime,
+  handleEndlessKey,
+  resumeEndlessLoop,
+  startEndlessRun,
+  stopEndlessLoop,
+} from "./endlessMode.js";
 
 const titleActions = ["modes", "settings"];
 const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
@@ -103,11 +116,13 @@ function stopActiveLoops() {
   stopGameLoop();
   stopBossLoop();
   stopSpeedTestLoop();
+  stopEndlessLoop();
 }
 
 function discardActiveAttempt() {
   clearAttemptRuntime(appState.game);
   clearSpeedTestRuntime();
+  clearEndlessRuntime();
 }
 
 function cleanupCampaignAttempt(reason, { clearSessionState = true } = {}) {
@@ -139,6 +154,12 @@ function openModeSelect() {
   cleanupCampaignAttempt("mode-select");
   changeScreen(Screens.MODE_SELECT);
   appState.modeSelection = 0;
+  renderCurrentScreen();
+}
+
+function openEndlessReady(reason = "endless-ready") {
+  cleanupCampaignAttempt(reason);
+  changeScreen(Screens.ENDLESS_READY);
   renderCurrentScreen();
 }
 
@@ -257,6 +278,45 @@ function startSelectedSpeedTest(source = "mode-select") {
   updateSpeedTestRun(state, currentTimeMs());
 }
 
+function finishEndless(game, result) {
+  if (!result || appState.screen === Screens.ENDLESS_RESULTS) return;
+  appState.endlessResult = result;
+  appState.endlessResultsIndex = 0;
+  appState.endlessResultsReadyAt = currentTimeMs() + 200;
+  changeScreen(Screens.ENDLESS_RESULTS);
+  renderCurrentScreen();
+}
+
+function startEndless(source = "mode-select") {
+  cleanupCampaignAttempt(["retry", "restart"].includes(source) ? source : "new-session");
+  const forcedModifier = (
+    appState.devMode &&
+    [QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID].includes(appState.forcedModifierId)
+  ) ? appState.forcedModifierId : null;
+  const game = startEndlessRun({
+    seed: getAttemptSeed(),
+    vocabulary: createEndlessVocabulary({
+      commonWords: appState.speedTestWordBank.words,
+      campaignBank: appState.wordBank,
+      bossBank: appState.bossWordBank,
+    }),
+    startStage: appState.devMode ? appState.endlessStartStage : 1,
+    forcedModifier,
+    recordEligible: !appState.devMode,
+    developerMode: appState.devMode,
+    source,
+    onUpdate: updateEndlessHud,
+    onComplete: finishEndless,
+  });
+  if (!game) {
+    openEndlessReady("start-failed");
+    return;
+  }
+  changeScreen(Screens.PLAYING);
+  renderEndlessShell(game, appState.devMode);
+  updateEndlessHud(game);
+}
+
 function changeSpeedTestConfig(configId) {
   const state = getCurrentSpeedTest();
   if (state?.phase === "ACTIVE") return;
@@ -364,6 +424,7 @@ function pauseGame() {
   if (appState.screen !== Screens.PLAYING) return;
   changeScreen(Screens.PAUSED);
   pauseSession();
+  if (appState.game?.mode === "endless") stopEndlessLoop();
   appState.pauseIndex = 0;
   renderPauseOverlay();
 }
@@ -373,6 +434,16 @@ function retryCurrentLevel() {
 }
 
 function renderPauseOverlay() {
+  if (appState.game?.mode === "endless") {
+    showEndlessPauseOverlay(appState.pauseIndex, {
+      resume: resumeGame,
+      restart: () => startEndless("restart"),
+      modes: openModeSelect,
+      title: openTitle,
+      select: (index) => { appState.pauseIndex = index; },
+    });
+    return;
+  }
   showPauseOverlay(appState.pauseIndex, {
     resume: resumeGame,
     retry: retryCurrentLevel,
@@ -388,6 +459,7 @@ function resumeGame() {
   changeScreen(Screens.PLAYING);
   resumeSession();
   if (appState.game?.mode === "boss") resumeBossLoop();
+  else if (appState.game?.mode === "endless") resumeEndlessLoop();
   else resumeGameLoop();
 }
 
@@ -405,6 +477,7 @@ function activateSelectedMode(modeId = getAllModes()[appState.modeSelection]?.id
     appState.speedTestConfigId = DEFAULT_SPEED_TEST_CONFIG_ID;
     startSelectedSpeedTest("mode-select");
   }
+  else if (route === "endless-ready") openEndlessReady("mode-select");
   else return false;
   return true;
 }
@@ -437,6 +510,22 @@ function renderCurrentScreen() {
       },
       activate: activateSelectedMode,
     });
+  } else if (appState.screen === Screens.ENDLESS_READY) {
+    renderEndlessReady({ start: () => startEndless("mode-select") });
+  } else if (appState.screen === Screens.ENDLESS_RESULTS) {
+    renderEndlessResults(
+      appState.endlessResult,
+      appState.endlessResultsIndex,
+      {
+        retry: () => startEndless("retry"),
+        modes: openModeSelect,
+        title: openTitle,
+        select: (index) => {
+          appState.endlessResultsIndex = index;
+          renderCurrentScreen();
+        },
+      },
+    );
   } else if (appState.screen === Screens.SPEED_TEST_RUN) {
     const state = getCurrentSpeedTest();
     if (state) {
@@ -555,7 +644,10 @@ function handleGlobalKeydown(event) {
       pauseGame();
       return;
     }
-    if (appState.game?.mode === "boss") {
+    if (appState.game?.mode === "endless") {
+      handleEndlessKey(event, appState.game);
+      updateEndlessHud(appState.game);
+    } else if (appState.game?.mode === "boss") {
       handleBossKey(event, appState.game, appState.save.settings, completeBossPhrase);
       updateBossHud(appState.game);
     } else {
@@ -583,7 +675,11 @@ function handleGlobalKeydown(event) {
       appState.pauseIndex = (appState.pauseIndex + direction + 4) % 4;
       renderPauseOverlay();
     } else if (event.key === "Enter") {
-      [resumeGame, retryCurrentLevel, openLevelSelect, openTitle][appState.pauseIndex]();
+      if (appState.game?.mode === "endless") {
+        [resumeGame, () => startEndless("restart"), openModeSelect, openTitle][appState.pauseIndex]();
+      } else {
+        [resumeGame, retryCurrentLevel, openLevelSelect, openTitle][appState.pauseIndex]();
+      }
     }
     return;
   }
@@ -612,6 +708,36 @@ function handleGlobalKeydown(event) {
       activateSelectedMode();
     } else if (event.key === "Escape") {
       openTitle();
+    }
+    return;
+  }
+
+  if (appState.screen === Screens.ENDLESS_READY) {
+    if (event.key === "Escape") openModeSelect();
+    else if (event.key === "Enter") startEndless("mode-select");
+    return;
+  }
+
+  if (appState.screen === Screens.ENDLESS_RESULTS) {
+    const actions = ["retry", "modes", "title"];
+    if (isResultsInputBlocked(
+      event,
+      currentTimeMs(),
+      appState.endlessResultsReadyAt,
+    )) return;
+    if (event.key === "Escape") {
+      openModeSelect();
+    } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      const direction = event.key === "ArrowUp" ? -1 : 1;
+      appState.endlessResultsIndex = (
+        appState.endlessResultsIndex + direction + actions.length
+      ) % actions.length;
+      renderCurrentScreen();
+    } else if (event.key === "Enter") {
+      const action = actions[appState.endlessResultsIndex];
+      if (action === "retry") startEndless("retry");
+      else if (action === "modes") openModeSelect();
+      else openTitle();
     }
     return;
   }
@@ -689,6 +815,7 @@ function handleGlobalKeydown(event) {
 
 async function bootstrap() {
   clearSession();
+  const search = new URLSearchParams(window.location.search);
   appState.devMode = isDevelopmentMode(window.location.search);
   appState.developerSeed = appState.devMode
     ? parseDeveloperSeed(window.location.search)
@@ -696,6 +823,9 @@ async function bootstrap() {
   appState.forcedModifierId = appState.devMode
     ? isForcedModifierRequested(window.location.search)
     : null;
+  appState.endlessStartStage = appState.devMode
+    ? Math.max(1, Number.parseInt(search.get("stage"), 10) || 1)
+    : 1;
   appState.save = loadSave();
   [appState.wordBank, appState.bossWordBank, appState.speedTestWordBank] = await Promise.all([
     loadWordBank(),
@@ -703,7 +833,6 @@ async function bootstrap() {
     loadSpeedTestWordBank(),
   ]);
   document.addEventListener("keydown", handleGlobalKeydown);
-  const search = new URLSearchParams(window.location.search);
   if (
     appState.devMode &&
     search.get("mode") === MODE_IDS.SPEED_TEST
@@ -712,6 +841,8 @@ async function bootstrap() {
       window.location.search,
     );
     startSelectedSpeedTest("developer");
+  } else if (appState.devMode && search.get("mode") === MODE_IDS.ENDLESS) {
+    openEndlessReady("developer");
   } else {
     renderCurrentScreen();
   }

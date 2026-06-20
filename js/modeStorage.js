@@ -30,6 +30,19 @@ function createSpeedTestRecord() {
   };
 }
 
+function createEndlessRecords() {
+  return {
+    bestStage: null,
+    highestScore: null,
+    longestSurvival: null,
+    mostWordsCompleted: null,
+    highestCombo: null,
+    highestPerfectStreak: null,
+    bestAccuracy: null,
+    bestAverageWpm: null,
+  };
+}
+
 function createModeSummary(modeId) {
   const summary = {
     completedSessions: 0,
@@ -43,6 +56,10 @@ function createModeSummary(modeId) {
     summary.records = Object.fromEntries(
       SPEED_TEST_CONFIG_IDS.map((configId) => [configId, createSpeedTestRecord()]),
     );
+  }
+  if (modeId === "endless") {
+    summary.highestStage = null;
+    summary.records = createEndlessRecords();
   }
   return summary;
 }
@@ -81,6 +98,46 @@ function sanitizeSpeedTestRecord(value) {
   };
 }
 
+function sanitizeRecordObject(value, fields) {
+  if (!value || typeof value !== "object") return null;
+  const record = {};
+  for (const field of fields) {
+    record[field] = field === "sessionId"
+      ? (typeof value[field] === "string" ? value[field] : null)
+      : nullableFinite(value[field]);
+  }
+  return record;
+}
+
+function sanitizeEndlessRecords(value) {
+  return {
+    bestStage: sanitizeRecordObject(value?.bestStage, [
+      "stage", "score", "wordsCompleted", "accuracy", "achievedAt", "sessionId",
+    ]),
+    highestScore: sanitizeRecordObject(value?.highestScore, [
+      "score", "stage", "wordsCompleted", "accuracy", "achievedAt", "sessionId",
+    ]),
+    longestSurvival: sanitizeRecordObject(value?.longestSurvival, [
+      "survivalTimeMs", "stage", "achievedAt", "sessionId",
+    ]),
+    mostWordsCompleted: sanitizeRecordObject(value?.mostWordsCompleted, [
+      "wordsCompleted", "stage", "achievedAt", "sessionId",
+    ]),
+    highestCombo: sanitizeRecordObject(value?.highestCombo, [
+      "value", "stage", "achievedAt", "sessionId",
+    ]),
+    highestPerfectStreak: sanitizeRecordObject(value?.highestPerfectStreak, [
+      "value", "stage", "achievedAt", "sessionId",
+    ]),
+    bestAccuracy: sanitizeRecordObject(value?.bestAccuracy, [
+      "value", "stage", "achievedAt", "sessionId",
+    ]),
+    bestAverageWpm: sanitizeRecordObject(value?.bestAverageWpm, [
+      "value", "stage", "achievedAt", "sessionId",
+    ]),
+  };
+}
+
 function sanitizeModeSummary(value, modeId) {
   const defaults = createModeSummary(modeId);
   const summary = {
@@ -97,6 +154,10 @@ function sanitizeModeSummary(value, modeId) {
       configId,
       sanitizeSpeedTestRecord(value?.records?.[configId]),
     ]));
+  }
+  if (modeId === "endless") {
+    summary.highestStage = nullableFinite(value?.highestStage);
+    summary.records = sanitizeEndlessRecords(value?.records);
   }
   return summary;
 }
@@ -135,6 +196,9 @@ function sanitizeRecentSummary(value) {
       backspaces: finiteNonNegative(value.modeData?.backspaces),
       wordDeletes: finiteNonNegative(value.modeData?.wordDeletes),
       completedWordCount: finiteNonNegative(value.modeData?.completedWordCount),
+      highestStage: nullableFinite(value.modeData?.highestStage),
+      wordsCompleted: finiteNonNegative(value.modeData?.wordsCompleted),
+      survivalTimeMs: finiteNonNegative(value.modeData?.survivalTimeMs),
     },
   };
 }
@@ -212,6 +276,61 @@ function shouldReplaceWpmRecord(record, result) {
   return record.bestResultAt == null || (endedAt != null && endedAt < record.bestResultAt);
 }
 
+function compareDescending(next, previous) {
+  if (next > previous) return 1;
+  if (next < previous) return -1;
+  return 0;
+}
+
+export function isBetterEndlessStageRecord(next, previous) {
+  if (!previous) return true;
+  for (const field of ["stage", "score", "wordsCompleted", "accuracy"]) {
+    const comparison = compareDescending(
+      finiteNonNegative(next?.[field]),
+      finiteNonNegative(previous?.[field]),
+    );
+    if (comparison) return comparison > 0;
+  }
+  return finiteNonNegative(next?.achievedAt, Infinity)
+    < finiteNonNegative(previous?.achievedAt, Infinity);
+}
+
+export function isBetterEndlessScoreRecord(next, previous) {
+  if (!previous) return true;
+  for (const field of ["score", "stage", "accuracy"]) {
+    const comparison = compareDescending(
+      finiteNonNegative(next?.[field]),
+      finiteNonNegative(previous?.[field]),
+    );
+    if (comparison) return comparison > 0;
+  }
+  return finiteNonNegative(next?.achievedAt, Infinity)
+    < finiteNonNegative(previous?.achievedAt, Infinity);
+}
+
+function updateIndependentRecord(records, key, next, valueField) {
+  const previous = records[key];
+  const nextValue = finiteNonNegative(next[valueField]);
+  const previousValue = finiteNonNegative(previous?.[valueField], -1);
+  if (
+    !previous ||
+    nextValue > previousValue ||
+    (
+      nextValue === previousValue &&
+      (
+        finiteNonNegative(next.stage) > finiteNonNegative(previous.stage) ||
+        (
+          finiteNonNegative(next.stage) === finiteNonNegative(previous.stage) &&
+          finiteNonNegative(next.achievedAt, Infinity)
+            < finiteNonNegative(previous.achievedAt, Infinity)
+        )
+      )
+    )
+  ) {
+    records[key] = next;
+  }
+}
+
 export function getSpeedTestRecord(configId) {
   if (!SPEED_TEST_CONFIG_IDS.includes(configId)) return null;
   return {
@@ -236,6 +355,10 @@ export function recordCompletedSession(result) {
     !result ||
     result.schemaVersion !== 1 ||
     result.developerMode === true ||
+    (
+      result.modeId === "endless" &&
+      result.modeData?.recordEligible !== true
+    ) ||
     result.state === "aborted" ||
     result.sessionState === "aborted" ||
     typeof result.sessionId !== "string" ||
@@ -279,6 +402,57 @@ export function recordCompletedSession(result) {
     if (flags.newRawWpmRecord) record.bestRawWpm = result.modeData.rawWpm;
     if (flags.newAccuracyRecord) record.bestAccuracy = result.accuracy;
     record.bestExactWords = better(record.bestExactWords, result.modeData.exactWords);
+  }
+  if (result.modeId === "endless") {
+    const records = mode.records;
+    const stage = finiteNonNegative(result.modeData?.highestStage);
+    const achievedAt = finiteNonNegative(result.endedAt);
+    const sessionId = result.sessionId;
+    const base = {
+      stage,
+      achievedAt,
+      sessionId,
+    };
+    const bestStage = {
+      ...base,
+      score: finiteNonNegative(result.score),
+      wordsCompleted: finiteNonNegative(result.modeData?.wordsCompleted),
+      accuracy: finiteNonNegative(result.accuracy),
+    };
+    if (isBetterEndlessStageRecord(bestStage, records.bestStage)) {
+      records.bestStage = bestStage;
+    }
+    const highestScore = {
+      ...bestStage,
+    };
+    if (isBetterEndlessScoreRecord(highestScore, records.highestScore)) {
+      records.highestScore = highestScore;
+    }
+    updateIndependentRecord(records, "longestSurvival", {
+      ...base,
+      survivalTimeMs: finiteNonNegative(result.modeData?.survivalTimeMs),
+    }, "survivalTimeMs");
+    updateIndependentRecord(records, "mostWordsCompleted", {
+      ...base,
+      wordsCompleted: finiteNonNegative(result.modeData?.wordsCompleted),
+    }, "wordsCompleted");
+    updateIndependentRecord(records, "highestCombo", {
+      ...base,
+      value: finiteNonNegative(result.modeData?.maximumCombo),
+    }, "value");
+    updateIndependentRecord(records, "highestPerfectStreak", {
+      ...base,
+      value: finiteNonNegative(result.modeData?.maximumPerfectStreak),
+    }, "value");
+    updateIndependentRecord(records, "bestAccuracy", {
+      ...base,
+      value: finiteNonNegative(result.accuracy),
+    }, "value");
+    updateIndependentRecord(records, "bestAverageWpm", {
+      ...base,
+      value: finiteNonNegative(result.modeData?.averageWpm),
+    }, "value");
+    mode.highestStage = better(mode.highestStage, stage);
   }
 
   const summary = sanitizeRecentSummary(result);

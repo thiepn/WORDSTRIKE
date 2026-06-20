@@ -1,0 +1,645 @@
+import { appState, Screens } from "./state.js";
+import { ENDLESS_CONFIG, isStandardEndlessConfiguration } from "./endlessConfig.js";
+import {
+  getEndlessDifficulty,
+  getEndlessQuickFingersInterval,
+} from "./endlessDifficulty.js";
+import {
+  getEndlessModifierForStage,
+  getNextEndlessModifierStage,
+} from "./endlessModifiers.js";
+import {
+  calculateEndlessScore,
+  calculateEndlessStageBonus,
+  calculateEndlessSurvivalPoints,
+  calculateEndlessWordPoints,
+} from "./endlessScoring.js";
+import { createEndlessWordGenerator } from "./endlessWords.js";
+import {
+  BLACKOUT_ID,
+  getBlackoutVisibility,
+  NO_BACKSPACE_ID,
+  QUICK_FINGERS_ID,
+} from "./modifiers.js";
+import { handleGameplayKey, reconcileTargetingState, resetTargetingState } from "./input.js";
+import {
+  clearWordElements,
+  createWordElement,
+  flashDamage,
+  removeWordElement,
+  updateWordElement,
+} from "./renderer.js";
+import { updateWordSeparation } from "./gameLoop.js";
+import { createSeededRandom, mixSeed } from "./random.js";
+import {
+  beginSession,
+  completeSession,
+  getCurrentSession,
+  markSessionActive,
+  markSessionResultPersisted,
+  SESSION_STATES,
+  setSessionState,
+} from "./sessionManager.js";
+import { buildSessionResult } from "./sessionResult.js";
+import {
+  calculateSessionAccuracy,
+  calculateSessionWpm,
+} from "./sessionMetrics.js";
+import { recordCompletedSession } from "./modeStorage.js";
+import { MODE_IDS } from "./modes.js";
+
+let currentEndless = null;
+let animationFrameId = null;
+let callbacks = {};
+
+function spawnRandom(seed) {
+  return createSeededRandom(mixSeed(seed, 0x2f6e2b1));
+}
+
+function createTargetingState() {
+  return {
+    mode: "idle",
+    prefix: "",
+    candidateIds: [],
+    activeTargetId: null,
+    startedAtActiveMs: null,
+  };
+}
+
+function activateBlackout(game) {
+  game.blackoutStats = { wordsHidden: 0, hiddenWordsCompleted: 0, wordsMissedAfterFade: 0 };
+  for (const word of game.words) {
+    Object.assign(word, {
+      spawnedAtActiveMs: game.elapsedMs,
+      blackoutPhase: "visible",
+      blackoutTextOpacity: 1,
+      blackoutHidden: false,
+      blackoutHiddenCounted: false,
+      blackoutMissedAfterFadeCounted: false,
+    });
+  }
+}
+
+function revealBlackout(game) {
+  for (const word of game.words) {
+    Object.assign(word, {
+      blackoutPhase: "visible",
+      blackoutTextOpacity: 1,
+      blackoutHidden: false,
+    });
+  }
+  delete game.blackoutStats;
+}
+
+export function createEndlessRuntime({
+  seed,
+  vocabulary,
+  startStage = 1,
+  maximumStages = null,
+  modifierSchedule = null,
+  forcedModifier = null,
+  recordEligible = true,
+  developerMode = false,
+} = {}) {
+  const safeStage = Number.isInteger(startStage) && startStage > 0 ? startStage : 1;
+  const runtimeConfig = {
+    startStage: safeStage,
+    maximumStages: Number.isInteger(maximumStages) && maximumStages > 0 ? maximumStages : null,
+    modifierSchedule,
+    forcedModifier,
+    recordEligible,
+  };
+  const eligible = isStandardEndlessConfiguration(runtimeConfig, developerMode);
+  const modifier = forcedModifier || getEndlessModifierForStage({
+    stage: safeStage,
+    seed,
+  });
+  const game = {
+    mode: "endless",
+    config: {
+      ...runtimeConfig,
+      modifiers: modifier ? [modifier] : [],
+    },
+    attemptSeed: seed,
+    developerMode,
+    recordEligible: eligible,
+    stage: safeStage,
+    highestStage: safeStage,
+    completedStages: 0,
+    stageWordsCompleted: 0,
+    totalWordsCompleted: 0,
+    integrity: ENDLESS_CONFIG.startingIntegrity,
+    words: [],
+    nextWordId: 1,
+    generatedWordCount: 0,
+    random: spawnRandom(seed),
+    wordGenerator: createEndlessWordGenerator(vocabulary, seed),
+    difficulty: getEndlessDifficulty(safeStage),
+    phase: "ACTIVE",
+    activeModifier: modifier,
+    previousModifier: null,
+    modifiersSurvived: 0,
+    transitionSpawnUntilMs: 0,
+    bannerUntilMs: modifier ? ENDLESS_CONFIG.modifierBannerMs : 0,
+    bannerText: modifier ? `STAGE ${safeStage} // MODIFIER INCOMING` : "",
+    lastSpawnAtMs: -ENDLESS_CONFIG.initialSpawnIntervalMs,
+    elapsedMs: 0,
+    lastTimestamp: null,
+    immunityUntilMs: 0,
+    coreHits: 0,
+    coreBreaches: 0,
+    score: 0,
+    accumulatedWordPoints: 0,
+    accumulatedStageBonusPoints: 0,
+    survivalPoints: 0,
+    combo: 0,
+    maxCombo: 0,
+    currentPerfectStreak: 0,
+    maximumPerfectStreak: 0,
+    currentWordHadError: false,
+    correctKeystrokes: 0,
+    totalKeystrokes: 0,
+    missedCharacters: 0,
+    correctCharacters: 0,
+    completedWordCount: 0,
+    missedWordCount: 0,
+    abandonedWordCount: 0,
+    abandonedCharacters: 0,
+    blackoutStats: modifier === BLACKOUT_ID
+      ? { wordsHidden: 0, hiddenWordsCompleted: 0, wordsMissedAfterFade: 0 }
+      : undefined,
+    activeTargetId: null,
+    targetingState: createTargetingState(),
+    rollingEvents: [],
+    peakWpm: 0,
+    finalRollingWpm: 0,
+    coreX: 0,
+    coreY: 0,
+    ended: false,
+    completionNotified: false,
+    result: null,
+  };
+  return game;
+}
+
+function dimensions(game) {
+  const area = document.querySelector("#play-area");
+  if (!area) return null;
+  game.coreX = area.clientWidth / 2;
+  game.coreY = area.clientHeight / 2;
+  return { width: area.clientWidth, height: area.clientHeight };
+}
+
+function spawnWord(game, size) {
+  if (game.words.length >= game.difficulty.activeWordCap) return false;
+  const edge = Math.floor(game.random() * 4);
+  const margin = 32;
+  let x = margin;
+  let y = margin;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    if (edge === 0) [x, y] = [game.random() * size.width, margin];
+    else if (edge === 1) [x, y] = [size.width - margin, game.random() * size.height];
+    else if (edge === 2) [x, y] = [game.random() * size.width, size.height - margin];
+    else [x, y] = [margin, game.random() * size.height];
+    if (game.words.every((word) => Math.hypot(word.x - x, word.y - y) >= 72)) break;
+  }
+  const dx = game.coreX - x;
+  const dy = game.coreY - y;
+  const distance = Math.max(1, Math.hypot(dx, dy));
+  const speed = game.difficulty.movementSpeed;
+  const text = game.wordGenerator.next(game.stage);
+  const word = {
+    id: game.nextWordId++,
+    text,
+    typedIndex: 0,
+    x,
+    y,
+    vx: (dx / distance) * speed,
+    vy: (dy / distance) * speed,
+    movementSpeed: speed,
+    createdAt: game.elapsedMs,
+    startedAt: null,
+    abandoned: false,
+    abandonedAt: null,
+    missedCharactersRecorded: false,
+    coreArrivalProcessed: false,
+    separationX: 0,
+    separationY: 0,
+  };
+  if (game.activeModifier === BLACKOUT_ID) {
+    Object.assign(word, {
+      spawnedAtActiveMs: game.elapsedMs,
+      blackoutPhase: "visible",
+      blackoutTextOpacity: 1,
+      blackoutHidden: false,
+      blackoutHiddenCounted: false,
+      blackoutMissedAfterFadeCounted: false,
+    });
+  }
+  game.generatedWordCount += 1;
+  game.words.push(word);
+  createWordElement(word);
+  return true;
+}
+
+function updateRollingWpm(game) {
+  const cutoff = game.elapsedMs - ENDLESS_CONFIG.rollingWpmWindowMs;
+  while (game.rollingEvents.length && game.rollingEvents[0].at < cutoff) {
+    game.rollingEvents.shift();
+  }
+  const firstAt = game.rollingEvents[0]?.at ?? game.elapsedMs;
+  const sampleMs = Math.min(
+    ENDLESS_CONFIG.rollingWpmWindowMs,
+    Math.max(0, game.elapsedMs - firstAt),
+  );
+  const characters = game.rollingEvents.reduce((sum, event) => sum + event.characters, 0);
+  const rolling = calculateSessionWpm({ characterCount: characters, activeDurationMs: sampleMs });
+  game.finalRollingWpm = rolling;
+  if (game.elapsedMs >= ENDLESS_CONFIG.rollingWpmMinimumSampleMs) {
+    game.peakWpm = Math.max(game.peakWpm, rolling);
+  }
+}
+
+function setStageModifier(game, nextModifier) {
+  if (game.activeModifier === BLACKOUT_ID && nextModifier !== BLACKOUT_ID) revealBlackout(game);
+  if (game.activeModifier) game.previousModifier = game.activeModifier;
+  game.activeModifier = nextModifier;
+  game.config.modifiers = nextModifier ? [nextModifier] : [];
+  if (nextModifier === BLACKOUT_ID) activateBlackout(game);
+}
+
+function advanceEndlessStage(game) {
+  if (
+    game.stageWordsCompleted < ENDLESS_CONFIG.wordsPerStage ||
+    game.elapsedMs < game.transitionSpawnUntilMs
+  ) {
+    return false;
+  }
+  const completedStage = game.stage;
+  if (game.activeModifier) game.modifiersSurvived += 1;
+  game.completedStages += 1;
+  game.accumulatedStageBonusPoints += calculateEndlessStageBonus(completedStage);
+  game.stage += 1;
+  game.highestStage = Math.max(game.highestStage, game.stage);
+  game.stageWordsCompleted = 0;
+  game.wordGenerator.resetStage(game.stage);
+  game.difficulty = getEndlessDifficulty(game.stage);
+  const nextModifier = game.config.forcedModifier || getEndlessModifierForStage({
+    stage: game.stage,
+    seed: game.attemptSeed,
+    previousModifier: game.previousModifier || game.activeModifier,
+  });
+  setStageModifier(game, nextModifier);
+  game.transitionSpawnUntilMs = game.elapsedMs + ENDLESS_CONFIG.spawnPauseMs;
+  game.bannerUntilMs = game.elapsedMs + ENDLESS_CONFIG.stageBannerMs;
+  game.bannerText = nextModifier
+    ? `STAGE ${game.stage} // MODIFIER INCOMING // ${nextModifier}`
+    : `STAGE ${game.stage}`;
+  return true;
+}
+
+export function registerEndlessWordCompletion(game, word) {
+  game.maxCombo = Math.max(game.maxCombo, game.combo);
+  if (game.currentWordHadError) {
+    game.currentPerfectStreak = 0;
+  } else {
+    game.currentPerfectStreak += 1;
+    game.maximumPerfectStreak = Math.max(
+      game.maximumPerfectStreak,
+      game.currentPerfectStreak,
+    );
+  }
+  game.currentWordHadError = false;
+  game.totalWordsCompleted += 1;
+  game.completedWordCount = game.totalWordsCompleted;
+  game.stageWordsCompleted += 1;
+  game.accumulatedWordPoints += calculateEndlessWordPoints(
+    game.stage,
+    word.text.length,
+    game.combo,
+    game.currentPerfectStreak,
+  );
+  game.rollingEvents.push({ at: game.elapsedMs, characters: word.text.length });
+  updateRollingWpm(game);
+
+  return advanceEndlessStage(game);
+}
+
+export function processEndlessCoreBreach(game, word) {
+  if (!game || game.ended || word.coreArrivalProcessed) return false;
+  word.coreArrivalProcessed = true;
+  if (!word.missedCharactersRecorded) {
+    word.missedCharactersRecorded = true;
+    game.missedCharacters += Math.max(0, word.text.length - word.typedIndex);
+  }
+  game.missedWordCount += 1;
+  game.coreBreaches += 1;
+  game.combo = 0;
+  game.currentPerfectStreak = 0;
+  game.currentWordHadError = false;
+  game.words = game.words.filter((candidate) => candidate.id !== word.id);
+  reconcileTargetingState(game);
+  removeWordElement(word);
+  if (game.elapsedMs >= game.immunityUntilMs) {
+    game.coreHits += 1;
+    game.integrity -= 1;
+    game.immunityUntilMs = game.elapsedMs + ENDLESS_CONFIG.collisionImmunityMs;
+    flashDamage(appState.save?.settings?.screenShake !== false);
+  }
+  return true;
+}
+
+export function handleEndlessKey(event, game = currentEndless) {
+  if (!game || game.ended) return false;
+  const beforeTotal = game.totalKeystrokes;
+  const beforeCorrect = game.correctKeystrokes;
+  const beforeAbandoned = game.abandonedWordCount;
+  const beforeTargetingMode = game.targetingState?.mode || "idle";
+  const handled = handleGameplayKey(
+    event,
+    game,
+    {
+      ...(appState.save?.settings || {}),
+      strictMode: false,
+      particles: appState.save?.settings?.particles !== false,
+    },
+    (_ignored, word) => registerEndlessWordCompletion(game, word),
+  );
+  if (game.totalKeystrokes > beforeTotal && game.correctKeystrokes === beforeCorrect) {
+    game.currentPerfectStreak = 0;
+    game.currentWordHadError = beforeTargetingMode !== "idle";
+  }
+  if (game.abandonedWordCount > beforeAbandoned) {
+    game.currentWordHadError = true;
+    game.currentPerfectStreak = 0;
+  }
+  game.score = calculateEndlessScore(
+    game.elapsedMs,
+    game.accumulatedWordPoints,
+    game.accumulatedStageBonusPoints,
+  );
+  callbacks.onUpdate?.(game);
+  return handled;
+}
+
+function updateBlackout(game, word) {
+  if (game.activeModifier !== BLACKOUT_ID) return;
+  const visibility = getBlackoutVisibility(game.elapsedMs - word.spawnedAtActiveMs);
+  Object.assign(word, {
+    blackoutPhase: visibility.phase,
+    blackoutTextOpacity: visibility.textOpacity,
+    blackoutHidden: visibility.hidden,
+  });
+  if (visibility.hidden && !word.blackoutHiddenCounted) {
+    word.blackoutHiddenCounted = true;
+    game.blackoutStats.wordsHidden += 1;
+  }
+}
+
+function buildEndlessResult(game) {
+  const session = getCurrentSession();
+  if (!session || session.modeId !== MODE_IDS.ENDLESS) return null;
+  const accuracy = calculateSessionAccuracy({
+    correctKeystrokes: game.correctKeystrokes,
+    totalKeystrokes: game.totalKeystrokes,
+    missedCharacters: game.missedCharacters,
+  });
+  const averageWpm = calculateSessionWpm({
+    characterCount: game.correctCharacters,
+    activeDurationMs: game.elapsedMs,
+  });
+  updateRollingWpm(game);
+  const score = calculateEndlessScore(
+    game.elapsedMs,
+    game.accumulatedWordPoints,
+    game.accumulatedStageBonusPoints,
+  );
+  const endedAt = Date.now();
+  return buildSessionResult({
+    sessionId: session.id,
+    modeId: MODE_IDS.ENDLESS,
+    variantId: "standard",
+    startedAt: session.startedAtEpochMs ?? session.createdAtEpochMs,
+    endedAt,
+    durationMs: Math.max(0, endedAt - session.createdAtEpochMs),
+    activeDurationMs: game.elapsedMs,
+    seed: game.attemptSeed,
+    developerMode: game.developerMode,
+    success: false,
+    failureReason: "core-destroyed",
+    score,
+    grade: null,
+    accuracy,
+    wpm: averageWpm,
+    characters: {
+      correct: game.correctCharacters,
+      incorrect: Math.max(0, game.totalKeystrokes - game.correctKeystrokes),
+      missed: game.missedCharacters,
+      totalKeystrokes: game.totalKeystrokes,
+    },
+    words: {
+      completed: game.totalWordsCompleted,
+      missed: game.missedWordCount,
+      total: game.totalWordsCompleted + game.missedWordCount,
+    },
+    combo: { maximum: game.maxCombo, final: game.combo },
+    modeData: {
+      metricVersion: 1,
+      highestStage: game.highestStage,
+      finalStage: game.stage,
+      stageProgress: game.stageWordsCompleted,
+      completedStages: game.completedStages,
+      wordsCompleted: game.totalWordsCompleted,
+      survivalTimeMs: game.elapsedMs,
+      coreHits: game.coreHits,
+      coreBreaches: game.coreBreaches,
+      modifiersSurvived: game.modifiersSurvived,
+      maximumCombo: game.maxCombo,
+      maximumPerfectStreak: game.maximumPerfectStreak,
+      averageWpm,
+      peakWpm: game.peakWpm,
+      finalRollingWpm: game.finalRollingWpm,
+      survivalPoints: calculateEndlessSurvivalPoints(game.elapsedMs),
+      wordPoints: game.accumulatedWordPoints,
+      stageBonusPoints: game.accumulatedStageBonusPoints,
+      attemptSeed: game.attemptSeed,
+      startStage: game.config.startStage,
+      recordEligible: game.recordEligible,
+    },
+  });
+}
+
+export function completeEndlessRun(game = currentEndless) {
+  if (!game || game.ended) return null;
+  game.ended = true;
+  stopEndlessLoop();
+  const result = buildEndlessResult(game);
+  if (!result) return null;
+  setSessionState(SESSION_STATES.RESULTS);
+  if (!completeSession(result)) return null;
+  if (game.recordEligible && recordCompletedSession(result)) {
+    markSessionResultPersisted(result.sessionId);
+  }
+  game.result = result;
+  return result;
+}
+
+function tick(timestamp) {
+  const game = currentEndless;
+  if (!game || game.ended) return;
+  if (appState.screen !== Screens.PLAYING) {
+    game.lastTimestamp = timestamp;
+    animationFrameId = requestAnimationFrame(tick);
+    return;
+  }
+  if (game.lastTimestamp == null) game.lastTimestamp = timestamp;
+  const deltaMs = Math.min(100, Math.max(0, timestamp - game.lastTimestamp));
+  game.lastTimestamp = timestamp;
+  game.elapsedMs += deltaMs;
+  if (
+    game.stageWordsCompleted >= ENDLESS_CONFIG.wordsPerStage &&
+    game.elapsedMs >= game.transitionSpawnUntilMs
+  ) {
+    advanceEndlessStage(game);
+  }
+  game.survivalPoints = calculateEndlessSurvivalPoints(game.elapsedMs);
+  game.score = calculateEndlessScore(
+    game.elapsedMs,
+    game.accumulatedWordPoints,
+    game.accumulatedStageBonusPoints,
+  );
+  const size = dimensions(game);
+  if (!size) {
+    animationFrameId = requestAnimationFrame(tick);
+    return;
+  }
+  const spawnInterval = game.activeModifier === QUICK_FINGERS_ID
+    ? getEndlessQuickFingersInterval(game.stage)
+    : game.difficulty.spawnIntervalMs;
+  if (
+    game.elapsedMs >= game.transitionSpawnUntilMs &&
+    game.elapsedMs - game.lastSpawnAtMs >= spawnInterval
+  ) {
+    spawnWord(game, size);
+    game.lastSpawnAtMs = game.elapsedMs;
+  }
+  const seconds = deltaMs / 1000;
+  for (const word of [...game.words]) {
+    updateBlackout(game, word);
+    word.x += word.vx * seconds;
+    word.y += word.vy * seconds;
+    if (Math.hypot(word.x - game.coreX, word.y - game.coreY) <= 42) {
+      processEndlessCoreBreach(game, word);
+      if (game.integrity <= 0) {
+        const result = completeEndlessRun(game);
+        if (!game.completionNotified) {
+          game.completionNotified = true;
+          callbacks.onComplete?.(game, result);
+        }
+        return;
+      }
+    }
+  }
+  updateWordSeparation(game, size, deltaMs);
+  const candidates = new Set(game.targetingState.candidateIds);
+  for (const word of game.words) {
+    updateWordElement(word, game.activeTargetId === word.id, {
+      candidate: game.targetingState.mode === "ambiguous" && candidates.has(word.id),
+      prefixLength: game.targetingState.prefix.length,
+    });
+  }
+  updateRollingWpm(game);
+  callbacks.onUpdate?.(game);
+  animationFrameId = requestAnimationFrame(tick);
+}
+
+export function startEndlessRun(options = {}) {
+  stopEndlessLoop();
+  clearWordElements();
+  const game = createEndlessRuntime(options);
+  const session = beginSession({
+    modeId: MODE_IDS.ENDLESS,
+    variantId: "standard",
+    source: options.developerMode ? "developer" : options.source || "mode-select",
+    seed: game.attemptSeed,
+    developerMode: game.developerMode,
+    config: {
+      startStage: game.config.startStage,
+      maximumStages: game.config.maximumStages,
+      modifierSchedule: game.config.modifierSchedule,
+      forcedModifier: game.config.forcedModifier,
+      recordEligible: game.recordEligible,
+    },
+  });
+  if (!session) return null;
+  currentEndless = game;
+  appState.game = game;
+  callbacks = { onUpdate: options.onUpdate, onComplete: options.onComplete };
+  markSessionActive();
+  animationFrameId = requestAnimationFrame(tick);
+  return game;
+}
+
+export function stopEndlessLoop() {
+  if (animationFrameId != null) cancelAnimationFrame(animationFrameId);
+  animationFrameId = null;
+}
+
+export function resumeEndlessLoop() {
+  if (animationFrameId == null && currentEndless && !currentEndless.ended) {
+    currentEndless.lastTimestamp = null;
+    animationFrameId = requestAnimationFrame(tick);
+  }
+}
+
+export function clearEndlessRuntime() {
+  stopEndlessLoop();
+  clearWordElements();
+  if (currentEndless) {
+    currentEndless.words.length = 0;
+    currentEndless.rollingEvents.length = 0;
+    resetTargetingState(currentEndless);
+  }
+  currentEndless = null;
+  callbacks = {};
+}
+
+export function getCurrentEndless() {
+  return currentEndless;
+}
+
+export function getEndlessLoopActive() {
+  return animationFrameId != null;
+}
+
+export function getEndlessDiagnosticText(game = currentEndless) {
+  if (!game) return "ENDLESS=inactive";
+  const session = getCurrentSession();
+  return [
+    `SEED=${game.attemptSeed}`,
+    `SESSION=${session?.id ?? "none"}`,
+    `STATE=${session?.state ?? "idle"}`,
+    `ELIGIBLE=${game.recordEligible}`,
+    `STAGE=${game.stage}`,
+    `COMPLETED STAGES=${game.completedStages}`,
+    `PROGRESS=${game.stageWordsCompleted}/${ENDLESS_CONFIG.wordsPerStage}`,
+    `WORDS=${game.totalWordsCompleted}`,
+    `ACTIVE=${Math.round(game.elapsedMs)}ms`,
+    `SCORE=${game.score}`,
+    `COMBO=${game.combo}/${game.maxCombo}`,
+    `PERFECT=${game.currentPerfectStreak}/${game.maximumPerfectStreak}`,
+    `MOVEMENT=${game.difficulty.movementMultiplier.toFixed(2)}:${game.difficulty.movementSpeed.toFixed(1)}`,
+    `SPAWN=${game.difficulty.spawnIntervalMs}ms`,
+    `CAP=${game.words.length}/${game.difficulty.activeWordCap}`,
+    `LENGTH=${game.difficulty.minimumWordLength}-${game.difficulty.maximumWordLength}`,
+    `TARGET AVG=${game.difficulty.targetAverageLength}`,
+    `WEIGHTS=${JSON.stringify(game.difficulty.vocabularyWeights)}`,
+    `MODIFIER=${game.activeModifier || "none"}`,
+    `NEXT MODIFIER=${getNextEndlessModifierStage(game.stage)}`,
+    `IMMUNITY=${Math.max(0, game.immunityUntilMs - game.elapsedMs)}ms`,
+    `GENERATED=${game.generatedWordCount}`,
+    `RECENT=${game.wordGenerator.recentWords.length}`,
+    `FINALIZED=${session?.resultFinalized === true}`,
+    `PERSISTED=${session?.resultPersisted === true}`,
+  ].join(" // ");
+}

@@ -2,49 +2,37 @@
 
 ## Mode registry
 
-`js/modes.js` is the source of truth for mode IDs, availability, labels, routes, and capabilities. Campaign and Typing Test are enabled. Endless, Daily Strike, and Practice Lab remain immutable disabled entries. Navigation checks `isModeEnabled()` and the registered route before starting a controller.
+`js/modes.js` is the source of truth for mode IDs, availability, routes, and capabilities. Campaign, Typing Test, and Endless are enabled. Daily Strike and Practice Lab remain immutable disabled entries.
 
 ## Shared session lifecycle
 
-`js/sessionManager.js` owns one metadata session at a time and never runs gameplay. Supported states are `preparing`, `briefing`, `active`, `paused`, `transitioning`, `results`, `completed`, and `aborted`.
-
-Only valid forward transitions are accepted. Completion and abort are idempotent. Retry creates a new identity. Monotonic timestamps measure runtime; epoch timestamps are used for persisted dates. Campaign WPM continues using the loop-owned `game.elapsedMs`.
+`js/sessionManager.js` owns one metadata session at a time. Controllers own gameplay. Valid transitions, monotonic active timing, idempotent completion, abort behavior, and unique retry identities remain centralized.
 
 ## Results and records
 
-`js/sessionResult.js` creates immutable JSON-safe results with generic metrics and mode-specific `modeData`. `js/sessionMetrics.js` delegates to the authoritative Campaign formulas.
+`js/sessionResult.js` creates immutable JSON-safe results. `js/modeStorage.js` keeps bounded aggregates and at most 30 compact recent summaries under `wordstrike_mode_data_v1`. Campaign save data remains independent.
 
-`js/modeStorage.js` uses `wordstrike_mode_data_v1`. It stores bounded aggregates, at most 30 compact recent summaries, a bounded duplicate-ID guard, and separate Typing Test records for all seven configurations. Runtime state, word lists, aborted sessions, and developer sessions are not stored. The existing `wordstrike_save` key remains authoritative and independent.
+## Controllers
 
-## Campaign adapter
+- Campaign adapts existing normal and boss loops through `campaignSession.js`.
+- Typing Test owns its ready/active buffer and deadline loop in `speedTest.js`.
+- Endless owns its standardized survival runtime in `endlessMode.js`, reusing Campaign word rendering, prefix targeting, movement geometry, separation, and compatible modifiers.
 
-`js/campaignSession.js` maps existing normal and boss phases into shared session states, builds normalized results, and records completed attempts once. It does not change spawning, scoring, grades, modifiers, timing, or boss behavior.
-
-## Typing Test controller
-
-`js/speedTest.js` owns the active test buffer, generated words, one deadline-based animation loop, keystroke history, completion, and normalized result publication. The timer begins on the first accepted printable character; setup, waiting, and Results time are excluded.
-
-`js/speedTestConfig.js` defines four timed and three word-count configurations. `js/speedTestWords.js` creates an unlimited deterministic stream from the dedicated common-English vocabulary. `js/speedTestMetrics.js` owns Typing Test accuracy, raw WPM, and net WPM without changing Campaign formulas.
-
-## Cleanup contract
-
-`js/sessionCleanup.js` coordinates authoritative loop stops, pause removal, mode runtime clearing, session abort, and session removal. Each gameplay controller retains ownership of its internal state and frame cancellation.
+Exactly one gameplay controller is active. Shared cleanup stops all loops before clearing mode runtime and session state.
 
 ## Navigation
 
-Campaign: Title → Mode Select → Campaign → Level Select.
+- Campaign: Title → Mode Select → Level Select → Run → Results.
+- Typing Test: Title → Mode Select → Ready Test → Results.
+- Endless: Title → Mode Select → Endless Ready → Run → Results.
 
-Typing Test: Title → Mode Select → Typing Test Setup → Run → Results.
-
-Mode Select and setup create no sessions. A Typing Test session begins in `preparing` when the run opens and becomes `active` on the first printable character. Escape aborts an unfinished test and returns to setup. Results retains the completed session until Retry or navigation.
+Mode Select and Endless Ready create no session. Endless begins its session only when the player starts. Stage and modifier banners remain active gameplay and do not exclude survival time.
 
 ## Adding a future mode
 
-1. Add or enable its registry entry.
-2. Add a focused mode controller.
+1. Register the mode.
+2. Add one focused controller.
 3. Begin one shared session.
-4. Publish lifecycle states.
-5. Build a normalized result.
-6. Use shared cleanup.
-7. Persist through the record store.
-8. Add navigation and tests.
+4. Publish normalized results.
+5. Use shared cleanup and bounded storage.
+6. Add navigation and regression tests.
