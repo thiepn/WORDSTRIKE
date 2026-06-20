@@ -174,6 +174,282 @@ button {
   color: var(--muted);
 }
 
+.speed-setup-screen,
+.speed-results-screen {
+  display: grid;
+  place-items: center;
+  padding: 28px;
+}
+
+.speed-setup-panel,
+.speed-results-panel {
+  position: relative;
+  z-index: 1;
+  width: min(860px, 94vw);
+  padding: 36px;
+  border: 1px solid rgb(0 255 242 / 42%);
+  background: rgb(10 14 20 / 94%);
+  box-shadow: 0 0 38px rgb(0 255 242 / 10%);
+  text-align: center;
+}
+
+.speed-setup-panel h1,
+.speed-results-panel h1 {
+  margin: 8px 0 26px;
+  color: var(--primary);
+  letter-spacing: 0.12em;
+}
+
+.speed-config-groups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  text-align: left;
+}
+
+.speed-config-group {
+  padding: 18px;
+  border: 1px solid var(--locked);
+  background: var(--panel);
+}
+
+.speed-config-group.active {
+  border-color: var(--secondary);
+  box-shadow: inset 3px 0 var(--secondary);
+}
+
+.speed-config-group h2 {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 14px;
+  letter-spacing: 0.16em;
+}
+
+.speed-config-group > div {
+  display: grid;
+  gap: 8px;
+}
+
+.speed-config-option {
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--locked);
+  background: var(--bg);
+  cursor: pointer;
+  text-align: left;
+  letter-spacing: 0.08em;
+}
+
+.speed-config-option:hover,
+.speed-config-option:focus-visible,
+.speed-config-option.selected {
+  outline: none;
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: inset 3px 0 var(--primary);
+}
+
+.speed-start-button {
+  width: min(360px, 100%);
+  margin-top: 24px;
+}
+
+.speed-test-screen {
+  display: grid;
+  grid-template-rows: 82px minmax(0, 1fr);
+  background:
+    radial-gradient(circle at 50% 45%, rgb(0 255 242 / 8%), transparent 40%),
+    linear-gradient(135deg, rgb(255 60 172 / 3%), transparent 50%);
+}
+
+.speed-test-hud {
+  z-index: 4;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 0 clamp(20px, 5vw, 72px);
+  border-bottom: 1px solid rgb(0 255 242 / 28%);
+  background: rgb(10 14 20 / 96%);
+  text-align: center;
+}
+
+.speed-test-hud.words-mode {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.speed-test-hud strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--primary);
+  font-size: 23px;
+}
+
+.speed-test-stage {
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  padding: clamp(24px, 5vh, 54px) clamp(20px, 7vw, 110px);
+}
+
+.speed-test-status,
+.speed-test-hint {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-align: center;
+}
+
+.speed-test-word-viewport {
+  align-self: center;
+  height: min(370px, 52vh);
+  overflow: hidden;
+  border-block: 1px solid rgb(129 144 158 / 18%);
+  scroll-behavior: smooth;
+}
+
+.speed-test-word-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 15px 20px;
+  padding: 150px 10px;
+  font-size: clamp(24px, 2.6vw, 38px);
+  font-weight: 600;
+  line-height: 1.25;
+  font-variant-ligatures: none;
+}
+
+.speed-test-word {
+  position: relative;
+  display: inline-flex;
+  min-height: 1.4em;
+  padding: 3px 5px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.speed-test-word-current {
+  border-color: var(--primary);
+  background: rgb(0 255 242 / 7%);
+  box-shadow: 0 0 16px rgb(0 255 242 / 14%);
+}
+
+.speed-test-word-current::before {
+  content: "CURRENT";
+  position: absolute;
+  left: 4px;
+  bottom: 100%;
+  color: var(--primary);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+}
+
+.speed-test-word-complete {
+  opacity: 0.56;
+}
+
+.speed-test-word-error {
+  outline: 1px solid rgb(255 71 87 / 35%);
+}
+
+.speed-test-char-pending {
+  color: var(--text);
+}
+
+.speed-test-char-correct {
+  color: var(--primary);
+}
+
+.speed-test-char-incorrect,
+.speed-test-extra {
+  color: var(--danger);
+  background: rgb(255 71 87 / 12%);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
+
+.speed-test-extra {
+  display: inline-block;
+  max-width: 12ch;
+  overflow: hidden;
+}
+
+.speed-test-dev {
+  position: absolute;
+  z-index: 5;
+  right: 12px;
+  bottom: 10px;
+  max-width: min(1000px, 86vw);
+  padding: 7px 9px;
+  border: 1px solid rgb(255 60 172 / 45%);
+  background: rgb(10 14 20 / 94%);
+  color: var(--muted);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.speed-result-headline {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin-bottom: 14px;
+  border: 1px solid var(--locked);
+  background: var(--locked);
+}
+
+.speed-result-headline > div {
+  padding: 18px 12px;
+  background: var(--panel);
+}
+
+.speed-result-headline span,
+.speed-result-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.speed-result-headline strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--primary);
+  font-size: 34px;
+}
+
+.speed-records {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin: 12px 0;
+  color: var(--success);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+
+.speed-result-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 18px 0 24px;
+}
+
+.speed-result-grid > div {
+  padding: 10px;
+  border: 1px solid var(--locked);
+  background: var(--panel);
+}
+
+.speed-result-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+}
+
 .eyebrow,
 .micro-label {
   color: var(--muted);
@@ -1399,6 +1675,31 @@ button {
 
   .mode-card {
     min-height: 96px;
+  }
+
+  .speed-config-groups,
+  .speed-result-headline,
+  .speed-result-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .speed-config-groups,
+  .speed-results-panel {
+    max-height: 86vh;
+    overflow: auto;
+  }
+
+  .speed-test-hud {
+    grid-template-columns: repeat(2, 1fr);
+    min-height: 110px;
+  }
+
+  .speed-test-hud.words-mode {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .speed-test-screen {
+    grid-template-rows: 110px minmax(0, 1fr);
   }
 
   .hud {

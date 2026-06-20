@@ -49,5 +49,10 @@ assert.equal(Object.isFrozen(result), true);
 assert.equal(Object.isFrozen(result.modeData), true);
 assert.throws(() => { result.score = 99; }, TypeError);
 assert.equal(buildSessionResult({ modeId: "campaign" }), null);
+assert.equal(buildSessionResult({
+  sessionId: "speed",
+  modeId: "speed-test",
+  score: null,
+}).score, null);
 
 console.log("Normalized result sanitization, campaign mode data, serialization, and immutability tests passed.");

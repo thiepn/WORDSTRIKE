@@ -1,4 +1,5 @@
 import { getAllModes, getModeDefinition } from "./modes.js";
+import { SPEED_TEST_CONFIG_IDS } from "./speedTestConfig.js";
 
 export const MODE_DATA_STORAGE_KEY = "wordstrike_mode_data_v1";
 export const MODE_DATA_SCHEMA_VERSION = 1;
@@ -16,8 +17,21 @@ function nullableFinite(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function createModeSummary() {
+function createSpeedTestRecord() {
   return {
+    bestWpm: null,
+    bestRawWpm: null,
+    bestAccuracy: null,
+    bestExactWords: null,
+    bestResultAt: null,
+    sessionId: null,
+    tieAccuracy: null,
+    tieRawWpm: null,
+  };
+}
+
+function createModeSummary(modeId) {
+  const summary = {
     completedSessions: 0,
     failedSessions: 0,
     activePlaytimeMs: 0,
@@ -25,6 +39,12 @@ function createModeSummary() {
     bestAccuracy: null,
     highestScore: null,
   };
+  if (modeId === "speed-test") {
+    summary.records = Object.fromEntries(
+      SPEED_TEST_CONFIG_IDS.map((configId) => [configId, createSpeedTestRecord()]),
+    );
+  }
+  return summary;
 }
 
 export function createDefaultModeData() {
@@ -41,16 +61,29 @@ export function createDefaultModeData() {
       wordsCompleted: 0,
     },
     modes: Object.fromEntries(
-      getAllModes().map((mode) => [mode.id, createModeSummary()]),
+      getAllModes().map((mode) => [mode.id, createModeSummary(mode.id)]),
     ),
     recentSessions: [],
     recordedSessionIds: [],
   };
 }
 
-function sanitizeModeSummary(value) {
-  const defaults = createModeSummary();
+function sanitizeSpeedTestRecord(value) {
   return {
+    bestWpm: nullableFinite(value?.bestWpm),
+    bestRawWpm: nullableFinite(value?.bestRawWpm),
+    bestAccuracy: nullableFinite(value?.bestAccuracy),
+    bestExactWords: nullableFinite(value?.bestExactWords),
+    bestResultAt: nullableFinite(value?.bestResultAt),
+    sessionId: typeof value?.sessionId === "string" ? value.sessionId : null,
+    tieAccuracy: nullableFinite(value?.tieAccuracy),
+    tieRawWpm: nullableFinite(value?.tieRawWpm),
+  };
+}
+
+function sanitizeModeSummary(value, modeId) {
+  const defaults = createModeSummary(modeId);
+  const summary = {
     ...defaults,
     completedSessions: finiteNonNegative(value?.completedSessions),
     failedSessions: finiteNonNegative(value?.failedSessions),
@@ -59,6 +92,13 @@ function sanitizeModeSummary(value) {
     bestAccuracy: nullableFinite(value?.bestAccuracy),
     highestScore: nullableFinite(value?.highestScore),
   };
+  if (modeId === "speed-test") {
+    summary.records = Object.fromEntries(SPEED_TEST_CONFIG_IDS.map((configId) => [
+      configId,
+      sanitizeSpeedTestRecord(value?.records?.[configId]),
+    ]));
+  }
+  return summary;
 }
 
 function sanitizeRecentSummary(value) {
@@ -71,7 +111,7 @@ function sanitizeRecentSummary(value) {
     variantId: typeof value.variantId === "string" ? value.variantId : null,
     endedAt: finiteNonNegative(value.endedAt),
     success: value.success === true,
-    score: finiteNonNegative(value.score),
+    score: value.score == null ? null : finiteNonNegative(value.score),
     grade: typeof value.grade === "string" ? value.grade : null,
     accuracy: Math.max(0, Math.min(100, finiteNonNegative(value.accuracy))),
     wpm: finiteNonNegative(value.wpm),
@@ -83,6 +123,11 @@ function sanitizeRecentSummary(value) {
       modifierId: typeof value.modeData?.modifierId === "string"
         ? value.modeData.modifierId
         : null,
+      configId: typeof value.modeData?.configId === "string"
+        ? value.modeData.configId
+        : null,
+      rawWpm: nullableFinite(value.modeData?.rawWpm),
+      completedWordCount: finiteNonNegative(value.modeData?.completedWordCount),
     },
   };
 }
@@ -110,7 +155,7 @@ function sanitizeModeData(value) {
     },
     modes: Object.fromEntries(getAllModes().map((mode) => [
       mode.id,
-      sanitizeModeSummary(value.modes?.[mode.id]),
+      sanitizeModeSummary(value.modes?.[mode.id], mode.id),
     ])),
     recentSessions: recentSessions.slice(0, MAX_RECENT_SESSIONS),
     recordedSessionIds: [...new Set(recordedIds)].slice(0, MAX_RECORDED_SESSION_IDS),
@@ -145,6 +190,40 @@ function better(previous, next) {
   return previous == null ? value : Math.max(previous, value);
 }
 
+function shouldReplaceWpmRecord(record, result) {
+  const wpm = nullableFinite(result.wpm);
+  const accuracy = nullableFinite(result.accuracy);
+  const rawWpm = nullableFinite(result.modeData?.rawWpm);
+  const endedAt = nullableFinite(result.endedAt);
+  if (wpm == null) return false;
+  if (record.bestWpm == null || wpm > record.bestWpm) return true;
+  if (wpm < record.bestWpm) return false;
+  if ((accuracy ?? 0) > (record.tieAccuracy ?? 0)) return true;
+  if ((accuracy ?? 0) < (record.tieAccuracy ?? 0)) return false;
+  if ((rawWpm ?? 0) > (record.tieRawWpm ?? 0)) return true;
+  if ((rawWpm ?? 0) < (record.tieRawWpm ?? 0)) return false;
+  return record.bestResultAt == null || (endedAt != null && endedAt < record.bestResultAt);
+}
+
+export function getSpeedTestRecord(configId) {
+  if (!SPEED_TEST_CONFIG_IDS.includes(configId)) return null;
+  return {
+    ...loadModeData().modes["speed-test"].records[configId],
+  };
+}
+
+export function getSpeedTestRecordFlags(result, previous = null) {
+  const record = previous || getSpeedTestRecord(result?.modeData?.configId);
+  if (!record) {
+    return { newWpmRecord: false, newRawWpmRecord: false, newAccuracyRecord: false };
+  }
+  return {
+    newWpmRecord: shouldReplaceWpmRecord(record, result),
+    newRawWpmRecord: record.bestRawWpm == null || result.modeData.rawWpm > record.bestRawWpm,
+    newAccuracyRecord: record.bestAccuracy == null || result.accuracy > record.bestAccuracy,
+  };
+}
+
 export function recordCompletedSession(result) {
   if (
     !result ||
@@ -176,6 +255,24 @@ export function recordCompletedSession(result) {
   mode.bestWpm = better(mode.bestWpm, result.wpm);
   mode.bestAccuracy = better(mode.bestAccuracy, result.accuracy);
   mode.highestScore = better(mode.highestScore, result.score);
+
+  if (
+    result.modeId === "speed-test" &&
+    SPEED_TEST_CONFIG_IDS.includes(result.modeData?.configId)
+  ) {
+    const record = mode.records[result.modeData.configId];
+    const flags = getSpeedTestRecordFlags(result, record);
+    if (flags.newWpmRecord) {
+      record.bestWpm = result.wpm;
+      record.bestResultAt = result.endedAt;
+      record.sessionId = result.sessionId;
+      record.tieAccuracy = result.accuracy;
+      record.tieRawWpm = result.modeData.rawWpm;
+    }
+    if (flags.newRawWpmRecord) record.bestRawWpm = result.modeData.rawWpm;
+    if (flags.newAccuracyRecord) record.bestAccuracy = result.accuracy;
+    record.bestExactWords = better(record.bestExactWords, result.modeData.exactWords);
+  }
 
   const summary = sanitizeRecentSummary(result);
   data.recentSessions = [

@@ -63,7 +63,7 @@ export function buildSessionResult(input = {}) {
     developerMode: input.developerMode === true,
     success: input.success === true,
     failureReason: nullableString(input.failureReason),
-    score: nonNegative(input.score),
+    score: input.score == null ? null : nonNegative(input.score),
     grade: nullableString(input.grade),
     accuracy: Math.max(0, Math.min(100, finite(input.accuracy))),
     wpm: nonNegative(input.wpm),

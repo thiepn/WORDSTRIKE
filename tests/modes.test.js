@@ -9,11 +9,14 @@ import {
 } from "../js/modes.js";
 
 assert.equal(getModeDefinition(MODE_IDS.CAMPAIGN).enabled, true);
-assert.equal(getModeDefinition(MODE_IDS.SPEED_TEST).enabled, false);
+assert.equal(getModeDefinition(MODE_IDS.SPEED_TEST).enabled, true);
 assert.equal(getModeDefinition(MODE_IDS.ENDLESS).enabled, false);
 assert.equal(getModeDefinition(MODE_IDS.DAILY).enabled, false);
 assert.equal(getModeDefinition(MODE_IDS.PRACTICE).enabled, false);
-assert.deepEqual(getEnabledModes().map(({ id }) => id), [MODE_IDS.CAMPAIGN]);
+assert.deepEqual(
+  getEnabledModes().map(({ id }) => id),
+  [MODE_IDS.CAMPAIGN, MODE_IDS.SPEED_TEST],
+);
 assert.equal(isModeEnabled(MODE_IDS.CAMPAIGN), true);
 assert.equal(isModeEnabled(MODE_IDS.ENDLESS), false);
 assert.equal(isValidModeId("unknown"), false);

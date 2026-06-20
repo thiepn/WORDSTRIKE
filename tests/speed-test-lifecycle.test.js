@@ -1,0 +1,96 @@
+import assert from "node:assert/strict";
+import { getSpeedTestConfig } from "../js/speedTestConfig.js";
+import {
+  clearSpeedTestRuntime,
+  getCurrentSpeedTest,
+  getSpeedTestLoopActive,
+  handleCurrentSpeedTestKey,
+  startSpeedTest,
+  stopSpeedTestLoop,
+} from "../js/speedTest.js";
+import {
+  abortSession,
+  clearSession,
+  getCurrentSession,
+  SESSION_STATES,
+} from "../js/sessionManager.js";
+
+globalThis.localStorage = {
+  value: null,
+  getItem() { return this.value; },
+  setItem(_key, value) { this.value = value; },
+};
+let nextFrameId = 0;
+const frames = new Map();
+globalThis.requestAnimationFrame = (callback) => {
+  const id = ++nextFrameId;
+  frames.set(id, callback);
+  return id;
+};
+globalThis.cancelAnimationFrame = (id) => frames.delete(id);
+
+const pool = ["word", "apple", "river", "stone", "green", "house"];
+const event = (key, timeStamp) => ({ key, timeStamp, preventDefault() {} });
+let completed = 0;
+
+clearSession();
+let state = startSpeedTest({
+  config: getSpeedTestConfig("time-15"),
+  wordPool: pool,
+  attemptSeed: 123,
+  onComplete: () => { completed += 1; },
+});
+assert.equal(state.phase, "PREPARING");
+state.words[0] = "apple";
+assert.equal(getCurrentSession().state, SESSION_STATES.PREPARING);
+assert.equal(getSpeedTestLoopActive(), true);
+handleCurrentSpeedTestKey(event("Backspace", 10));
+handleCurrentSpeedTestKey(event(" ", 20));
+assert.equal(state.activeStartedAtMs, null);
+handleCurrentSpeedTestKey(event("a", 100));
+assert.equal(state.activeStartedAtMs, 100);
+assert.equal(getCurrentSession().state, SESSION_STATES.ACTIVE);
+assert.equal(state.typedBuffer, "a");
+assert.equal(state.deadlineMs, 15100);
+
+const frameEntry = [...frames.entries()].at(-1);
+frames.delete(frameEntry[0]);
+frameEntry[1](15100);
+assert.equal(completed, 1);
+assert.equal(state.ended, true);
+assert.equal(getCurrentSession().state, SESSION_STATES.COMPLETED);
+assert.equal(state.result.characters.correct, 1);
+assert.equal(state.result.characters.missed, 0);
+assert.ok(state.result.wpm > 0);
+assert.equal(handleCurrentSpeedTestKey(event("x", 15101)), false);
+assert.equal(completed, 1);
+
+const firstSessionId = getCurrentSession().id;
+state = startSpeedTest({
+  config: getSpeedTestConfig("words-25"),
+  wordPool: pool,
+  attemptSeed: 456,
+});
+assert.notEqual(getCurrentSession().id, firstSessionId);
+assert.equal(state.words.length, 25);
+state.words.splice(0, state.words.length, ...Array(24).fill("cat"), "word");
+state.currentWordIndex = 24;
+for (const [index, key] of [..."word"].entries()) {
+  handleCurrentSpeedTestKey(event(key, 200 + index));
+}
+assert.equal(state.ended, true);
+assert.equal(state.metrics.wordsCompleted, 1);
+assert.equal(state.result.activeDurationMs, 3);
+
+state = startSpeedTest({
+  config: getSpeedTestConfig("time-60"),
+  wordPool: pool,
+  attemptSeed: 999,
+});
+assert.equal(abortSession("escape").state, SESSION_STATES.ABORTED);
+stopSpeedTestLoop();
+assert.equal(frames.size, 0);
+clearSpeedTestRuntime();
+assert.equal(getCurrentSpeedTest(), null);
+
+console.log("Typing Test delayed start, deadline, exact-once completion, retry identity, final-word, and cleanup tests passed.");

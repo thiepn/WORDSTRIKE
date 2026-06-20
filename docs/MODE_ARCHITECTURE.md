@@ -2,37 +2,41 @@
 
 ## Mode registry
 
-`js/modes.js` is the source of truth for mode IDs, availability, labels, routes, and capabilities. Campaign is enabled; Typing Test, Endless, Daily Strike, and Practice Lab are immutable disabled entries. Navigation must check `isModeEnabled()` before starting a controller.
+`js/modes.js` is the source of truth for mode IDs, availability, labels, routes, and capabilities. Campaign and Typing Test are enabled. Endless, Daily Strike, and Practice Lab remain immutable disabled entries. Navigation checks `isModeEnabled()` and the registered route before starting a controller.
 
-## Session lifecycle
+## Shared session lifecycle
 
-`js/sessionManager.js` owns one metadata session at a time. It does not run gameplay. Normal and boss loops remain authoritative and the Campaign adapter publishes their phases:
+`js/sessionManager.js` owns one metadata session at a time and never runs gameplay. Supported states are `preparing`, `briefing`, `active`, `paused`, `transitioning`, `results`, `completed`, and `aborted`.
 
-- `preparing` → level data is being created.
-- `briefing` → modifier briefing or boss intro.
-- `active` → typing time is running.
-- `paused` → active or phase-specific time is suspended.
-- `transitioning` → boss sequence transition.
-- `completed` → one normalized result was finalized.
-- `aborted` → navigation or retry ended an unfinished attempt.
-
-Only valid forward transitions are accepted. Completion and abort are idempotent. Retry and Next Level begin new session identities. Monotonic timestamps measure active and paused runtime; epoch timestamps are used for persisted dates. Campaign WPM continues using the existing loop-owned `game.elapsedMs`.
+Only valid forward transitions are accepted. Completion and abort are idempotent. Retry creates a new identity. Monotonic timestamps measure runtime; epoch timestamps are used for persisted dates. Campaign WPM continues using the loop-owned `game.elapsedMs`.
 
 ## Results and records
 
-`js/sessionResult.js` creates an immutable, JSON-safe schema with generic metrics and a `modeData` object for Campaign fields. `js/sessionMetrics.js` delegates to the existing authoritative accuracy and WPM formulas.
+`js/sessionResult.js` creates immutable JSON-safe results with generic metrics and mode-specific `modeData`. `js/sessionMetrics.js` delegates to the authoritative Campaign formulas.
 
-`js/modeStorage.js` uses `wordstrike_mode_data_v1`. It stores bounded aggregates, at most 30 compact recent summaries, and a bounded duplicate-ID guard. Runtime state, word lists, aborted sessions, and developer sessions are not stored. The existing `wordstrike_save` Campaign key remains independent and authoritative for unlocks, grades, and settings.
+`js/modeStorage.js` uses `wordstrike_mode_data_v1`. It stores bounded aggregates, at most 30 compact recent summaries, a bounded duplicate-ID guard, and separate Typing Test records for all seven configurations. Runtime state, word lists, aborted sessions, and developer sessions are not stored. The existing `wordstrike_save` key remains authoritative and independent.
 
-## Campaign adapter and cleanup
+## Campaign adapter
 
-`js/campaignSession.js` starts Campaign sessions, maps normal/boss phases, builds normalized results, and records completed attempts once. It never changes spawning, scoring, grades, modifiers, or boss behavior.
+`js/campaignSession.js` maps existing normal and boss phases into shared session states, builds normalized results, and records completed attempts once. It does not change spawning, scoring, grades, modifiers, timing, or boss behavior.
 
-`js/sessionCleanup.js` coordinates existing loop stops, pause-overlay removal, runtime clearing, session abort, and session removal. Gameplay modules retain ownership of their internal cleanup.
+## Typing Test controller
+
+`js/speedTest.js` owns the active test buffer, generated words, one deadline-based animation loop, keystroke history, completion, and normalized result publication. The timer begins on the first accepted printable character; setup, waiting, and Results time are excluded.
+
+`js/speedTestConfig.js` defines four timed and three word-count configurations. `js/speedTestWords.js` creates an unlimited deterministic stream from the dedicated common-English vocabulary. `js/speedTestMetrics.js` owns Typing Test accuracy, raw WPM, and net WPM without changing Campaign formulas.
+
+## Cleanup contract
+
+`js/sessionCleanup.js` coordinates authoritative loop stops, pause removal, mode runtime clearing, session abort, and session removal. Each gameplay controller retains ownership of its internal state and frame cancellation.
 
 ## Navigation
 
-The route is Title → Mode Select → Campaign → Level Select. Mode Select creates no session. A session begins only when a level launches. Level Select and Main Menu abort and clear unfinished sessions; Results keeps the completed session until Retry, Next Level, or exit.
+Campaign: Title → Mode Select → Campaign → Level Select.
+
+Typing Test: Title → Mode Select → Typing Test Setup → Run → Results.
+
+Mode Select and setup create no sessions. A Typing Test session begins in `preparing` when the run opens and becomes `active` on the first printable character. Escape aborts an unfinished test and returns to setup. Results retains the completed session until Retry or navigation.
 
 ## Adding a future mode
 

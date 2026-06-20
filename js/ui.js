@@ -16,6 +16,16 @@ import {
   QUICK_FINGERS_ID,
 } from "./modifiers.js";
 import { getSessionDiagnosticText } from "./campaignSession.js";
+import {
+  getSpeedTestConfigsByType,
+  SPEED_TEST_TYPES,
+} from "./speedTestConfig.js";
+import {
+  getSpeedTestActiveDuration,
+  getSpeedTestCurrentWord,
+  getSpeedTestDiagnosticText,
+  getSpeedTestLiveMetrics,
+} from "./speedTest.js";
 
 const app = () => document.querySelector("#app");
 
@@ -81,6 +91,252 @@ export function renderModeSelect(modes, selectedIndex, handlers) {
     }
   });
   app().querySelector(".mode-card.available.selected")?.focus({ preventScroll: true });
+}
+
+export function renderSpeedTestSetup(config, handlers) {
+  const timeConfigs = getSpeedTestConfigsByType(SPEED_TEST_TYPES.TIME);
+  const wordConfigs = getSpeedTestConfigsByType(SPEED_TEST_TYPES.WORDS);
+  const option = (item) => `
+    <button class="speed-config-option ${item.configId === config.configId ? "selected" : ""}"
+            data-speed-config="${item.configId}">
+      ${item.testType === SPEED_TEST_TYPES.TIME
+    ? `${item.durationSeconds} SECONDS`
+    : `${item.wordCount} WORDS`}
+    </button>`;
+  app().innerHTML = `
+    <section class="screen speed-setup-screen">
+      <div class="speed-setup-panel">
+        <div class="eyebrow">Typing Test</div>
+        <h1>CHOOSE A TEST</h1>
+        <div class="speed-config-groups">
+          <section class="speed-config-group ${config.testType === SPEED_TEST_TYPES.TIME ? "active" : ""}">
+            <h2>TIME</h2>
+            <div>${timeConfigs.map(option).join("")}</div>
+          </section>
+          <section class="speed-config-group ${config.testType === SPEED_TEST_TYPES.WORDS ? "active" : ""}">
+            <h2>WORDS</h2>
+            <div>${wordConfigs.map(option).join("")}</div>
+          </section>
+        </div>
+        <button class="arcade-button selected speed-start-button" data-action="speed-start">
+          START ${config.label.toUpperCase()}
+        </button>
+        <p class="footer-hint">← → CATEGORY &nbsp;•&nbsp; ↑ ↓ OPTION &nbsp;•&nbsp; ENTER START &nbsp;•&nbsp; ESC BACK</p>
+      </div>
+    </section>`;
+  app().querySelectorAll("[data-speed-config]").forEach((button) => {
+    button.onclick = () => handlers.select?.(button.dataset.speedConfig);
+    button.onmouseenter = () => handlers.select?.(button.dataset.speedConfig);
+  });
+  app().querySelector('[data-action="speed-start"]').onclick = handlers.start;
+  app().querySelector(`[data-speed-config="${config.configId}"]`)?.focus({
+    preventScroll: true,
+  });
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function speedWordMarkup(expected, typed = "") {
+  const characters = [...expected].map((character, index) => {
+    const className = index >= typed.length
+      ? "speed-test-char-pending"
+      : typed[index] === character
+        ? "speed-test-char-correct"
+        : "speed-test-char-incorrect";
+    return `<span class="${className}">${character}</span>`;
+  }).join("");
+  const extra = typed.length > expected.length
+    ? `<span class="speed-test-extra">${escapeHtml(typed.slice(expected.length, expected.length + 12))}${typed.length > expected.length + 12 ? "…" : ""}</span>`
+    : "";
+  return `${characters}${extra}`;
+}
+
+export function renderSpeedTestRun(state, devMode = false) {
+  const isTime = state.config.testType === SPEED_TEST_TYPES.TIME;
+  app().innerHTML = `
+    <section class="screen speed-test-screen">
+      <header class="speed-test-hud ${isTime ? "" : "words-mode"}">
+        <div>
+          <span class="micro-label">${isTime ? "Time" : "Words"}</span>
+          <strong id="speed-test-primary">${isTime
+    ? state.config.durationSeconds.toFixed(1)
+    : `0 / ${state.config.wordCount}`}</strong>
+        </div>
+        ${isTime ? "" : `
+          <div>
+            <span class="micro-label">Time</span>
+            <strong id="speed-test-elapsed">00:00</strong>
+          </div>`}
+        <div>
+          <span class="micro-label">WPM</span>
+          <strong id="speed-test-wpm">0</strong>
+        </div>
+        <div>
+          <span class="micro-label">Raw</span>
+          <strong id="speed-test-raw">0</strong>
+        </div>
+        <div>
+          <span class="micro-label">Accuracy</span>
+          <strong id="speed-test-accuracy">100%</strong>
+        </div>
+      </header>
+      <main class="speed-test-stage">
+        <div class="speed-test-status" id="speed-test-status">START TYPING</div>
+        <div class="speed-test-word-viewport" id="speed-test-word-viewport">
+          <div class="speed-test-word-flow" id="speed-test-word-flow">
+            ${state.words.map((word, index) => `
+              <span class="speed-test-word ${index === 0 ? "speed-test-word-current" : ""}"
+                    data-speed-word-index="${index}"
+                    aria-current="${index === 0 ? "true" : "false"}">${speedWordMarkup(word)}</span>`).join("")}
+          </div>
+        </div>
+        <p class="speed-test-hint">ESC — ABORT</p>
+      </main>
+      ${devMode ? `<aside class="speed-test-dev" id="speed-test-dev">${getSpeedTestDiagnosticText(state)}</aside>` : ""}
+    </section>`;
+}
+
+export function updateSpeedTestRun(state, nowMs) {
+  if (!state) return;
+  const now = Number.isFinite(nowMs)
+    ? nowMs
+    : globalThis.performance?.now?.() ?? Date.now();
+  const live = getSpeedTestLiveMetrics(state, now);
+  const activeDuration = getSpeedTestActiveDuration(state, now);
+  const primary = document.querySelector("#speed-test-primary");
+  if (primary) {
+    primary.textContent = state.config.testType === SPEED_TEST_TYPES.TIME
+      ? (state.activeStartedAtMs == null
+        ? state.config.durationSeconds
+        : Math.max(0, (state.deadlineMs - now) / 1000)).toFixed(1)
+      : `${state.metrics.wordsCompleted} / ${state.config.wordCount}`;
+  }
+  const values = {
+    "#speed-test-wpm": Math.round(live.wpm),
+    "#speed-test-raw": Math.round(live.rawWpm),
+    "#speed-test-accuracy": `${live.accuracy.toFixed(1)}%`,
+    "#speed-test-elapsed": `${Math.floor(activeDuration / 60000).toString().padStart(2, "0")}:${Math.floor((activeDuration % 60000) / 1000).toString().padStart(2, "0")}`,
+    "#speed-test-status": state.activeStartedAtMs == null
+      ? "START TYPING"
+      : `TIME ${Math.floor(activeDuration / 60000).toString().padStart(2, "0")}:${Math.floor((activeDuration % 60000) / 1000).toString().padStart(2, "0")}`,
+  };
+  for (const [selector, value] of Object.entries(values)) {
+    const element = document.querySelector(selector);
+    if (element) element.textContent = value;
+  }
+
+  const flow = document.querySelector("#speed-test-word-flow");
+  if (flow) {
+    const renderedCount = flow.querySelectorAll?.("[data-speed-word-index]").length || 0;
+    if (renderedCount < state.words.length && flow.insertAdjacentHTML) {
+      flow.insertAdjacentHTML(
+        "beforeend",
+        state.words.slice(renderedCount).map((word, offset) => {
+          const index = renderedCount + offset;
+          return `<span class="speed-test-word" data-speed-word-index="${index}" aria-current="false">${speedWordMarkup(word)}</span>`;
+        }).join(""),
+      );
+    }
+  }
+
+  for (let index = 0; index < state.committedWords.length; index += 1) {
+    const element = document.querySelector(`[data-speed-word-index="${index}"]`);
+    if (!element || element.dataset.committed === "true") continue;
+    const result = state.committedWords[index];
+    element.classList.remove("speed-test-word-current");
+    element.classList.add("speed-test-word-complete");
+    if (!result.exact) element.classList.add("speed-test-word-error");
+    element.innerHTML = speedWordMarkup(result.expected, result.typed);
+    element.dataset.committed = "true";
+    element.setAttribute?.("aria-current", "false");
+  }
+
+  document.querySelectorAll?.(".speed-test-word-current").forEach((element) => {
+    if (Number(element.dataset.speedWordIndex) !== state.currentWordIndex) {
+      element.classList.remove("speed-test-word-current");
+      element.setAttribute?.("aria-current", "false");
+    }
+  });
+  const current = document.querySelector(
+    `[data-speed-word-index="${state.currentWordIndex}"]`,
+  );
+  if (current) {
+    current.classList.add("speed-test-word-current");
+    current.innerHTML = speedWordMarkup(
+      getSpeedTestCurrentWord(state),
+      state.typedBuffer,
+    );
+    current.setAttribute?.("aria-current", "true");
+    if (current.dataset.lastCentered !== "true") {
+      document.querySelectorAll?.("[data-last-centered]").forEach((element) => {
+        delete element.dataset.lastCentered;
+      });
+      current.dataset.lastCentered = "true";
+      current.scrollIntoView?.({ block: "center", inline: "nearest" });
+    }
+  }
+  const diagnostics = document.querySelector("#speed-test-dev");
+  if (diagnostics) diagnostics.textContent = getSpeedTestDiagnosticText(state, now);
+}
+
+export function renderSpeedTestResults(result, recordFlags, selectedIndex, handlers) {
+  const actions = [
+    ["RETRY SAME TEST", "retry"],
+    ["CHANGE TEST", "change"],
+    ["MODE SELECT", "modes"],
+    ["MAIN MENU", "title"],
+  ];
+  const mode = result.modeData;
+  const configLabel = result.variantId === SPEED_TEST_TYPES.TIME
+    ? `${mode.durationSeconds} SECOND TEST`
+    : `${mode.targetWordCount} WORD TEST`;
+  app().innerHTML = `
+    <section class="screen speed-results-screen">
+      <div class="speed-results-panel">
+        <div class="eyebrow">${configLabel}</div>
+        <h1>TEST COMPLETE</h1>
+        <div class="speed-result-headline">
+          <div><span>WPM</span><strong>${result.wpm.toFixed(1)}</strong></div>
+          <div><span>RAW</span><strong>${mode.rawWpm.toFixed(1)}</strong></div>
+          <div><span>ACCURACY</span><strong>${result.accuracy.toFixed(1)}%</strong></div>
+        </div>
+        ${(recordFlags.newWpmRecord || recordFlags.newAccuracyRecord) ? `
+          <div class="speed-records">
+            ${recordFlags.newWpmRecord ? "<span>NEW WPM RECORD</span>" : ""}
+            ${recordFlags.newAccuracyRecord ? "<span>NEW ACCURACY RECORD</span>" : ""}
+          </div>` : ""}
+        <div class="speed-result-grid">
+          <div><span>Correct characters</span><strong>${result.characters.correct}</strong></div>
+          <div><span>Incorrect characters</span><strong>${result.characters.incorrect}</strong></div>
+          <div><span>Extra characters</span><strong>${mode.extraCharacters}</strong></div>
+          <div><span>Missed characters</span><strong>${result.characters.missed}</strong></div>
+          <div><span>Backspaces</span><strong>${mode.backspaces}</strong></div>
+          <div><span>Words completed</span><strong>${result.words.completed}</strong></div>
+          <div><span>Exact words</span><strong>${mode.exactWords}</strong></div>
+          <div><span>Incorrect words</span><strong>${mode.incorrectWords}</strong></div>
+          <div><span>Active duration</span><strong>${(result.activeDurationMs / 1000).toFixed(1)}s</strong></div>
+        </div>
+        <div class="menu-list">
+          ${actions.map(([label, action], index) => menuButton(
+    label,
+    action,
+    index === selectedIndex,
+  )).join("")}
+        </div>
+      </div>
+    </section>`;
+  for (const [, action] of actions) {
+    app().querySelector(`[data-action="${action}"]`).onclick = handlers[action];
+  }
+  app().querySelectorAll(".speed-results-panel .arcade-button").forEach((button, index) => {
+    button.onmouseenter = () => handlers.select?.(index);
+  });
 }
 
 function renderDevPanel(

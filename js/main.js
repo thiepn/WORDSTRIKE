@@ -23,6 +23,7 @@ import {
   loadWordBank,
   createNormalWordAttempt,
 } from "./wordBank.js";
+import { loadSpeedTestWordBank } from "./speedTestWords.js";
 import { calculateGrade } from "./scoring.js";
 import {
   calculateSessionAccuracy,
@@ -56,6 +57,9 @@ import {
   renderGameplayShell,
   renderLevelSelect,
   renderModeSelect,
+  renderSpeedTestResults,
+  renderSpeedTestRun,
+  renderSpeedTestSetup,
   renderDevModeIndicator,
   renderDevSessionDiagnostics,
   renderResults,
@@ -64,6 +68,7 @@ import {
   showPauseOverlay,
   updateBossHud,
   updateHud,
+  updateSpeedTestRun,
 } from "./ui.js";
 import { getAllModes, isModeEnabled, MODE_IDS } from "./modes.js";
 import {
@@ -77,6 +82,20 @@ import {
   resumeSession,
 } from "./sessionManager.js";
 import { cleanupCurrentSession } from "./sessionCleanup.js";
+import {
+  DEFAULT_SPEED_TEST_CONFIG_ID,
+  getSpeedTestConfig,
+  moveSpeedTestSetupSelection,
+  normalizeSpeedTestConfigId,
+  parseDeveloperSpeedTestConfig,
+} from "./speedTestConfig.js";
+import {
+  clearSpeedTestRuntime,
+  getCurrentSpeedTest,
+  handleCurrentSpeedTestKey,
+  startSpeedTest,
+  stopSpeedTestLoop,
+} from "./speedTest.js";
 
 const titleActions = ["modes", "settings"];
 const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
@@ -84,10 +103,12 @@ const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
 function stopActiveLoops() {
   stopGameLoop();
   stopBossLoop();
+  stopSpeedTestLoop();
 }
 
 function discardActiveAttempt() {
   clearAttemptRuntime(appState.game);
+  clearSpeedTestRuntime();
 }
 
 function cleanupCampaignAttempt(reason, { clearSessionState = true } = {}) {
@@ -119,6 +140,15 @@ function openModeSelect() {
   cleanupCampaignAttempt("mode-select");
   changeScreen(Screens.MODE_SELECT);
   appState.modeSelection = 0;
+  renderCurrentScreen();
+}
+
+function openSpeedTestSetup(reason = "change-test") {
+  cleanupCampaignAttempt(reason);
+  appState.speedTestConfigId = normalizeSpeedTestConfigId(
+    appState.speedTestConfigId,
+  );
+  changeScreen(Screens.SPEED_TEST_SETUP);
   renderCurrentScreen();
 }
 
@@ -200,6 +230,39 @@ function startLevel(levelNumber, source = "level-select") {
   game.forcedModifier = forcedModifier;
   game.devMode = appState.devMode;
   syncCampaignSession(game);
+}
+
+function finishSpeedTest(state, result) {
+  if (!result || appState.screen === Screens.SPEED_TEST_RESULTS) return;
+  appState.speedTestResult = result;
+  appState.speedTestRecordFlags = { ...state.recordFlags };
+  appState.speedTestResultsIndex = 0;
+  appState.speedTestResultsReadyAt = currentTimeMs() + 200;
+  changeScreen(Screens.SPEED_TEST_RESULTS);
+  renderCurrentScreen();
+}
+
+function startSelectedSpeedTest(source = "mode-select") {
+  const config = getSpeedTestConfig(appState.speedTestConfigId)
+    || getSpeedTestConfig(DEFAULT_SPEED_TEST_CONFIG_ID);
+  cleanupCampaignAttempt(source === "retry" ? "retry" : "new-session");
+  const attemptSeed = getAttemptSeed();
+  const state = startSpeedTest({
+    config,
+    wordPool: appState.speedTestWordBank.words,
+    attemptSeed,
+    developerMode: appState.devMode,
+    source,
+    onUpdate: updateSpeedTestRun,
+    onComplete: finishSpeedTest,
+  });
+  if (!state) {
+    openSpeedTestSetup("start-failed");
+    return;
+  }
+  changeScreen(Screens.SPEED_TEST_RUN);
+  renderSpeedTestRun(state, appState.devMode);
+  updateSpeedTestRun(state, currentTimeMs());
 }
 
 function startBossLevel(levelNumber, legitimatelyUnlocked, source) {
@@ -335,11 +398,11 @@ function activateTitleAction() {
 
 function activateSelectedMode(modeId = getAllModes()[appState.modeSelection]?.id) {
   if (!isModeEnabled(modeId)) return false;
-  if (modeId === MODE_IDS.CAMPAIGN) {
-    openLevelSelect("mode-select");
-    return true;
-  }
-  return false;
+  const route = getAllModes().find((mode) => mode.id === modeId)?.route;
+  if (route === "level-select") openLevelSelect("mode-select");
+  else if (route === "speed-test-setup") openSpeedTestSetup("mode-select");
+  else return false;
+  return true;
 }
 
 function toggleSetting(key) {
@@ -370,6 +433,43 @@ function renderCurrentScreen() {
       },
       activate: activateSelectedMode,
     });
+  } else if (appState.screen === Screens.SPEED_TEST_SETUP) {
+    renderSpeedTestSetup(
+      getSpeedTestConfig(appState.speedTestConfigId)
+        || getSpeedTestConfig(DEFAULT_SPEED_TEST_CONFIG_ID),
+      {
+        select: (configId) => {
+          const next = normalizeSpeedTestConfigId(configId);
+          if (next === appState.speedTestConfigId) return;
+          appState.speedTestConfigId = next;
+          renderCurrentScreen();
+        },
+        start: () => startSelectedSpeedTest("mode-select"),
+      },
+    );
+  } else if (appState.screen === Screens.SPEED_TEST_RUN) {
+    const state = getCurrentSpeedTest();
+    if (state) {
+      renderSpeedTestRun(state, appState.devMode);
+      updateSpeedTestRun(state, currentTimeMs());
+    }
+  } else if (appState.screen === Screens.SPEED_TEST_RESULTS) {
+    renderSpeedTestResults(
+      appState.speedTestResult,
+      appState.speedTestRecordFlags,
+      appState.speedTestResultsIndex,
+      {
+        retry: () => startSelectedSpeedTest("retry"),
+        change: () => openSpeedTestSetup("change-test"),
+        modes: openModeSelect,
+        title: openTitle,
+        select: (index) => {
+          if (index === appState.speedTestResultsIndex) return;
+          appState.speedTestResultsIndex = index;
+          renderCurrentScreen();
+        },
+      },
+    );
   } else if (appState.screen === Screens.LEVEL_SELECT) {
     renderLevelSelect(
       appState.save,
@@ -435,6 +535,16 @@ function inspectDevLevel(levelNumber) {
 }
 
 function handleGlobalKeydown(event) {
+  if (appState.screen === Screens.SPEED_TEST_RUN) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      openSpeedTestSetup("aborted");
+      return;
+    }
+    handleCurrentSpeedTestKey(event);
+    return;
+  }
+
   if (appState.screen === Screens.PLAYING) {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -502,6 +612,54 @@ function handleGlobalKeydown(event) {
     return;
   }
 
+  if (appState.screen === Screens.SPEED_TEST_SETUP) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      openModeSelect();
+    } else if (
+      ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Tab"].includes(event.key)
+    ) {
+      event.preventDefault();
+      appState.speedTestConfigId = moveSpeedTestSetupSelection(
+        appState.speedTestConfigId,
+        event.key,
+      );
+      renderCurrentScreen();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      startSelectedSpeedTest("mode-select");
+    }
+    return;
+  }
+
+  if (appState.screen === Screens.SPEED_TEST_RESULTS) {
+    const actions = ["retry", "change", "modes", "title"];
+    if (isResultsInputBlocked(
+      event,
+      currentTimeMs(),
+      appState.speedTestResultsReadyAt,
+    )) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      openSpeedTestSetup("change-test");
+    } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      event.preventDefault();
+      const direction = event.key === "ArrowUp" ? -1 : 1;
+      appState.speedTestResultsIndex = (
+        appState.speedTestResultsIndex + direction + actions.length
+      ) % actions.length;
+      renderCurrentScreen();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const action = actions[appState.speedTestResultsIndex];
+      if (action === "retry") startSelectedSpeedTest("retry");
+      else if (action === "change") openSpeedTestSetup("change-test");
+      else if (action === "modes") openModeSelect();
+      else openTitle();
+    }
+    return;
+  }
+
   if (appState.screen === Screens.LEVEL_SELECT) {
     if (event.key.startsWith("Arrow")) moveLevelSelection(event.key);
     if (event.key === "Enter") startLevel(appState.levelSelection);
@@ -555,12 +713,24 @@ async function bootstrap() {
     ? isForcedModifierRequested(window.location.search)
     : null;
   appState.save = loadSave();
-  [appState.wordBank, appState.bossWordBank] = await Promise.all([
+  [appState.wordBank, appState.bossWordBank, appState.speedTestWordBank] = await Promise.all([
     loadWordBank(),
     loadBossWordBank(),
+    loadSpeedTestWordBank(),
   ]);
   document.addEventListener("keydown", handleGlobalKeydown);
-  renderCurrentScreen();
+  const search = new URLSearchParams(window.location.search);
+  if (
+    appState.devMode &&
+    search.get("mode") === MODE_IDS.SPEED_TEST
+  ) {
+    appState.speedTestConfigId = parseDeveloperSpeedTestConfig(
+      window.location.search,
+    );
+    startSelectedSpeedTest("developer");
+  } else {
+    renderCurrentScreen();
+  }
 }
 
 bootstrap();
