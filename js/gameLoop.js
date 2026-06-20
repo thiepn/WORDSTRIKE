@@ -3,54 +3,17 @@ import {
   clearWordElements,
   clearBossPhrase,
   createWordElement,
-  flashChainBreak,
   flashDamage,
   removeWordElement,
   updateWordElement,
-  flashQuickFingersBurst,
 } from "./renderer.js";
-import {
-  BLACKOUT_ID,
-  CHAIN_BREAK_CAUSES,
-  CHAIN_FAILURE_REASON,
-  CHAIN_ID,
-  getBlackoutVisibility,
-  getEffectiveSpawnInterval,
-  getQuickFingersPhase,
-  hasChainModifier,
-  markChainBroken,
-  NO_BACKSPACE_ID,
-  QUICK_FINGERS_ID,
-} from "./modifiers.js";
 import { createSeededRandom, mixSeed } from "./random.js";
-import { reconcileTargetingState, resetTargetingState } from "./input.js";
+import { reconcileTargetingState } from "./input.js";
 
 let animationFrameId = null;
 let callbacks = {};
-const MODIFIER_BRIEFING_MS = 2000;
-
-function createModifierRuntime(config) {
-  if (!config.modifiers?.includes(QUICK_FINGERS_ID)) return null;
-  return {
-    quickFingers: {
-      active: false,
-      phase: "waiting",
-      remainingMs: 6000,
-      burstCount: 0,
-      effectiveSpawnIntervalMs: config.spawnIntervalMs,
-    },
-  };
-}
 
 export function createGameState(levelNumber, config, words, attempt = {}) {
-  const hasModifier = config.modifiers?.some((id) => (
-    id === QUICK_FINGERS_ID ||
-    id === NO_BACKSPACE_ID ||
-    id === BLACKOUT_ID ||
-    id === CHAIN_ID
-  ));
-  const hasBlackout = config.modifiers?.includes(BLACKOUT_ID);
-  const hasChain = hasChainModifier(config);
   return {
     mode: "normal",
     levelNumber,
@@ -82,29 +45,7 @@ export function createGameState(levelNumber, config, words, attempt = {}) {
     completedWordCount: 0,
     missedWordCount: 0,
     elapsedMs: 0,
-    phase: hasModifier ? "MODIFIER_BRIEFING" : "ACTIVE",
-    briefingElapsedMs: 0,
-    modifierRuntime: createModifierRuntime(config),
-    ...(hasChain ? {
-      chainRuntime: {
-        active: true,
-        broken: false,
-        breakCause: null,
-        brokenAtActiveMs: null,
-        comboAtBreak: 0,
-        failedWordId: null,
-      },
-      failureReason: null,
-    } : {}),
-    abandonedWordCount: 0,
-    abandonedCharacters: 0,
-    ...(hasBlackout ? {
-      blackoutStats: {
-        wordsHidden: 0,
-        hiddenWordsCompleted: 0,
-        wordsMissedAfterFade: 0,
-      },
-    } : {}),
+    phase: "ACTIVE",
     coreX: 0,
     coreY: 0,
     lastTimestamp: null,
@@ -157,7 +98,6 @@ function spawnWord(game, dimensions) {
   const dy = game.coreY - y;
   const distance = Math.max(Math.hypot(dx, dy), 1);
   const speed = game.config.wordSpeedPxPerSec;
-  const hasBlackout = game.config.modifiers?.includes(BLACKOUT_ID);
   const word = {
     id: game.nextWordId,
     text: game.wordQueue[game.spawnedCount],
@@ -168,20 +108,10 @@ function spawnWord(game, dimensions) {
     vy: (dy / distance) * speed,
     createdAt: game.elapsedMs,
     startedAt: null,
-    abandoned: false,
-    abandonedAt: null,
     missedCharactersRecorded: false,
     coreArrivalProcessed: false,
     separationX: 0,
     separationY: 0,
-    ...(hasBlackout ? {
-      spawnedAtActiveMs: game.elapsedMs,
-      blackoutPhase: "visible",
-      blackoutTextOpacity: 1,
-      blackoutHidden: false,
-      blackoutHiddenCounted: false,
-      blackoutMissedAfterFadeCounted: false,
-    } : {}),
   };
   game.nextWordId += 1;
   game.spawnedCount += 1;
@@ -192,23 +122,6 @@ function spawnWord(game, dimensions) {
 export function processWordCoreArrival(game, word) {
   if (game.ended || word.coreArrivalProcessed) return false;
   word.coreArrivalProcessed = true;
-  if (hasChainModifier(game.config)) {
-    registerMissedWord(game, word);
-    game.words = game.words.filter((candidate) => candidate.id !== word.id);
-    removeWordElement(word);
-    if (markChainBroken(game, CHAIN_BREAK_CAUSES.WORD_REACHED_CORE, word.id)) {
-      finalizeChainFailure(game);
-    }
-    return true;
-  }
-  if (
-    game.config.modifiers?.includes(BLACKOUT_ID) &&
-    word.blackoutPhase !== "visible" &&
-    !word.blackoutMissedAfterFadeCounted
-  ) {
-    word.blackoutMissedAfterFadeCounted = true;
-    game.blackoutStats.wordsMissedAfterFade += 1;
-  }
   registerMissedWord(game, word);
   game.missedWordCount += 1;
   game.words = game.words.filter((candidate) => candidate.id !== word.id);
@@ -221,23 +134,7 @@ export function processWordCoreArrival(game, word) {
   return true;
 }
 
-export function updateBlackoutWordState(game, word) {
-  if (!game.config.modifiers?.includes(BLACKOUT_ID)) return word;
-  const visibility = getBlackoutVisibility(
-    game.elapsedMs - word.spawnedAtActiveMs,
-  );
-  word.blackoutPhase = visibility.phase;
-  word.blackoutTextOpacity = visibility.textOpacity;
-  word.blackoutHidden = visibility.hidden;
-  if (visibility.hidden && !word.blackoutHiddenCounted) {
-    word.blackoutHiddenCounted = true;
-    game.blackoutStats.wordsHidden += 1;
-  }
-  return word;
-}
-
 function wordVisualSize(word) {
-  if (word.blackoutHidden) return { width: 34, height: 34 };
   return {
     width: Math.min(220, Math.max(50, word.text.length * 17 + 18)),
     height: 38,
@@ -247,7 +144,6 @@ function wordVisualSize(word) {
 function wordMobility(game, word) {
   if (game.targetingState.activeTargetId === word.id) return 0.25;
   if (game.targetingState.candidateIds.includes(word.id)) return 0.65;
-  if (word.abandoned) return 1.2;
   return 1;
 }
 
@@ -326,22 +222,6 @@ function finish(game, success) {
   callbacks.onEnd?.(game, success);
 }
 
-export function finalizeChainFailure(game) {
-  if (
-    !game ||
-    game.ended ||
-    game.failureReason !== CHAIN_FAILURE_REASON ||
-    !game.chainRuntime?.broken
-  ) {
-    return false;
-  }
-  resetTargetingState(game);
-  flashChainBreak();
-  callbacks.onHudUpdate?.(game);
-  finish(game, false);
-  return true;
-}
-
 function tick(timestamp) {
   const game = appState.game;
   if (!game || game.ended) return;
@@ -355,50 +235,14 @@ function tick(timestamp) {
   const deltaMs = Math.min(timestamp - game.lastTimestamp, 100);
   game.lastTimestamp = timestamp;
 
-  if (game.phase === "MODIFIER_BRIEFING") {
-    game.briefingElapsedMs += deltaMs;
-    if (game.briefingElapsedMs >= MODIFIER_BRIEFING_MS) {
-      game.phase = "ACTIVE";
-      game.lastSpawnAt = -game.config.spawnIntervalMs;
-    }
-    callbacks.onHudUpdate?.(game);
-    animationFrameId = requestAnimationFrame(tick);
-    return;
-  }
-
   game.elapsedMs += deltaMs;
-  const quickRuntime = game.modifierRuntime?.quickFingers;
-  if (quickRuntime) {
-    if (game.spawnedCount >= game.config.wordCount) {
-      Object.assign(quickRuntime, {
-        active: false,
-        phase: "complete",
-        remainingMs: 0,
-        effectiveSpawnIntervalMs: game.config.spawnIntervalMs,
-      });
-    } else {
-      const previousBurstCount = quickRuntime.burstCount;
-      const phase = getQuickFingersPhase(game.elapsedMs);
-      Object.assign(quickRuntime, phase, {
-        effectiveSpawnIntervalMs: getEffectiveSpawnInterval(
-          game.config.spawnIntervalMs,
-          phase.active,
-        ),
-      });
-      if (phase.active && phase.burstCount > previousBurstCount) {
-        flashQuickFingersBurst();
-      }
-    }
-  }
   const dimensions = getDimensions(game);
   if (!dimensions) return;
-  const effectiveSpawnIntervalMs = quickRuntime?.effectiveSpawnIntervalMs
-    ?? game.config.spawnIntervalMs;
 
   if (
     game.spawnedCount < game.config.wordCount &&
     game.words.length < game.config.maxSimultaneousWords &&
-    game.elapsedMs - game.lastSpawnAt >= effectiveSpawnIntervalMs
+    game.elapsedMs - game.lastSpawnAt >= game.config.spawnIntervalMs
   ) {
     spawnWord(game, dimensions);
     game.lastSpawnAt = game.elapsedMs;
@@ -406,12 +250,11 @@ function tick(timestamp) {
 
   const deltaSeconds = deltaMs / 1000;
   for (const word of [...game.words]) {
-    if (game.blackoutStats) updateBlackoutWordState(game, word);
     word.x += word.vx * deltaSeconds;
     word.y += word.vy * deltaSeconds;
     if (Math.hypot(word.x - game.coreX, word.y - game.coreY) <= 42) {
       processWordCoreArrival(game, word);
-      if (game.ended || game.failureReason === CHAIN_FAILURE_REASON) return;
+      if (game.ended) return;
       if (game.lives <= 0) {
         finish(game, false);
         return;
@@ -426,7 +269,6 @@ function tick(timestamp) {
 
   callbacks.onHudUpdate?.(game);
   if (
-    !game.failureReason &&
     game.spawnedCount >= game.config.wordCount &&
     game.words.length === 0
   ) {

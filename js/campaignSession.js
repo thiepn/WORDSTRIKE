@@ -26,7 +26,6 @@ export function beginCampaignSession({
   seed,
   source,
   developerMode,
-  modifierId = null,
   difficultyData = {},
 }) {
   return beginSession({
@@ -37,7 +36,6 @@ export function beginCampaignSession({
     seed,
     config: {
       level,
-      modifierId,
       difficultyData,
     },
     runtimeData: { level },
@@ -55,9 +53,7 @@ export function syncCampaignSession(game) {
       ACTIVE: SESSION_STATES.ACTIVE,
       TRANSITION: SESSION_STATES.TRANSITIONING,
     }[game.phase]
-    : game.phase === "MODIFIER_BRIEFING"
-      ? SESSION_STATES.BRIEFING
-      : SESSION_STATES.ACTIVE;
+    : SESSION_STATES.ACTIVE;
   if (!phaseState || phaseState === session.state) return false;
   return setSessionState(phaseState);
 }
@@ -111,7 +107,6 @@ export function buildCampaignResult(game, campaignResult, success) {
     },
     modeData: {
       level: game.levelNumber,
-      modifierId: isBoss ? null : game.config.modifiers?.[0] || null,
       bossLevel: isBoss ? game.levelNumber : null,
       bossSequencesCompleted: isBoss ? game.phrasesCompleted : null,
       livesRemaining: isBoss ? null : game.lives,

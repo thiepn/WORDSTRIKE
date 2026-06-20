@@ -51,26 +51,14 @@ export function updateWordElement(word, isActive, candidateState = null) {
   separation.style.transform = `translate(${word.separationX || 0}px, ${word.separationY || 0}px)`;
   visual.classList.toggle("active", isActive);
   visual.classList.toggle("candidate", isCandidate);
-  visual.classList.toggle("word-abandoned", word.abandoned === true);
-  visual.classList.toggle("word-blackout-visible", word.blackoutPhase === "visible");
-  visual.classList.toggle("word-blackout-fading", word.blackoutPhase === "fading");
-  visual.classList.toggle("word-blackout-hidden", word.blackoutHidden === true);
-  position.setAttribute(
-    "aria-label",
-    word.blackoutHidden ? "Hidden incoming word" : word.text,
-  );
+  position.setAttribute("aria-label", word.text);
   const displayTypedIndex = isCandidate ? candidatePrefixLength : word.typedIndex;
   const typed = word.text.slice(0, displayTypedIndex);
   const remaining = word.text.slice(displayTypedIndex);
   visual.innerHTML = `
-    <span class="word-text" style="opacity:${word.blackoutTextOpacity ?? 1}" aria-hidden="${word.blackoutHidden === true}">
+    <span class="word-text">
       <span class="typed-letter">${typed}</span><span class="remaining-letter">${remaining}</span>
-    </span>
-    ${word.blackoutHidden ? `
-      <span class="word-blackout-marker" aria-hidden="true">&#9671;</span>
-      ${isActive ? `<span class="word-blackout-progress">${word.typedIndex} / ${word.text.length}</span>` : ""}
-    ` : ""}
-    ${word.abandoned ? '<span class="corrupted-label">LOST</span>' : ""}`;
+    </span>`;
 }
 
 export function removeWordElement(word, completed = false, particlesEnabled = true) {
@@ -118,15 +106,6 @@ export function flashDamage(screenShake = true) {
     );
   }
   window.setTimeout(() => area.classList.remove("damage-flash"), 260);
-}
-
-export function flashChainBreak() {
-  const screen = document.querySelector(".game-screen");
-  if (!screen) return;
-  screen.classList.remove("chain-break-flash");
-  void screen.offsetWidth;
-  screen.classList.add("chain-break-flash");
-  window.setTimeout(() => screen.classList.remove("chain-break-flash"), 220);
 }
 
 export function clearBossPhrase() {
@@ -186,22 +165,4 @@ export function flashBossWrong() {
   void frame.offsetWidth;
   frame.classList.add("wrong");
   window.setTimeout(() => frame.classList.remove("wrong"), 180);
-}
-
-export function flashQuickFingersBurst() {
-  const screen = document.querySelector(".game-screen");
-  if (!screen) return;
-  screen.classList.remove("quick-burst-flash");
-  void screen.offsetWidth;
-  screen.classList.add("quick-burst-flash");
-  window.setTimeout(() => screen.classList.remove("quick-burst-flash"), 300);
-}
-
-export function flashWordCorruption(wordId) {
-  const visual = wordElements.get(wordId)?.visual;
-  if (!visual) return;
-  visual.classList.remove("word-corruption-flash");
-  void visual.offsetWidth;
-  visual.classList.add("word-corruption-flash");
-  window.setTimeout(() => visual.classList.remove("word-corruption-flash"), 260);
 }

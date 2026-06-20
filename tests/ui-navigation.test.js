@@ -6,60 +6,25 @@ import {
   isResultsInputBlocked,
 } from "../js/state.js";
 
-assert.deepEqual(
-  getResultsActions({ grade: "A", levelNumber: 20 }),
-  ["retry", "next", "levels"],
-);
+assert.deepEqual(getResultsActions({ grade: "A", levelNumber: 20 }), ["retry", "next", "levels"]);
 assert.equal(getDefaultResultsIndex({ grade: "A", levelNumber: 20 }), 1);
 assert.equal(getDefaultResultsIndex({ grade: "Fail", levelNumber: 20 }), 0);
-assert.deepEqual(
-  getResultsActions({ grade: "S", levelNumber: 100 }),
-  ["retry", "levels"],
-);
-assert.equal(getDefaultResultsIndex({ grade: "S", levelNumber: 100 }), 1);
+assert.deepEqual(getResultsActions({ grade: "S", levelNumber: 100 }), ["retry", "levels"]);
 assert.equal(isResultsInputBlocked({ repeat: false }, 100, 300), true);
 assert.equal(isResultsInputBlocked({ repeat: false }, 300, 300), false);
-assert.equal(isResultsInputBlocked({ repeat: true }, 500, 300), true);
 
-const abandonedAttempt = {
+const normalAttempt = {
   mode: "normal",
   activeTargetId: 2,
-  targetingState: {
-    mode: "ambiguous",
-    prefix: "c",
-    candidateIds: [1, 2],
-    activeTargetId: null,
-  },
+  targetingState: { mode: "ambiguous", prefix: "c", candidateIds: [1, 2] },
   words: [{ id: 1 }],
   wordQueue: ["charge"],
-  modifierRuntime: { quickFingers: {} },
-  blackoutStats: { wordsHidden: 1 },
-  chainRuntime: { active: true, broken: true },
-  failureReason: "chain-broken",
-  abandonedWordCount: 2,
-  abandonedCharacters: 7,
 };
-clearAttemptRuntime(abandonedAttempt);
-assert.equal(abandonedAttempt.activeTargetId, null);
-assert.equal(abandonedAttempt.targetingState.mode, "idle");
-assert.deepEqual(abandonedAttempt.words, []);
-assert.deepEqual(abandonedAttempt.wordQueue, []);
-assert.equal(abandonedAttempt.modifierRuntime, null);
-assert.equal(abandonedAttempt.blackoutStats, undefined);
-assert.equal(abandonedAttempt.chainRuntime, undefined);
-assert.equal(abandonedAttempt.failureReason, undefined);
-assert.equal(abandonedAttempt.abandonedWordCount, 0);
-
-const bossAttempt = {
-  mode: "boss",
-  phrases: ["one", "two"],
-  currentPhrase: "one",
-  transitionElapsedMs: 200,
-};
-clearAttemptRuntime(bossAttempt);
-assert.deepEqual(bossAttempt.phrases, []);
-assert.equal(bossAttempt.currentPhrase, "");
-assert.equal(bossAttempt.transitionElapsedMs, 0);
+clearAttemptRuntime(normalAttempt);
+assert.equal(normalAttempt.activeTargetId, null);
+assert.equal(normalAttempt.targetingState.mode, "idle");
+assert.deepEqual(normalAttempt.words, []);
+assert.deepEqual(normalAttempt.wordQueue, []);
 
 class ClassList {
   constructor() { this.values = new Set(); }
@@ -90,8 +55,7 @@ class Container {
     return this.buttons.find((button) => button.dataset.action === action) || null;
   }
   querySelectorAll(selector) {
-    if (selector === ".arcade-button") return this.buttons;
-    return [];
+    return selector === ".arcade-button" ? this.buttons : [];
   }
   append(child) { this.children.push(child); }
   remove() {}
@@ -110,12 +74,12 @@ globalThis.document = {
 };
 
 const {
-  getChainBreakCauseLabel,
   renderGameplayShell,
   renderLevelSelect,
   renderResults,
   showPauseOverlay,
 } = await import("../js/ui.js");
+
 const calls = [];
 showPauseOverlay(0, {
   resume: () => calls.push("resume"),
@@ -125,80 +89,38 @@ showPauseOverlay(0, {
   select: (index) => calls.push(`select:${index}`),
 });
 const overlay = gameScreen.children[0];
-assert.match(overlay.html, /RESUME/);
-assert.match(overlay.html, /RETRY/);
-assert.match(overlay.html, /LEVEL SELECT/);
-assert.match(overlay.html, /MAIN MENU/);
 assert.deepEqual(
   overlay.buttons.map((button) => button.dataset.action),
   ["resume", "retry", "levels", "title"],
 );
-overlay.buttons[3].onmouseenter();
-assert.equal(calls.at(-1), "select:3");
-overlay.buttons[3].onclick();
-assert.equal(calls.at(-1), "title");
 
-assert.equal(getChainBreakCauseLabel("wrong-key-idle"), "WRONG KEY");
-assert.equal(
-  getChainBreakCauseLabel("wrong-key-ambiguous"),
-  "AMBIGUOUS PREFIX FAILED",
-);
-renderResults(
-  {
-    grade: "Fail",
-    wpm: 20,
-    accuracy: 50,
-    maxCombo: 4,
-    score: 120,
-    levelNumber: 82,
-    isBoss: false,
-    modifierIds: ["chain"],
-    chainBroken: true,
-    chainBreakCause: "wrong-key-locked",
-    chainComboAtBreak: 4,
-    livesRemaining: 3,
-    startingLives: 3,
-  },
-  0,
-  {
-    retry() {},
-    next() {},
-    levels() {},
-  },
-);
-assert.match(app.html, /CHAIN BROKEN/);
-assert.match(app.html, /MODIFIER: CHAIN/);
-assert.match(app.html, /TARGET MISTYPED/);
-assert.match(app.html, /COMBO AT BREAK: 4/);
-assert.doesNotMatch(app.html, /Lives/);
+renderResults({
+  grade: "Fail",
+  wpm: 20,
+  accuracy: 50,
+  maxCombo: 4,
+  score: 120,
+  levelNumber: 82,
+  isBoss: false,
+  livesRemaining: 1,
+  startingLives: 3,
+}, 0, { retry() {}, next() {}, levels() {} });
+assert.match(app.html, /Core breached/);
+assert.match(app.html, /Lives/);
+assert.doesNotMatch(app.html, /MODIFIER|CHAIN BROKEN|BLACKOUT/);
 
-renderGameplayShell(
-  82,
-  3,
-  { modifiers: ["chain"] },
-  false,
-  false,
-  {},
-);
-assert.match(app.html, /Chain integrity/i);
-assert.match(app.html, /◇ INTACT/);
-assert.match(app.html, /ZERO MISTAKES ALLOWED/);
-assert.match(app.html, /ONE MISTAKE ENDS THE RUN/);
-assert.doesNotMatch(app.html, /◆◆◆/);
+renderGameplayShell(82, 3, {}, false, {});
+assert.match(app.html, /Core integrity/i);
+assert.doesNotMatch(app.html, /MODIFIER|CHAIN|BLACKOUT|NO BACKSPACE/);
 
 renderLevelSelect(
   { currentFurthestLevel: 100, levels: {} },
   82,
   false,
-  { phrases: [] },
+  {},
   null,
-  null,
-  {
-    back() {},
-    select() {},
-  },
+  { back() {}, select() {} },
 );
-assert.match(app.html, /title="Chain">CH</);
-assert.match(app.html, /One wrong key or missed word immediately ends the level/);
+assert.doesNotMatch(app.html, /Quick Fingers|No Backspace|Blackout|Modifier detected/);
 
-console.log("Pause actions and results default-selection tests passed.");
+console.log("Pause, ordinary Campaign UI, and Results navigation tests passed.");

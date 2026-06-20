@@ -1,38 +1,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { generateLevel } from "../js/levelGenerator.js";
-import {
-  BLACKOUT_ID,
-  CHAIN_ID,
-  NO_BACKSPACE_ID,
-  QUICK_FINGERS_ID,
-} from "../js/modifiers.js";
 import { createNormalWordAttempt } from "../js/wordBank.js";
 
 const wordBank = JSON.parse(
   await readFile(new URL("../data/theme-default.json", import.meta.url), "utf8"),
 );
 
-const modifierExpectations = new Map([
-  [22, QUICK_FINGERS_ID],
-  [27, QUICK_FINGERS_ID],
-  [32, QUICK_FINGERS_ID],
-  [37, QUICK_FINGERS_ID],
-  [42, NO_BACKSPACE_ID],
-  [47, QUICK_FINGERS_ID],
-  [52, NO_BACKSPACE_ID],
-  [57, QUICK_FINGERS_ID],
-  [62, BLACKOUT_ID],
-  [67, QUICK_FINGERS_ID],
-  [72, NO_BACKSPACE_ID],
-  [77, BLACKOUT_ID],
-  [82, CHAIN_ID],
-  [87, NO_BACKSPACE_ID],
-  [92, BLACKOUT_ID],
-  [97, QUICK_FINGERS_ID],
-]);
-for (const [level, modifier] of modifierExpectations) {
-  assert.deepEqual(generateLevel(level).modifiers, [modifier]);
+for (const level of [22, 27, 32, 37, 42, 47, 52, 57, 62, 67, 72, 77, 82, 87, 92, 97]) {
+  assert.equal("modifiers" in generateLevel(level), false);
 }
 
 for (const level of [1, 5, 8, 9, 11, 22, 42, 62, 82, 97, 99]) {
@@ -65,9 +41,8 @@ const sourceFiles = await Promise.all([
   "js/main.js",
   "js/gameLoop.js",
   "js/input.js",
-  "js/modifiers.js",
 ].map((path) => readFile(new URL(`../${path}`, import.meta.url), "utf8")));
 assert.equal(sourceFiles.some((source) => source.includes("setInterval(")), false);
 assert.equal(sourceFiles[0].split('addEventListener("keydown"').length - 1, 1);
 
-console.log("Campaign weighted words, modifiers, seeded retries, and loop isolation tests passed.");
+console.log("Campaign weighted words, ordinary former modifier levels, seeded retries, and loop isolation passed.");

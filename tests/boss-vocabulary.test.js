@@ -1,79 +1,76 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
-  BOSS_BANNED_WORDS,
-  BOSS_VOCABULARY_BUCKETS,
-  EMERGENCY_BOSS_WORDS,
-  generateBossEncounter,
-  normalizeBossVocabulary,
-  validateBossVocabulary,
+  BOSS_WORD_TIERS,
+  buildBossWordPools,
+  getBossWordTier,
+  validateBossLongVocabulary,
+  validateBossWordPools,
 } from "../js/bossGenerator.js";
 import { loadBossWordBank } from "../js/wordBank.js";
 
-const source = JSON.parse(
-  await readFile(new URL("../data/bossWords.json", import.meta.url), "utf8"),
+const typingSource = JSON.parse(
+  await readFile(new URL("../data/typingTestWords.json", import.meta.url), "utf8"),
 );
-const validation = validateBossVocabulary(source);
-assert.equal(validation.valid, true, validation.errors.join("\n"));
-assert.ok(validation.entries.length > 400);
-assert.equal(new Set(validation.entries.map(({ word }) => word)).size, validation.entries.length);
-assert.ok(validation.entries.every(({ word, tier }) => (
-  /^[a-z]+$/.test(word) &&
-  word === word.toLowerCase() &&
-  word.length >= 6 &&
-  word.length <= 20 &&
-  Number.isInteger(tier) &&
-  tier >= 1 &&
-  tier <= 10 &&
-  !BOSS_BANNED_WORDS.has(word)
-)));
-assert.equal(validation.entries.some(({ word }) => word === "the"), false);
-assert.equal(validation.entries.some(({ word }) => word === "its"), false);
-for (const requirement of BOSS_VOCABULARY_BUCKETS) {
-  const actual = validation.bucketCounts.find(({ min, max }) => (
-    min === requirement.min && max === requirement.max
-  ));
-  assert.ok(actual.count >= requirement.minimum, `${requirement.min}-${requirement.max}: ${actual.count}`);
-}
-assert.ok(validation.lateGameCount >= 220);
+const typingSnapshot = JSON.stringify(typingSource);
+const longSource = JSON.parse(
+  await readFile(new URL("../data/bossCommonLongWords.json", import.meta.url), "utf8"),
+);
 
-const invalid = validateBossVocabulary({
-  words: [
-    { word: "the", tier: 1 },
-    { word: "Bad-word", tier: 99 },
-    { word: "quantum", tier: 2 },
-    { word: "quantum", tier: 2 },
-  ],
+const longValidation = validateBossLongVocabulary(longSource);
+assert.equal(longValidation.valid, true, longValidation.errors.join("\n"));
+assert.ok(longValidation.words.length >= 180);
+assert.equal(new Set(longValidation.words).size, longValidation.words.length);
+assert.ok(longValidation.words.every((word) => /^[a-z]{9,15}$/.test(word)));
+
+assert.equal(getBossWordTier("cat"), BOSS_WORD_TIERS.SHORT);
+assert.equal(getBossWordTier("animal"), BOSS_WORD_TIERS.MEDIUM);
+assert.equal(getBossWordTier("adventure"), BOSS_WORD_TIERS.LONG);
+assert.equal(getBossWordTier("communication"), BOSS_WORD_TIERS.VERY_LONG);
+for (const invalid of ["at", "sixteencharacters", "Bad", "two-words", "", null]) {
+  assert.equal(getBossWordTier(invalid), null);
+}
+
+const pools = buildBossWordPools({
+  typingWords: typingSource.words,
+  longWords: longValidation.words,
 });
-assert.equal(invalid.valid, false);
-assert.match(invalid.errors.join("\n"), /the: length 3 is outside 6-20/);
-assert.match(invalid.errors.join("\n"), /the: banned boss word/);
-assert.match(invalid.errors.join("\n"), /Bad-word: must contain lowercase ASCII letters only/);
-assert.match(invalid.errors.join("\n"), /quantum: duplicate word/);
+const poolValidation = validateBossWordPools(pools);
+assert.equal(poolValidation.valid, true, poolValidation.errors.join("\n"));
+const allPoolWords = Object.values(pools).flat().map(({ word }) => word);
+assert.equal(new Set(allPoolWords).size, allPoolWords.length);
+for (const [tier, entries] of Object.entries(pools)) {
+  assert.ok(entries.every(({ word }) => getBossWordTier(word) === tier));
+  assert.equal(Object.isFrozen(entries), true);
+}
+assert.equal(JSON.stringify(typingSource), typingSnapshot);
+
+const oldPath = new URL("../data/bossWords.json", import.meta.url);
+await assert.rejects(readFile(oldPath, "utf8"));
 
 const realFetch = globalThis.fetch;
-globalThis.fetch = async () => ({
-  ok: true,
-  async json() { return source; },
-});
+globalThis.fetch = async (url) => {
+  const text = String(url);
+  return {
+    ok: true,
+    async json() {
+      return text.includes("typingTestWords") ? typingSource : longSource;
+    },
+  };
+};
 const loaded = await loadBossWordBank();
-assert.equal(loaded.source, "dedicated");
-assert.equal(loaded.words.length, validation.entries.length);
+assert.equal(loaded.source, "typing-test+curated-long");
+assert.equal(validateBossWordPools(loaded.pools).valid, true);
 
 const realWarn = console.warn;
-let fallbackWarning = "";
-console.warn = (...parts) => { fallbackWarning = parts.join(" "); };
+let warning = "";
+console.warn = (...parts) => { warning = parts.join(" "); };
 globalThis.fetch = async () => { throw new Error("offline"); };
 const emergency = await loadBossWordBank();
 globalThis.fetch = realFetch;
 console.warn = realWarn;
 assert.equal(emergency.source, "emergency");
-assert.match(fallbackWarning, /difficult emergency boss vocabulary/i);
-assert.deepEqual(emergency.words, EMERGENCY_BOSS_WORDS);
-assert.ok(emergency.words.every(({ word }) => word.length >= 15));
-for (let level = 10; level <= 100; level += 10) {
-  assert.doesNotThrow(() => generateBossEncounter(emergency, level, 77));
-}
+assert.match(warning, /recognizable emergency boss vocabulary/i);
+assert.ok(Object.values(emergency.pools).flat().length > 0);
 
-assert.equal(normalizeBossVocabulary(source).length, validation.entries.length);
-console.log(`Boss vocabulary validation passed with ${validation.entries.length} difficult words.`);
+console.log(`Boss vocabulary validated with ${longValidation.words.length} curated common long words.`);

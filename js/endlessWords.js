@@ -28,7 +28,9 @@ export function createEndlessVocabulary({ commonWords, campaignBank, bossBank } 
     ...(tiers["4"] || []),
     ...(tiers["5"] || []),
   ]);
-  const boss = uniqueWords((bossBank?.words || []).map((entry) => entry.word));
+  const boss = uniqueWords((bossBank?.words || []).map((entry) => (
+    typeof entry === "string" ? entry : entry?.word
+  )));
   return Object.freeze({
     common: Object.freeze(uniqueWords(commonWords)),
     campaign: Object.freeze(campaign),

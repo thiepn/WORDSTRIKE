@@ -181,9 +181,6 @@ function sanitizeRecentSummary(value) {
       level: Number.isInteger(Number(value.modeData?.level))
         ? Number(value.modeData.level)
         : null,
-      modifierId: typeof value.modeData?.modifierId === "string"
-        ? value.modeData.modifierId
-        : null,
       configId: typeof value.modeData?.configId === "string"
         ? value.modeData.configId
         : null,

@@ -86,7 +86,7 @@ assert.equal(getBossPhraseSizeClass(76), "boss-phrase-size-dense");
 assert.equal(getBossPhraseSizeClass(111), "boss-phrase-size-extreme");
 
 const css = await readFile(new URL("../style.css", import.meta.url), "utf8");
-assert.match(css, /\.boss-phrase\s*\{[^}]*min-height:\s*3\.6em/s);
+assert.match(css, /\.boss-phrase\s*\{[^}]*min-height:\s*5em/s);
 assert.match(css, /\.boss-word-group\s*\{[^}]*white-space:\s*nowrap/s);
 assert.match(css, /\.boss-char\s*\{[^}]*width:\s*1ch[^}]*min-width:\s*1ch/s);
 assert.match(css, /\.boss-phrase-size-normal/);

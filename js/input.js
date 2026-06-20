@@ -2,19 +2,11 @@ import { calculateWordScore } from "./scoring.js";
 import {
   flashBossWrong,
   flashCandidateWrong,
-  flashWordCorruption,
   flashWrong,
   removeWordElement,
   renderBossPhrase,
   updateWordElement,
 } from "./renderer.js";
-import {
-  BLACKOUT_ID,
-  CHAIN_BREAK_CAUSES,
-  hasChainModifier,
-  markChainBroken,
-  NO_BACKSPACE_ID,
-} from "./modifiers.js";
 
 const IGNORED_KEYS = new Set([
   "Shift", "Control", "Alt", "Meta", "CapsLock", "Tab", "Escape", "Enter",
@@ -74,7 +66,6 @@ function eligibleWords(game) {
   return game.words.filter((word) => (
     word &&
     typeof word.text === "string" &&
-    !word.abandoned &&
     !word.coreArrivalProcessed
   ));
 }
@@ -118,42 +109,7 @@ export function reconcileTargetingState(game) {
   return null;
 }
 
-function abandonTarget(game, target) {
-  const remainingCharacters = Math.max(0, target.text.length - target.typedIndex);
-  if (!target.missedCharactersRecorded) {
-    target.missedCharactersRecorded = true;
-    game.missedCharacters += remainingCharacters;
-    game.abandonedCharacters += remainingCharacters;
-  }
-  target.abandoned = true;
-  target.abandonedAt = game.elapsedMs;
-  game.abandonedWordCount += 1;
-  resetTargetingState(game);
-  updateWordElement(target, false);
-  flashWordCorruption(target.id);
-}
-
-function breakChainFromInput(
-  game,
-  cause,
-  failedWordId,
-  onChainBreak,
-) {
-  if (!markChainBroken(game, cause, failedWordId)) return false;
-  resetTargetingState(game);
-  onChainBreak?.(game);
-  return true;
-}
-
 function completeTarget(game, target, settings, onWordCompleted) {
-  if (
-    game.config.modifiers?.includes(BLACKOUT_ID) &&
-    target.blackoutHidden &&
-    !target.blackoutCompletedCounted
-  ) {
-    target.blackoutCompletedCounted = true;
-    game.blackoutStats.hiddenWordsCompleted += 1;
-  }
   const actualTimeSeconds = Math.max(
     (game.elapsedMs - target.startedAt) / 1000,
     0.05,
@@ -173,51 +129,13 @@ export function handleGameplayKey(
   game,
   settings,
   onWordCompleted,
-  onChainBreak,
 ) {
-  const chain = hasChainModifier(game.config);
-  if (
-    event.key === "Backspace" &&
-    (game.config.modifiers?.includes(NO_BACKSPACE_ID) || chain)
-  ) {
-    event.preventDefault();
-    return true;
-  }
-  if (game.phase !== "ACTIVE" || game.ended || game.failureReason) return false;
+  if (game.phase !== "ACTIVE" || game.ended) return false;
   if (IGNORED_KEYS.has(event.key) || event.key.length !== 1) return false;
   const key = event.key.toLowerCase();
-  const noBackspace = game.config.modifiers?.includes(NO_BACKSPACE_ID);
   const state = ensureTargetingState(game);
   if (!/^[a-z]$/.test(key)) {
-    if (chain) {
-      event.preventDefault();
-      game.totalKeystrokes += 1;
-      const cause = state.mode === "ambiguous"
-        ? CHAIN_BREAK_CAUSES.WRONG_KEY_AMBIGUOUS
-        : state.mode === "locked"
-          ? CHAIN_BREAK_CAUSES.WRONG_KEY_LOCKED
-          : CHAIN_BREAK_CAUSES.WRONG_KEY_IDLE;
-      breakChainFromInput(
-        game,
-        cause,
-        state.activeTargetId,
-        onChainBreak,
-      );
-      return true;
-    }
-    if (!noBackspace) return false;
-    event.preventDefault();
-    game.totalKeystrokes += 1;
-    if (settings.strictMode) game.combo = 0;
-    if (state.mode === "locked") {
-      const activeTarget = eligibleWords(game).find(
-        (word) => word.id === state.activeTargetId,
-      );
-      if (activeTarget) abandonTarget(game, activeTarget);
-    } else if (state.mode === "ambiguous") {
-      flashCandidateWrong(state.candidateIds);
-    }
-    return true;
+    return false;
   }
   event.preventDefault();
   game.totalKeystrokes += 1;
@@ -228,15 +146,6 @@ export function handleGameplayKey(
       (word) => state.candidateIds.includes(word.id) && word.text.startsWith(nextPrefix),
     );
     if (!candidates.length) {
-      if (chain) {
-        breakChainFromInput(
-          game,
-          CHAIN_BREAK_CAUSES.WRONG_KEY_AMBIGUOUS,
-          null,
-          onChainBreak,
-        );
-        return true;
-      }
       if (settings.strictMode) game.combo = 0;
       flashCandidateWrong(state.candidateIds);
       return true;
@@ -263,15 +172,6 @@ export function handleGameplayKey(
       .filter((word) => word.text.startsWith(key))
       .sort((a, b) => distanceToCore(a, game) - distanceToCore(b, game));
     if (!candidates.length) {
-      if (chain) {
-        breakChainFromInput(
-          game,
-          CHAIN_BREAK_CAUSES.WRONG_KEY_IDLE,
-          null,
-          onChainBreak,
-        );
-        return true;
-      }
       if (settings.strictMode) game.combo = 0;
       return true;
     }
@@ -301,18 +201,8 @@ export function handleGameplayKey(
     return true;
   }
   if (target.text[target.typedIndex] !== key) {
-    if (chain) {
-      breakChainFromInput(
-        game,
-        CHAIN_BREAK_CAUSES.WRONG_KEY_LOCKED,
-        target.id,
-        onChainBreak,
-      );
-      return true;
-    }
     if (settings.strictMode) game.combo = 0;
-    if (noBackspace) abandonTarget(game, target);
-    else flashWrong(target.id);
+    flashWrong(target.id);
     return true;
   }
   target.typedIndex += 1;

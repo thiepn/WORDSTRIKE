@@ -1,6 +1,8 @@
 import {
+  buildBossWordPools,
   EMERGENCY_BOSS_WORDS,
-  validateBossVocabulary,
+  validateBossLongVocabulary,
+  validateBossWordPools,
 } from "./bossGenerator.js";
 import { createSeededRandom, mixSeed, shuffleSeeded } from "./random.js";
 
@@ -25,26 +27,49 @@ export async function loadWordBank() {
 
 export async function loadBossWordBank() {
   try {
-    const response = await fetch(new URL("../data/bossWords.json", import.meta.url));
-    if (!response.ok) throw new Error(`Boss vocabulary request failed: ${response.status}`);
-    const data = await response.json();
-    const validation = validateBossVocabulary(data);
-    if (!validation.valid) {
-      throw new Error(`Invalid boss vocabulary: ${validation.errors.join("; ")}`);
+    const [typingResponse, longResponse] = await Promise.all([
+      fetch(new URL("../data/typingTestWords.json", import.meta.url)),
+      fetch(new URL("../data/bossCommonLongWords.json", import.meta.url)),
+    ]);
+    if (!typingResponse.ok || !longResponse.ok) {
+      throw new Error("Boss vocabulary request failed");
+    }
+    const [typingSource, longSource] = await Promise.all([
+      typingResponse.json(),
+      longResponse.json(),
+    ]);
+    const longValidation = validateBossLongVocabulary(longSource);
+    if (!longValidation.valid) {
+      throw new Error(`Invalid curated boss vocabulary: ${longValidation.errors.join("; ")}`);
+    }
+    const pools = buildBossWordPools({
+      typingWords: typingSource.words,
+      longWords: longValidation.words,
+    });
+    const poolValidation = validateBossWordPools(pools);
+    if (!poolValidation.valid) {
+      throw new Error(`Invalid boss pools: ${poolValidation.errors.join("; ")}`);
     }
     return {
-      schemaVersion: data.schemaVersion ?? 1,
-      source: "dedicated",
-      words: validation.entries,
-      bucketCounts: validation.bucketCounts,
+      schemaVersion: 1,
+      source: "typing-test+curated-long",
+      typingWords: [...typingSource.words],
+      longWords: [...longValidation.words],
+      pools,
+      words: Object.values(pools).flat().map(({ word, source }) => ({ word, source })),
     };
   } catch (error) {
-    console.warn("Using difficult emergency boss vocabulary.", error);
+    console.warn("Using recognizable emergency boss vocabulary.", error);
+    const typingWords = EMERGENCY_BOSS_WORDS.filter((word) => word.length <= 10);
+    const longWords = EMERGENCY_BOSS_WORDS.filter((word) => word.length >= 9);
+    const pools = buildBossWordPools({ typingWords, longWords });
     return {
       schemaVersion: 1,
       source: "emergency",
-      words: EMERGENCY_BOSS_WORDS.map((entry) => ({ ...entry })),
-      bucketCounts: [],
+      typingWords,
+      longWords,
+      pools,
+      words: Object.values(pools).flat().map(({ word, source }) => ({ word, source })),
     };
   }
 }

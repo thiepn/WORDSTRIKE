@@ -74,7 +74,7 @@ updateLevelResult(chainProgress, 82, {
   score: 9999,
   maxCombo: 99,
   isBoss: false,
-  failureReason: "chain-broken",
+  failureReason: "core-breached",
 });
 assert.equal(JSON.stringify(chainProgress), chainClearSnapshot);
 

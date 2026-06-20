@@ -24,7 +24,7 @@ function normalGame() {
   return {
     mode: "normal",
     levelNumber: 22,
-    phase: "MODIFIER_BRIEFING",
+    phase: "ACTIVE",
     ended: false,
     elapsedMs: 5000,
     correctCharacters: 20,
@@ -38,10 +38,7 @@ function normalGame() {
     score: 500,
     lives: 2,
     attemptSeed: 12345,
-    config: {
-      wordCount: 5,
-      modifiers: ["quick-fingers"],
-    },
+    config: { wordCount: 5 },
   };
 }
 
@@ -52,12 +49,8 @@ beginCampaignSession({
   seed: 12345,
   source: "level-select",
   developerMode: false,
-  modifierId: "quick-fingers",
 });
 const game = normalGame();
-assert.equal(syncCampaignSession(game), true);
-assert.equal(getCurrentSession().state, SESSION_STATES.BRIEFING);
-game.phase = "ACTIVE";
 assert.equal(syncCampaignSession(game), true);
 assert.equal(getCurrentSession().state, SESSION_STATES.ACTIVE);
 assert.equal(pauseSession(), true);
@@ -76,7 +69,7 @@ const normalized = finalizeCampaignSession(game, campaignResult, true);
 assert.equal(normalized.modeId, "campaign");
 assert.equal(normalized.variantId, "normal");
 assert.equal(normalized.modeData.level, 22);
-assert.equal(normalized.modeData.modifierId, "quick-fingers");
+assert.equal("modifierId" in normalized.modeData, false);
 assert.equal(normalized.activeDurationMs, game.elapsedMs);
 assert.equal(finalizeCampaignSession(game, campaignResult, true), null);
 assert.equal(JSON.parse(values.get(MODE_DATA_STORAGE_KEY)).totals.completedSessions, 1);

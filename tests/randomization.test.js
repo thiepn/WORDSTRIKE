@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { generateBossEncounter } from "../js/bossGenerator.js";
+import { buildBossWordPools, generateBossEncounter } from "../js/bossGenerator.js";
 import { generateLevel } from "../js/levelGenerator.js";
 import { createNormalWordAttempt } from "../js/wordBank.js";
 import {
@@ -13,9 +13,20 @@ import {
 const wordBank = JSON.parse(
   await readFile(new URL("../data/theme-default.json", import.meta.url), "utf8"),
 );
-const bossBank = JSON.parse(
-  await readFile(new URL("../data/bossWords.json", import.meta.url), "utf8"),
-);
+const typingBank = JSON.parse(await readFile(
+  new URL("../data/typingTestWords.json", import.meta.url),
+  "utf8",
+));
+const longBank = JSON.parse(await readFile(
+  new URL("../data/bossCommonLongWords.json", import.meta.url),
+  "utf8",
+));
+const bossBank = {
+  pools: buildBossWordPools({
+    typingWords: typingBank.words,
+    longWords: longBank.words,
+  }),
+};
 
 const normalConfig = generateLevel(67);
 const first = createNormalWordAttempt(wordBank, normalConfig, 12345);

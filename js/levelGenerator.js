@@ -1,4 +1,3 @@
-import { getModifiersForLevel } from "./modifiers.js";
 import {
   calculateBossTiming as calculateDedicatedBossTiming,
   getBossDifficultyProfile,
@@ -25,7 +24,6 @@ export function generateLegacyLevel(n) {
     wordCount: getLegacyCampaignWordCount(n),
     ...pressure,
     lives: 3,
-    modifiers: getModifiersForLevel(n),
     world: Math.floor((n - 1) / 100),
   };
 }
@@ -40,7 +38,6 @@ export function generateLevel(n) {
     wordCount: getLegacyCampaignWordCount(n),
     ...pressure,
     lives: 3,
-    modifiers: getModifiersForLevel(n),
     world: Math.floor((n - 1) / 100),
   };
 }

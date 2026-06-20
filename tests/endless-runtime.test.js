@@ -114,6 +114,8 @@ assert.equal(result.modeId, "endless");
 assert.equal(result.failureReason, "core-destroyed");
 assert.equal(result.modeData.recordEligible, true);
 assert.equal(result.modeData.survivalPoints, 6000);
+assert.equal("modifiersSurvived" in result.modeData, false);
+assert.equal("activeModifier" in result.modeData, false);
 assert.equal(getCurrentSession().state, "completed");
 assert.equal(completeEndlessRun(game), null);
 clearEndlessRuntime();

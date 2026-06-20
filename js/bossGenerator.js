@@ -1,64 +1,71 @@
 import { mixSeed, shuffleSeeded } from "./random.js";
 
-export const MAX_BOSS_GENERATION_ATTEMPTS = 64;
+export const MAX_BOSS_GENERATION_ATTEMPTS = 32;
+
+export const BOSS_WORD_TIERS = Object.freeze({
+  SHORT: "short",
+  MEDIUM: "medium",
+  LONG: "long",
+  VERY_LONG: "very-long",
+});
+
+const TIER_LIMITS = Object.freeze({
+  [BOSS_WORD_TIERS.SHORT]: Object.freeze({ min: 3, max: 5 }),
+  [BOSS_WORD_TIERS.MEDIUM]: Object.freeze({ min: 6, max: 8 }),
+  [BOSS_WORD_TIERS.LONG]: Object.freeze({ min: 9, max: 11 }),
+  [BOSS_WORD_TIERS.VERY_LONG]: Object.freeze({ min: 12, max: 15 }),
+});
 
 export const BOSS_BANNED_WORDS = new Set([
-  "a", "an", "the", "and", "or", "but", "of", "to", "in", "on", "at", "by",
-  "for", "from", "with", "as", "is", "it", "its", "be", "are", "was", "were",
-  "this", "that", "these", "those", "he", "she", "we", "you", "they",
+  "the", "and", "but", "for", "from", "with", "this", "that", "these",
+  "those", "they", "them", "their", "there", "where", "which", "would",
+  "could", "should",
 ]);
 
 const PROFILE_ROWS = [
-  [10, 1, 4, 6, 7.5, 9, 40],
-  [20, 1, 5, 7, 8.5, 10, 60],
-  [30, 2, 4, 7, 9.0, 11, 65],
-  [40, 2, 5, 8, 9.8, 12, 70],
-  [50, 2, 6, 8, 10.5, 13, 75],
-  [60, 3, 5, 9, 11.2, 14, 80],
-  [70, 3, 6, 9, 12.0, 15, 85],
-  [80, 3, 6, 10, 12.8, 16, 90],
-  [90, 3, 7, 10, 13.5, 17, 95],
-  [100, 3, 8, 11, 14.2, 18, 100],
+  [10, 1, 5, 33, 40],
+  [20, 1, 6, 47, 60],
+  [30, 2, 5, 78, 65],
+  [40, 2, 7, 106, 70],
+  [50, 2, 8, 136, 75],
+  [60, 3, 7, 180, 80],
+  [70, 3, 9, 231, 85],
+  [80, 3, 10, 246, 90],
+  [90, 3, 11, 302, 95],
+  [100, 3, 12, 362, 100],
 ];
 
 export const BOSS_DIFFICULTY_PROFILES = Object.freeze(Object.fromEntries(
-  PROFILE_ROWS.map(([
+  PROFILE_ROWS.map(([level, segmentCount, wordsPerSegment, targetCharacters, targetWPM]) => [
     level,
-    segmentCount,
-    wordsPerSegment,
-    minimumWordLength,
-    requiredAverageWordLength,
-    minimumLongestWord,
-    targetWPM,
-  ]) => [level, Object.freeze({
-    level,
-    bossIndex: level / 10,
-    segmentCount,
-    wordsPerSegment,
-    totalWordCount: segmentCount * wordsPerSegment,
-    minimumWordLength,
-    requiredAverageWordLength,
-    minimumLongestWord,
-    targetWPM,
-  })]),
+    Object.freeze({
+      level,
+      bossIndex: level / 10,
+      segmentCount,
+      wordsPerSegment,
+      totalWordCount: segmentCount * wordsPerSegment,
+      targetCharacters,
+      minimumCharacters: Math.floor(targetCharacters * 0.95),
+      maximumCharacters: Math.ceil(targetCharacters * 1.05),
+      targetWPM,
+    }),
+  ]),
 ));
 
-export const BOSS_VOCABULARY_BUCKETS = Object.freeze([
-  Object.freeze({ min: 6, max: 7, minimum: 60 }),
-  Object.freeze({ min: 8, max: 9, minimum: 80 }),
-  Object.freeze({ min: 10, max: 11, minimum: 100 }),
-  Object.freeze({ min: 12, max: 14, minimum: 120 }),
-  Object.freeze({ min: 15, max: 20, minimum: 100 }),
-]);
+const PATTERN_COUNTS = Object.freeze({
+  10: Object.freeze({ short: 2, medium: 3, long: 0, "very-long": 0 }),
+  20: Object.freeze({ short: 1, medium: 4, long: 1, "very-long": 0 }),
+  30: Object.freeze({ short: 1, medium: 2, long: 2, "very-long": 0 }),
+  40: Object.freeze({ short: 1, medium: 4, long: 2, "very-long": 0 }),
+  50: Object.freeze({ short: 1, medium: 3, long: 3, "very-long": 1 }),
+  60: Object.freeze({ short: 1, medium: 3, long: 2, "very-long": 1 }),
+  70: Object.freeze({ short: 2, medium: 3, long: 3, "very-long": 1 }),
+  80: Object.freeze({ short: 2, medium: 4, long: 3, "very-long": 1 }),
+  90: Object.freeze({ short: 2, medium: 3, long: 4, "very-long": 2 }),
+  100: Object.freeze({ short: 1, medium: 3, long: 5, "very-long": 3 }),
+});
 
-const COMMON_SUFFIXES = [
-  "izations", "ization", "ational", "ations", "ation", "ingly", "ments",
-  "ment", "tions", "tion", "ness", "ists", "ist", "ing", "edly", "ed", "ly", "s",
-];
-
-const BOSS_WORD_ORDER_LABEL = "boss-word-order";
-
-function hashSeedLabel(label) {
+function hashLabel(label) {
   let hash = 0x811c9dc5;
   for (const character of label) {
     hash ^= character.charCodeAt(0);
@@ -67,28 +74,100 @@ function hashSeedLabel(label) {
   return hash >>> 0;
 }
 
-function deriveBossWordOrderSeed(attemptSeed, level) {
+function domainSeed(attemptSeed, level, label, index = 0) {
   return mixSeed(
     mixSeed(attemptSeed, Math.imul(level, 104729)),
-    hashSeedLabel(BOSS_WORD_ORDER_LABEL),
+    hashLabel(`${label}:${index}`),
   );
 }
 
-export const EMERGENCY_BOSS_WORDS = Object.freeze([
-  "electromagnetic", "intercontinental", "misinterpretation", "multidimensional",
-  "microarchitecture", "counterproductive", "photosensitivity", "characterization",
-  "institutionalization", "psychopharmacology", "circumnavigation", "commercialization",
-  "comprehensibility", "decentralization", "disenfranchisement", "electrophoresis",
-  "environmentalist", "extraterrestrial", "gastrointestinal", "hydroelectricity",
-  "immunodeficiency", "incomprehensible", "industrialization", "interdisciplinary",
-  "intergovernmental", "interoperability", "intersectionality", "microelectronics",
-  "neurodegenerative", "overcompensation", "overgeneralization", "parliamentarian",
-  "reproducibility", "superconductivity", "telecommunication", "thermoregulation",
-  "transcontinental", "uncharacteristic", "unconstitutional", "vascularization",
-].map((word) => Object.freeze({ word, tier: 10 })));
+function validBossWord(word) {
+  return (
+    typeof word === "string" &&
+    /^[a-z]+$/.test(word) &&
+    word.length >= 3 &&
+    word.length <= 15 &&
+    !BOSS_BANNED_WORDS.has(word)
+  );
+}
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
+export function getBossWordTier(word) {
+  if (!validBossWord(word)) return null;
+  for (const [tier, { min, max }] of Object.entries(TIER_LIMITS)) {
+    if (word.length >= min && word.length <= max) return tier;
+  }
+  return null;
+}
+
+function freezePool(entries) {
+  return Object.freeze(entries.map((entry) => Object.freeze({ ...entry })));
+}
+
+export function buildBossWordPools({ typingWords = [], longWords = [] } = {}) {
+  const pools = Object.fromEntries(
+    Object.values(BOSS_WORD_TIERS).map((tier) => [tier, []]),
+  );
+  const seen = new Set();
+  const add = (words, source) => {
+    for (const word of words || []) {
+      const tier = getBossWordTier(word);
+      if (!tier || seen.has(word)) continue;
+      if (
+        source === "typing-test" &&
+        ![BOSS_WORD_TIERS.SHORT, BOSS_WORD_TIERS.MEDIUM, BOSS_WORD_TIERS.LONG].includes(tier)
+      ) continue;
+      if (
+        source === "curated-long" &&
+        ![BOSS_WORD_TIERS.LONG, BOSS_WORD_TIERS.VERY_LONG].includes(tier)
+      ) continue;
+      seen.add(word);
+      pools[tier].push({ word, tier, source });
+    }
+  };
+  add(typingWords, "typing-test");
+  add(longWords, "curated-long");
+  return Object.freeze(Object.fromEntries(
+    Object.entries(pools).map(([tier, entries]) => [tier, freezePool(entries)]),
+  ));
+}
+
+export function validateBossWordPools(pools) {
+  const errors = [];
+  const seen = new Set();
+  for (const tier of Object.values(BOSS_WORD_TIERS)) {
+    const entries = pools?.[tier];
+    if (!Array.isArray(entries) || !entries.length) {
+      errors.push(`${tier}: empty pool`);
+      continue;
+    }
+    for (const entry of entries) {
+      if (getBossWordTier(entry?.word) !== tier) errors.push(`${entry?.word}: invalid ${tier} entry`);
+      if (seen.has(entry?.word)) errors.push(`${entry?.word}: duplicate across pools`);
+      seen.add(entry?.word);
+    }
+  }
+  if ((pools?.short?.length || 0) < 40) errors.push("short pool requires at least 40 words");
+  if ((pools?.medium?.length || 0) < 80) errors.push("medium pool requires at least 80 words");
+  if ((pools?.long?.length || 0) < 100) errors.push("long pool requires at least 100 words");
+  if ((pools?.["very-long"]?.length || 0) < 50) errors.push("very-long pool requires at least 50 words");
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateBossLongVocabulary(source) {
+  const words = Array.isArray(source?.words) ? source.words : [];
+  const errors = [];
+  const seen = new Set();
+  for (const [index, word] of words.entries()) {
+    if (typeof word !== "string") {
+      errors.push(`entry ${index}: missing word`);
+      continue;
+    }
+    if (!/^[a-z]{9,15}$/.test(word)) errors.push(`${word}: must be 9-15 lowercase ASCII letters`);
+    if (seen.has(word)) errors.push(`${word}: duplicate word`);
+    seen.add(word);
+  }
+  if (seen.size < 180) errors.push(`requires at least 180 unique words; found ${seen.size}`);
+  return { valid: errors.length === 0, errors, words: [...seen] };
 }
 
 export function getBossDifficultyProfile(level) {
@@ -97,97 +176,118 @@ export function getBossDifficultyProfile(level) {
   return profile ? { ...profile } : null;
 }
 
-export function normalizeBossVocabulary(source) {
-  if (Array.isArray(source?.words)) {
-    return source.words.map((entry) => (
-      typeof entry === "string"
-        ? { word: entry, tier: clamp(entry.length - 5, 1, 10) }
-        : { word: entry?.word, tier: entry?.tier }
-    ));
-  }
-  if (!source?.tiers || typeof source.tiers !== "object") return [];
-  return Object.entries(source.tiers).flatMap(([tier, words]) => (
-    Array.isArray(words)
-      ? words.map((word) => ({ word, tier: Number(tier) }))
-      : []
-  ));
-}
-
-export function validateBossVocabulary(source, { requireBucketMinimums = true } = {}) {
-  const entries = normalizeBossVocabulary(source);
-  const errors = [];
-  const seen = new Set();
-  for (const [index, entry] of entries.entries()) {
-    const label = typeof entry.word === "string" ? entry.word : `entry ${index}`;
-    if (typeof entry.word !== "string") {
-      errors.push(`${label}: missing word`);
-      continue;
-    }
-    if (!/^[a-z]+$/.test(entry.word)) errors.push(`${label}: must contain lowercase ASCII letters only`);
-    if (entry.word.length < 6 || entry.word.length > 20) {
-      errors.push(`${label}: length ${entry.word.length} is outside 6-20`);
-    }
-    if (!Number.isInteger(entry.tier) || entry.tier < 1 || entry.tier > 10) {
-      errors.push(`${label}: tier ${entry.tier} is outside 1-10`);
-    }
-    if (BOSS_BANNED_WORDS.has(entry.word)) errors.push(`${label}: banned boss word`);
-    if (seen.has(entry.word)) errors.push(`${label}: duplicate word`);
-    seen.add(entry.word);
-  }
-  const bucketCounts = BOSS_VOCABULARY_BUCKETS.map(({ min, max, minimum }) => {
-    const count = entries.filter(({ word }) => (
-      typeof word === "string" && word.length >= min && word.length <= max
-    )).length;
-    if (requireBucketMinimums && count < minimum) {
-      errors.push(`length ${min}-${max}: ${count} words; requires ${minimum}`);
-    }
-    return { min, max, minimum, count };
-  });
-  const lateGameCount = entries.filter(({ word }) => (
-    typeof word === "string" && word.length >= 11 && word.length <= 20
-  )).length;
-  if (requireBucketMinimums && lateGameCount < 220) {
-    errors.push(`late-game 11-20 pool: ${lateGameCount} words; requires at least 220`);
-  }
-  return {
-    valid: errors.length === 0,
-    errors,
-    entries: errors.length ? entries : entries.map((entry) => ({ ...entry })),
-    bucketCounts,
-    lateGameCount,
-  };
-}
-
-function stripCommonSuffix(word) {
-  for (const suffix of COMMON_SUFFIXES) {
-    if (word.endsWith(suffix) && word.length - suffix.length >= 6) {
-      return word.slice(0, -suffix.length);
-    }
-  }
-  return word;
+function rootKey(word) {
+  return word
+    .replace(/(ations|ation|ments|ment|ingly|ing|edly|ness|able|ible|ally|ly|ed|s)$/u, "")
+    .slice(0, 8);
 }
 
 export function areBossWordsRootSimilar(first, second) {
   if (first === second) return true;
-  if (
-    Math.abs(first.length - second.length) <= 4 &&
-    (first.startsWith(second) || second.startsWith(first))
-  ) {
-    return true;
-  }
-  if (first.length >= 8 && second.length >= 8 && first.slice(0, 8) === second.slice(0, 8)) {
-    return true;
-  }
-  return stripCommonSuffix(first) === stripCommonSuffix(second);
+  if (!first || !second) return false;
+  if (first.slice(0, 6) === second.slice(0, 6)) return true;
+  const firstRoot = rootKey(first);
+  const secondRoot = rootKey(second);
+  return firstRoot.length >= 6 && firstRoot === secondRoot;
 }
 
-function hasRootSimilarity(words) {
-  for (let first = 0; first < words.length; first += 1) {
-    for (let second = first + 1; second < words.length; second += 1) {
-      if (areBossWordsRootSimilar(words[first], words[second])) return true;
-    }
+function patternFromCounts(counts) {
+  return Object.entries(counts).flatMap(([tier, count]) => Array(count).fill(tier));
+}
+
+function hasVeryLongRun(pattern) {
+  let run = 0;
+  for (const tier of pattern) {
+    run = tier === BOSS_WORD_TIERS.VERY_LONG ? run + 1 : 0;
+    if (run > 2) return true;
   }
   return false;
+}
+
+export function getBossTierPattern({ bossLevel, segmentIndex, seed }) {
+  const counts = PATTERN_COUNTS[bossLevel];
+  if (!counts) return null;
+  const base = patternFromCounts(counts);
+  const tierSeed = domainSeed(seed, bossLevel, "boss-tier-pattern", segmentIndex);
+  const orderSeed = domainSeed(seed, bossLevel, "boss-segment-order", segmentIndex);
+  const seededBase = shuffleSeeded(base, tierSeed);
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const pattern = shuffleSeeded(seededBase, mixSeed(orderSeed, attempt + 1));
+    if (!hasVeryLongRun(pattern)) return Object.freeze(pattern);
+  }
+  return Object.freeze(base);
+}
+
+function segmentCharacterTargets(profile) {
+  const base = Math.floor(profile.targetCharacters / profile.segmentCount);
+  const remainder = profile.targetCharacters % profile.segmentCount;
+  return Array.from(
+    { length: profile.segmentCount },
+    (_, index) => base + (index >= profile.segmentCount - remainder ? 1 : 0),
+  );
+}
+
+function theoreticalRange(pattern) {
+  return pattern.reduce(
+    (range, tier) => ({
+      min: range.min + TIER_LIMITS[tier].min,
+      max: range.max + TIER_LIMITS[tier].max,
+    }),
+    { min: 0, max: 0 },
+  );
+}
+
+function selectSegmentWords({
+  pools,
+  pattern,
+  targetCharacters,
+  selectedWords,
+  level,
+  segmentIndex,
+  seed,
+  generationAttempt,
+}) {
+  const targetLetters = targetCharacters - (pattern.length - 1);
+  const selectionSeed = mixSeed(
+    domainSeed(seed, level, "boss-word-selection", segmentIndex),
+    domainSeed(generationAttempt, level, "boss-budget-adjustment", segmentIndex),
+  );
+  let visited = 0;
+
+  const search = (slot, letters, chosen) => {
+    visited += 1;
+    if (visited > 12000) return null;
+    if (slot >= pattern.length) return letters === targetLetters ? chosen : null;
+    const tier = pattern[slot];
+    const remainingPattern = pattern.slice(slot + 1);
+    const remainingRange = theoreticalRange(remainingPattern);
+    const candidates = shuffleSeeded(
+      pools[tier],
+      mixSeed(selectionSeed, Math.imul(slot + 1, 0x9e3779b9)),
+    ).filter(({ word }) => (
+      !selectedWords.has(word) &&
+      !chosen.some((entry) => entry.word === word) &&
+      !chosen.some((entry) => areBossWordsRootSimilar(entry.word, word))
+    ));
+    candidates.sort((first, second) => {
+      const firstRemaining = targetLetters - letters - first.word.length;
+      const secondRemaining = targetLetters - letters - second.word.length;
+      const ideal = remainingPattern.length
+        ? (remainingRange.min + remainingRange.max) / 2
+        : 0;
+      return Math.abs(firstRemaining - ideal) - Math.abs(secondRemaining - ideal);
+    });
+    for (const candidate of candidates.slice(0, 48)) {
+      const nextLetters = letters + candidate.word.length;
+      const required = targetLetters - nextLetters;
+      if (required < remainingRange.min || required > remainingRange.max) continue;
+      const result = search(slot + 1, nextLetters, [...chosen, candidate]);
+      if (result) return result;
+    }
+    return null;
+  };
+
+  return search(0, 0, []);
 }
 
 function orderedWords(segments) {
@@ -208,21 +308,10 @@ export function getBossEncounterMetrics(segments) {
   };
 }
 
-function sequenceLooksArtificial(words) {
-  for (let index = 1; index < words.length; index += 1) {
-    if (words[index - 1].slice(0, 4) === words[index].slice(0, 4)) return true;
-  }
-  let sameInitialRun = 1;
-  for (let index = 1; index < words.length; index += 1) {
-    sameInitialRun = words[index][0] === words[index - 1][0]
-      ? sameInitialRun + 1
-      : 1;
-    if (sameInitialRun > 3) return true;
-  }
-  const text = words.join("|");
-  const ascending = [...words].sort().join("|");
-  const descending = [...words].sort().reverse().join("|");
-  return words.length > 2 && (text === ascending || text === descending);
+function tierCounts(words) {
+  const counts = { short: 0, medium: 0, long: 0, "very-long": 0 };
+  for (const word of words) counts[getBossWordTier(word)] += 1;
+  return counts;
 }
 
 export function validateBossEncounter(segments, profile) {
@@ -231,120 +320,35 @@ export function validateBossEncounter(segments, profile) {
   if (!Array.isArray(segments) || segments.length !== profile.segmentCount) {
     errors.push(`expected ${profile.segmentCount} segments`);
   }
-  const safeSegments = Array.isArray(segments) ? segments : [];
-  const wordsBySegment = safeSegments.map((segment) => (
-    typeof segment === "string" ? segment.split(" ").filter(Boolean) : []
-  ));
+  const wordsBySegment = (Array.isArray(segments) ? segments : []).map(
+    (segment) => String(segment).split(" ").filter(Boolean),
+  );
   if (wordsBySegment.some((words) => words.length !== profile.wordsPerSegment)) {
     errors.push(`expected ${profile.wordsPerSegment} words per segment`);
   }
-  if (safeSegments.some((segment) => !segment)) errors.push("empty segment");
   const words = wordsBySegment.flat();
   if (words.length !== profile.totalWordCount) errors.push(`expected ${profile.totalWordCount} total words`);
   if (new Set(words).size !== words.length) errors.push("duplicate word");
-  const malformed = words.filter((word) => !/^[a-z]+$/.test(word));
-  if (malformed.length) errors.push(`malformed words: ${malformed.join(", ")}`);
-  const banned = words.filter((word) => BOSS_BANNED_WORDS.has(word));
-  if (banned.length) errors.push(`banned words: ${banned.join(", ")}`);
-  const undersized = words.filter((word) => word.length < profile.minimumWordLength);
-  if (undersized.length) errors.push(`undersized words: ${undersized.join(", ")}`);
-  const metrics = getBossEncounterMetrics(safeSegments);
-  if (metrics.averageSelectedWordLength + Number.EPSILON < profile.requiredAverageWordLength) {
-    errors.push(`average ${metrics.averageSelectedWordLength.toFixed(2)} below ${profile.requiredAverageWordLength}`);
+  if (words.some((word) => !getBossWordTier(word))) errors.push("invalid word");
+  for (const segmentWords of wordsBySegment) {
+    const tiers = segmentWords.map(getBossWordTier);
+    if (!tiers.includes(BOSS_WORD_TIERS.SHORT)) errors.push("segment missing short word");
+    if (!tiers.includes(BOSS_WORD_TIERS.MEDIUM)) errors.push("segment missing medium word");
+    if (hasVeryLongRun(tiers)) errors.push("more than two very-long words consecutively");
+    if (new Set(tiers).size < 2) errors.push("segment lacks tier variety");
+    if (profile.level >= 30 && !tiers.includes(BOSS_WORD_TIERS.LONG)) {
+      errors.push("later segment missing long word");
+    }
+    if (profile.level >= 50 && !tiers.includes(BOSS_WORD_TIERS.VERY_LONG)) {
+      errors.push("advanced segment missing very-long word");
+    }
   }
-  if (metrics.longestSelectedWord < profile.minimumLongestWord) {
-    errors.push(`longest ${metrics.longestSelectedWord} below ${profile.minimumLongestWord}`);
-  }
-  if (hasRootSimilarity(words)) errors.push("root-similar words");
-  if (sequenceLooksArtificial(words)) errors.push("repetitive or sorted-looking order");
+  const metrics = getBossEncounterMetrics(segments || []);
+  if (
+    metrics.totalRequiredCharacters < profile.minimumCharacters ||
+    metrics.totalRequiredCharacters > profile.maximumCharacters
+  ) errors.push(`characters ${metrics.totalRequiredCharacters} outside target range`);
   return { valid: errors.length === 0, errors, metrics };
-}
-
-function candidateFits(entry, selected) {
-  return selected.every((existing) => !areBossWordsRootSimilar(entry.word, existing.word));
-}
-
-function selectWords(entries, profile, seed, strongest = false) {
-  const eligible = entries.filter(({ word }) => (
-    typeof word === "string" &&
-    /^[a-z]+$/.test(word) &&
-    word.length >= profile.minimumWordLength &&
-    word.length <= 20 &&
-    !BOSS_BANNED_WORDS.has(word)
-  ));
-  const shuffled = shuffleSeeded(eligible, seed);
-  const selected = [];
-  const targetCharacters = Math.ceil(
-    profile.requiredAverageWordLength * profile.totalWordCount,
-  );
-  const longestTarget = Math.max(
-    profile.minimumLongestWord,
-    Math.ceil(profile.requiredAverageWordLength) + 1,
-  );
-
-  for (let slot = 0; slot < profile.totalWordCount; slot += 1) {
-    const remainingSlots = profile.totalWordCount - slot;
-    const currentCharacters = selected.reduce((sum, entry) => sum + entry.word.length, 0);
-    const idealLength = slot === 0
-      ? longestTarget
-      : clamp(Math.ceil((targetCharacters - currentCharacters) / remainingSlots), profile.minimumWordLength, 20);
-    const requiresLongest = slot === 0;
-    const options = shuffled.filter((entry) => (
-      !selected.some((existing) => existing.word === entry.word) &&
-      (!requiresLongest || entry.word.length >= profile.minimumLongestWord) &&
-      candidateFits(entry, selected)
-    ));
-    if (!options.length) return null;
-    options.sort((first, second) => {
-      if (strongest) return second.word.length - first.word.length;
-      const firstDistance = Math.abs(first.word.length - idealLength);
-      const secondDistance = Math.abs(second.word.length - idealLength);
-      const firstTierDistance = Math.abs(first.tier - profile.bossIndex);
-      const secondTierDistance = Math.abs(second.tier - profile.bossIndex);
-      return firstDistance - secondDistance || firstTierDistance - secondTierDistance;
-    });
-    selected.push(options[0]);
-  }
-  return selected;
-}
-
-function validateSelectedWordSet(selected, profile) {
-  if (!Array.isArray(selected) || selected.length !== profile.totalWordCount) return false;
-  const words = selected.map((entry) => entry?.word);
-  if (words.some((word) => typeof word !== "string" || !/^[a-z]+$/.test(word))) return false;
-  if (new Set(words).size !== words.length) return false;
-  if (words.some((word) => (
-    BOSS_BANNED_WORDS.has(word) || word.length < profile.minimumWordLength
-  ))) {
-    return false;
-  }
-  const totalCharacters = words.reduce((sum, word) => sum + word.length, 0);
-  if (totalCharacters / words.length + Number.EPSILON < profile.requiredAverageWordLength) {
-    return false;
-  }
-  if (Math.max(...words.map((word) => word.length)) < profile.minimumLongestWord) {
-    return false;
-  }
-  return !hasRootSimilarity(words);
-}
-
-function buildSegments(selected, profile, orderSeed, orderAttempt) {
-  const stageSeed = mixSeed(orderSeed, orderAttempt);
-  const independentlyShuffled = shuffleSeeded(selected, stageSeed);
-  const balanced = independentlyShuffled
-    .map((entry, orderIndex) => ({ entry, orderIndex }))
-    .sort((first, second) => (
-      second.entry.word.length - first.entry.word.length ||
-      first.orderIndex - second.orderIndex
-    ))
-    .map(({ entry }) => entry);
-  const segmentWords = Array.from({ length: profile.segmentCount }, () => []);
-  for (const [index, entry] of balanced.entries()) {
-    segmentWords[index % profile.segmentCount].push(entry.word);
-  }
-  return segmentWords.map((words, index) => (
-    shuffleSeeded(words, mixSeed(stageSeed, 0x9e3779b9 + index)).join(" ")
-  ));
 }
 
 export function calculateBossTiming(profileOrLevel, selectedSegments) {
@@ -359,10 +363,9 @@ export function calculateBossTiming(profileOrLevel, selectedSegments) {
   );
   const idealTypingSeconds = ((totalRequiredCharacters / 5) / profile.targetWPM) * 60;
   const transitionAllowanceSeconds = Math.max(0, profile.segmentCount - 1) * 0.35;
-  const effectiveTimeLimitSec = clamp(
-    idealTypingSeconds * 1.08 + transitionAllowanceSeconds,
+  const effectiveTimeLimitSec = Math.max(
     9,
-    50,
+    Math.min(50, idealTypingSeconds * 1.08 + transitionAllowanceSeconds),
   );
   return {
     totalRequiredCharacters,
@@ -374,55 +377,117 @@ export function calculateBossTiming(profileOrLevel, selectedSegments) {
   };
 }
 
-function createEncounterResult(profile, segments, generationAttempt, fallbackUsed) {
+const FALLBACK_TYPING_WORDS = Object.freeze([
+  "act", "air", "ask", "back", "ball", "bank", "best", "bird", "blue", "boat",
+  "book", "bring", "build", "care", "carry", "chair", "change", "check", "child",
+  "city", "clean", "clear", "close", "cloud", "color", "common", "complete",
+  "country", "course", "create", "decide", "develop", "different", "dinner",
+  "direct", "dream", "drive", "early", "earth", "effect", "energy", "enough",
+  "example", "family", "father", "field", "flower", "follow", "forest", "friend",
+  "future", "garden", "great", "ground", "group", "happen", "heart", "history",
+  "holiday", "important", "inside", "island", "language", "learn", "letter",
+  "light", "little", "market", "minute", "modern", "moment", "morning", "mother",
+  "mountain", "nature", "notice", "number", "people", "perhaps", "person",
+  "picture", "possible", "problem", "question", "reason", "remember", "school",
+  "second", "sentence", "several", "simple", "sister", "something", "special",
+  "station", "straight", "strong", "summer", "teacher", "thought", "together",
+  "tomorrow", "travel", "weather", "window", "winter", "without", "wonder",
+]);
+
+const FALLBACK_LONG_WORDS = Object.freeze([
+  "adventure", "agreement", "attention", "beautiful", "breakfast", "challenge",
+  "character", "community", "connection", "conversation", "dangerous", "decision",
+  "different", "direction", "education", "equipment", "especially", "experience",
+  "financial", "following", "friendly", "government", "happiness", "important",
+  "information", "interesting", "knowledge", "leadership", "management", "meaningful",
+  "necessary", "opportunity", "organization", "particular", "performance", "personal",
+  "population", "practical", "production", "professional", "relationship", "restaurant",
+  "successful", "temperature", "traditional", "understand", "wonderful", "achievement",
+  "advertising", "appointment", "celebration", "comfortable", "communication",
+  "competition", "confidence", "construction", "department", "description",
+  "development", "discussion", "environment", "everything", "explanation",
+  "friendship", "immediately", "improvement", "independent", "individual",
+  "international", "introduction", "investment", "invitation", "partnership",
+  "personality", "preparation", "presentation", "prevention", "responsibility",
+  "technology", "themselves", "throughout", "understanding", "university",
+]);
+
+export const EMERGENCY_BOSS_WORDS = Object.freeze([
+  ...FALLBACK_TYPING_WORDS,
+  ...FALLBACK_LONG_WORDS,
+]);
+
+function normalizePools(source) {
+  if (source?.pools) return source.pools;
+  return buildBossWordPools({
+    typingWords: source?.typingWords || FALLBACK_TYPING_WORDS,
+    longWords: source?.longWords || FALLBACK_LONG_WORDS,
+  });
+}
+
+function createEncounter(profile, pools, attemptSeed, generationAttempt, fallbackUsed) {
+  const targets = segmentCharacterTargets(profile);
+  const used = new Set();
+  const entriesBySegment = [];
+  const tierPatterns = [];
+  for (let segmentIndex = 0; segmentIndex < profile.segmentCount; segmentIndex += 1) {
+    const pattern = getBossTierPattern({
+      bossLevel: profile.level,
+      segmentIndex,
+      seed: mixSeed(attemptSeed, generationAttempt),
+      generationAttempt,
+    });
+    const entries = selectSegmentWords({
+      pools,
+      pattern,
+      targetCharacters: targets[segmentIndex],
+      selectedWords: used,
+      level: profile.level,
+      segmentIndex,
+      seed: mixSeed(attemptSeed, generationAttempt),
+    });
+    if (!entries) return null;
+    entries.forEach(({ word }) => used.add(word));
+    entriesBySegment.push(entries);
+    tierPatterns.push(pattern);
+  }
+  const segments = entriesBySegment.map((entries) => entries.map(({ word }) => word).join(" "));
   const validation = validateBossEncounter(segments, profile);
   if (!validation.valid) return null;
-  const timing = calculateBossTiming(profile, segments);
+  const flatEntries = entriesBySegment.flat();
   return {
     profile: { ...profile },
     segments,
     words: validation.metrics.words,
+    wordSources: flatEntries.map(({ source }) => source),
+    tierPatterns: tierPatterns.map((pattern) => [...pattern]),
+    tierCounts: tierCounts(validation.metrics.words),
+    targetSegmentCharacters: targets,
     generationAttempt,
     fallbackUsed,
     metrics: validation.metrics,
-    timing,
+    timing: calculateBossTiming(profile, segments),
   };
 }
 
 export function generateBossEncounter(source, level, attemptSeed) {
   const profile = getBossDifficultyProfile(level);
   if (!profile) return null;
-  const normalized = normalizeBossVocabulary(source);
-  const entries = normalized.length ? normalized : EMERGENCY_BOSS_WORDS;
-  const orderSeed = deriveBossWordOrderSeed(attemptSeed, level);
-  for (let generationAttempt = 1; generationAttempt <= MAX_BOSS_GENERATION_ATTEMPTS; generationAttempt += 1) {
-    const seed = mixSeed(
-      attemptSeed,
-      Math.imul(level, 104729) ^ Math.imul(generationAttempt, 0x45d9f3b),
-    );
-    const selected = selectWords(entries, profile, seed);
-    if (!selected || !validateSelectedWordSet(selected, profile)) continue;
-    const segments = buildSegments(selected, profile, orderSeed, generationAttempt);
-    const encounter = createEncounterResult(profile, segments, generationAttempt, false);
-    if (encounter) return encounter;
-  }
-
-  const fallbackEntries = [...entries, ...EMERGENCY_BOSS_WORDS]
-    .filter((entry, index, all) => all.findIndex((item) => item.word === entry.word) === index);
-  for (let fallbackAttempt = 1; fallbackAttempt <= MAX_BOSS_GENERATION_ATTEMPTS; fallbackAttempt += 1) {
-    const seed = mixSeed(attemptSeed, 0xf411ba11 ^ Math.imul(level, fallbackAttempt));
-    const selected = selectWords(fallbackEntries, profile, seed, fallbackAttempt === 1);
-    if (!selected || !validateSelectedWordSet(selected, profile)) continue;
-    const encounter = createEncounterResult(
+  const pools = normalizePools(source);
+  const validation = validateBossWordPools(pools);
+  const primaryPools = validation.valid
+    ? pools
+    : buildBossWordPools({
+      typingWords: FALLBACK_TYPING_WORDS,
+      longWords: FALLBACK_LONG_WORDS,
+    });
+  for (let attempt = 1; attempt <= MAX_BOSS_GENERATION_ATTEMPTS; attempt += 1) {
+    const encounter = createEncounter(
       profile,
-      buildSegments(
-        selected,
-        profile,
-        orderSeed,
-        MAX_BOSS_GENERATION_ATTEMPTS + fallbackAttempt,
-      ),
-      MAX_BOSS_GENERATION_ATTEMPTS + fallbackAttempt,
-      true,
+      primaryPools,
+      attemptSeed,
+      attempt,
+      !validation.valid,
     );
     if (encounter) return encounter;
   }

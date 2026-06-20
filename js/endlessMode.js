@@ -3,12 +3,7 @@ import { ENDLESS_CONFIG, isStandardEndlessConfiguration } from "./endlessConfig.
 import {
   estimateRequiredWpm,
   getEndlessDifficulty,
-  getEndlessQuickFingersInterval,
 } from "./endlessDifficulty.js";
-import {
-  getEndlessModifierForStage,
-  getNextEndlessModifierStage,
-} from "./endlessModifiers.js";
 import {
   calculateEndlessScore,
   calculateEndlessStageBonus,
@@ -16,11 +11,6 @@ import {
   calculateEndlessWordPoints,
 } from "./endlessScoring.js";
 import { createEndlessWordGenerator } from "./endlessWords.js";
-import {
-  BLACKOUT_ID,
-  getBlackoutVisibility,
-  QUICK_FINGERS_ID,
-} from "./modifiers.js";
 import { handleGameplayKey, reconcileTargetingState, resetTargetingState } from "./input.js";
 import {
   clearWordElements,
@@ -66,38 +56,11 @@ function createTargetingState() {
   };
 }
 
-function activateBlackout(game) {
-  game.blackoutStats = { wordsHidden: 0, hiddenWordsCompleted: 0, wordsMissedAfterFade: 0 };
-  for (const word of game.words) {
-    Object.assign(word, {
-      spawnedAtActiveMs: game.elapsedMs,
-      blackoutPhase: "visible",
-      blackoutTextOpacity: 1,
-      blackoutHidden: false,
-      blackoutHiddenCounted: false,
-      blackoutMissedAfterFadeCounted: false,
-    });
-  }
-}
-
-function revealBlackout(game) {
-  for (const word of game.words) {
-    Object.assign(word, {
-      blackoutPhase: "visible",
-      blackoutTextOpacity: 1,
-      blackoutHidden: false,
-    });
-  }
-  delete game.blackoutStats;
-}
-
 export function createEndlessRuntime({
   seed,
   vocabulary,
   startStage = 1,
   maximumStages = null,
-  modifierSchedule = null,
-  forcedModifier = null,
   recordEligible = true,
   developerMode = false,
 } = {}) {
@@ -105,21 +68,12 @@ export function createEndlessRuntime({
   const runtimeConfig = {
     startStage: safeStage,
     maximumStages: Number.isInteger(maximumStages) && maximumStages > 0 ? maximumStages : null,
-    modifierSchedule,
-    forcedModifier,
     recordEligible,
   };
   const eligible = isStandardEndlessConfiguration(runtimeConfig, developerMode);
-  const modifier = forcedModifier || getEndlessModifierForStage({
-    stage: safeStage,
-    seed,
-  });
   const game = {
     mode: "endless",
-    config: {
-      ...runtimeConfig,
-      modifiers: modifier ? [modifier] : [],
-    },
+    config: runtimeConfig,
     attemptSeed: seed,
     developerMode,
     recordEligible: eligible,
@@ -136,12 +90,9 @@ export function createEndlessRuntime({
     wordGenerator: createEndlessWordGenerator(vocabulary, seed),
     difficulty: getEndlessDifficulty(safeStage),
     phase: "ACTIVE",
-    activeModifier: modifier,
-    previousModifier: null,
-    modifiersSurvived: 0,
     transitionSpawnUntilMs: 0,
-    bannerUntilMs: modifier ? ENDLESS_CONFIG.modifierBannerMs : 0,
-    bannerText: modifier ? `STAGE ${safeStage} // MODIFIER INCOMING` : "",
+    bannerUntilMs: 0,
+    bannerText: "",
     lastSpawnAtMs: -ENDLESS_CONFIG.initialSpawnIntervalMs,
     elapsedMs: 0,
     lastTimestamp: null,
@@ -163,11 +114,6 @@ export function createEndlessRuntime({
     correctCharacters: 0,
     completedWordCount: 0,
     missedWordCount: 0,
-    abandonedWordCount: 0,
-    abandonedCharacters: 0,
-    blackoutStats: modifier === BLACKOUT_ID
-      ? { wordsHidden: 0, hiddenWordsCompleted: 0, wordsMissedAfterFade: 0 }
-      : undefined,
     activeTargetId: null,
     targetingState: createTargetingState(),
     rollingEvents: [],
@@ -219,23 +165,11 @@ function spawnWord(game, size) {
     movementSpeed: speed,
     createdAt: game.elapsedMs,
     startedAt: null,
-    abandoned: false,
-    abandonedAt: null,
     missedCharactersRecorded: false,
     coreArrivalProcessed: false,
     separationX: 0,
     separationY: 0,
   };
-  if (game.activeModifier === BLACKOUT_ID) {
-    Object.assign(word, {
-      spawnedAtActiveMs: game.elapsedMs,
-      blackoutPhase: "visible",
-      blackoutTextOpacity: 1,
-      blackoutHidden: false,
-      blackoutHiddenCounted: false,
-      blackoutMissedAfterFadeCounted: false,
-    });
-  }
   game.generatedWordCount += 1;
   game.words.push(word);
   createWordElement(word);
@@ -260,14 +194,6 @@ function updateRollingWpm(game) {
   }
 }
 
-function setStageModifier(game, nextModifier) {
-  if (game.activeModifier === BLACKOUT_ID && nextModifier !== BLACKOUT_ID) revealBlackout(game);
-  if (game.activeModifier) game.previousModifier = game.activeModifier;
-  game.activeModifier = nextModifier;
-  game.config.modifiers = nextModifier ? [nextModifier] : [];
-  if (nextModifier === BLACKOUT_ID) activateBlackout(game);
-}
-
 function advanceEndlessStage(game) {
   if (
     game.stageWordsCompleted < ENDLESS_CONFIG.wordsPerStage ||
@@ -276,7 +202,6 @@ function advanceEndlessStage(game) {
     return false;
   }
   const completedStage = game.stage;
-  if (game.activeModifier) game.modifiersSurvived += 1;
   game.completedStages += 1;
   game.accumulatedStageBonusPoints += calculateEndlessStageBonus(completedStage);
   game.stage += 1;
@@ -284,17 +209,9 @@ function advanceEndlessStage(game) {
   game.stageWordsCompleted = 0;
   game.wordGenerator.resetStage(game.stage);
   game.difficulty = getEndlessDifficulty(game.stage);
-  const nextModifier = game.config.forcedModifier || getEndlessModifierForStage({
-    stage: game.stage,
-    seed: game.attemptSeed,
-    previousModifier: game.previousModifier || game.activeModifier,
-  });
-  setStageModifier(game, nextModifier);
   game.transitionSpawnUntilMs = game.elapsedMs + ENDLESS_CONFIG.spawnPauseMs;
   game.bannerUntilMs = game.elapsedMs + ENDLESS_CONFIG.stageBannerMs;
-  game.bannerText = nextModifier
-    ? `STAGE ${game.stage} // MODIFIER INCOMING // ${nextModifier}`
-    : `STAGE ${game.stage}`;
+  game.bannerText = `STAGE ${game.stage}`;
   return true;
 }
 
@@ -353,7 +270,6 @@ export function handleEndlessKey(event, game = currentEndless) {
   if (!game || game.ended) return false;
   const beforeTotal = game.totalKeystrokes;
   const beforeCorrect = game.correctKeystrokes;
-  const beforeAbandoned = game.abandonedWordCount;
   const beforeTargetingMode = game.targetingState?.mode || "idle";
   const handled = handleGameplayKey(
     event,
@@ -369,10 +285,6 @@ export function handleEndlessKey(event, game = currentEndless) {
     game.currentPerfectStreak = 0;
     game.currentWordHadError = beforeTargetingMode !== "idle";
   }
-  if (game.abandonedWordCount > beforeAbandoned) {
-    game.currentWordHadError = true;
-    game.currentPerfectStreak = 0;
-  }
   game.score = calculateEndlessScore(
     game.elapsedMs,
     game.accumulatedWordPoints,
@@ -380,20 +292,6 @@ export function handleEndlessKey(event, game = currentEndless) {
   );
   callbacks.onUpdate?.(game);
   return handled;
-}
-
-function updateBlackout(game, word) {
-  if (game.activeModifier !== BLACKOUT_ID) return;
-  const visibility = getBlackoutVisibility(game.elapsedMs - word.spawnedAtActiveMs);
-  Object.assign(word, {
-    blackoutPhase: visibility.phase,
-    blackoutTextOpacity: visibility.textOpacity,
-    blackoutHidden: visibility.hidden,
-  });
-  if (visibility.hidden && !word.blackoutHiddenCounted) {
-    word.blackoutHiddenCounted = true;
-    game.blackoutStats.wordsHidden += 1;
-  }
 }
 
 function buildEndlessResult(game) {
@@ -453,7 +351,6 @@ function buildEndlessResult(game) {
       survivalTimeMs: game.elapsedMs,
       coreHits: game.coreHits,
       coreBreaches: game.coreBreaches,
-      modifiersSurvived: game.modifiersSurvived,
       maximumCombo: game.maxCombo,
       maximumPerfectStreak: game.maximumPerfectStreak,
       averageWpm,
@@ -513,19 +410,15 @@ function tick(timestamp) {
     animationFrameId = requestAnimationFrame(tick);
     return;
   }
-  const spawnInterval = game.activeModifier === QUICK_FINGERS_ID
-    ? getEndlessQuickFingersInterval(game.stage)
-    : game.difficulty.spawnIntervalMs;
   if (
     game.elapsedMs >= game.transitionSpawnUntilMs &&
-    game.elapsedMs - game.lastSpawnAtMs >= spawnInterval
+    game.elapsedMs - game.lastSpawnAtMs >= game.difficulty.spawnIntervalMs
   ) {
     spawnWord(game, size);
     game.lastSpawnAtMs = game.elapsedMs;
   }
   const seconds = deltaMs / 1000;
   for (const word of [...game.words]) {
-    updateBlackout(game, word);
     word.x += word.vx * seconds;
     word.y += word.vy * seconds;
     if (Math.hypot(word.x - game.coreX, word.y - game.coreY) <= 42) {
@@ -566,8 +459,6 @@ export function startEndlessRun(options = {}) {
     config: {
       startStage: game.config.startStage,
       maximumStages: game.config.maximumStages,
-      modifierSchedule: game.config.modifierSchedule,
-      forcedModifier: game.config.forcedModifier,
       recordEligible: game.recordEligible,
     },
   });
@@ -635,13 +526,9 @@ export function getEndlessDiagnosticText(game = currentEndless) {
     `TARGET AVG=${game.difficulty.targetAverageLength}`,
     `REQUIRED WPM=${estimateRequiredWpm({
       targetAverageWordLength: game.difficulty.targetAverageLength,
-      spawnIntervalMs: game.activeModifier === QUICK_FINGERS_ID
-        ? getEndlessQuickFingersInterval(game.stage)
-        : game.difficulty.spawnIntervalMs,
+      spawnIntervalMs: game.difficulty.spawnIntervalMs,
     }).toFixed(1)}`,
     `WEIGHTS=${JSON.stringify(game.difficulty.vocabularyWeights)}`,
-    `MODIFIER=${game.activeModifier || "none"}`,
-    `NEXT MODIFIER=${getNextEndlessModifierStage(game.stage)}`,
     `IMMUNITY=${Math.max(0, game.immunityUntilMs - game.elapsedMs)}ms`,
     `GENERATED=${game.generatedWordCount}`,
     `RECENT=${game.wordGenerator.recentWords.length}`,

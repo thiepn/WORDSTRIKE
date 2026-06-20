@@ -6,17 +6,6 @@ import {
 } from "./levelGenerator.js";
 import { getCampaignDifficultyLevel } from "./campaignDifficulty.js";
 import { generateBossEncounter } from "./bossGenerator.js";
-import {
-  BLACKOUT_FADE_MS,
-  BLACKOUT_ID,
-  BLACKOUT_VISIBLE_MS,
-  CHAIN_BREAK_CAUSES,
-  CHAIN_ID,
-  getModifierById,
-  getModifiersForLevel,
-  NO_BACKSPACE_ID,
-  QUICK_FINGERS_ID,
-} from "./modifiers.js";
 import { getSessionDiagnosticText } from "./campaignSession.js";
 import {
   getSpeedTestConfigsByType,
@@ -135,7 +124,6 @@ export function renderEndlessShell(game, devMode = false) {
           <span id="endless-progress">${game.stageWordsCompleted} / ${ENDLESS_CONFIG.wordsPerStage}</span></div>
         <div>SCORE <strong id="endless-score">0</strong></div>
         <div>CORE <strong class="endless-integrity" id="endless-integrity">${"◇".repeat(game.integrity)}</strong></div>
-        <span class="endless-modifier-label" id="endless-modifier">${game.activeModifier ? getModifierById(game.activeModifier)?.name.toUpperCase() : ""}</span>
       </header>
       ${devMode ? `<aside class="dev-runtime-panel" id="dev-runtime-panel">${getEndlessDiagnosticText(game)}</aside>` : ""}
       <div class="play-area" id="play-area">
@@ -151,9 +139,6 @@ export function updateEndlessHud(game) {
     "#endless-progress": `${game.stageWordsCompleted} / ${ENDLESS_CONFIG.wordsPerStage}`,
     "#endless-score": game.score.toLocaleString(),
     "#endless-integrity": "◇".repeat(Math.max(0, game.integrity)),
-    "#endless-modifier": game.activeModifier
-      ? getModifierById(game.activeModifier)?.name.toUpperCase() || ""
-      : "",
   };
   for (const [selector, value] of Object.entries(values)) {
     const element = document.querySelector(selector);
@@ -451,12 +436,7 @@ export function renderSpeedTestResults(result, recordFlags, selectedIndex, handl
   });
 }
 
-function renderDevPanel(
-  selectedLevel,
-  bossWordBank,
-  forcedModifierId,
-  developerSeed,
-) {
+function renderDevPanel(selectedLevel, bossWordBank, developerSeed) {
   const isBoss = selectedLevel % 10 === 0;
   const config = isBoss ? generateBossLevel(selectedLevel) : generateLevel(selectedLevel);
   const legacyConfig = isBoss ? null : generateLegacyLevel(selectedLevel);
@@ -473,10 +453,15 @@ function renderDevPanel(
       ["segmentCount", config.segmentCount],
       ["wordsPerSegment", config.wordsPerSegment],
       ["totalWordCount", config.totalWordCount],
-      ["minimumWordLength", config.minimumWordLength],
-      ["requiredAverageWordLength", config.requiredAverageWordLength],
-      ["minimumLongestWord", config.minimumLongestWord],
       ["attemptSeed", previewSeed],
+      ["tierPatterns", encounter.tierPatterns.join(" | ")],
+      ["wordSources", encounter.wordSources.join(", ")],
+      ["shortCount", encounter.tierCounts.short],
+      ["mediumCount", encounter.tierCounts.medium],
+      ["longCount", encounter.tierCounts.long],
+      ["veryLongCount", encounter.tierCounts["very-long"]],
+      ["targetCharacters", config.targetCharacters],
+      ["targetRange", `${config.minimumCharacters}-${config.maximumCharacters}`],
       ["minimumSelectedWordLength", encounter.metrics.minimumSelectedWordLength],
       ["averageSelectedWordLength", encounter.metrics.averageSelectedWordLength.toFixed(2)],
       ["longestSelectedWord", encounter.metrics.longestSelectedWord],
@@ -507,11 +492,7 @@ function renderDevPanel(
       ["lives", config.lives],
       ["targetWPM", config.targetWPM],
       ["world", config.world],
-      ["modifier", config.modifiers.join(", ") || "none"],
       ["attemptSeed", previewSeed],
-      ["forcedModifier", forcedModifierId && !isBoss ? forcedModifierId : "none"],
-      ["blackoutVisibleMs", BLACKOUT_VISIBLE_MS],
-      ["blackoutFadeMs", BLACKOUT_FADE_MS],
     ];
   return `
     <aside class="dev-panel" aria-label="Developer level controls">
@@ -524,21 +505,6 @@ function renderDevPanel(
         <div class="dev-quick-buttons">
           ${[10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 22, 42, 62, 82, 99].map((level) => `<button type="button" data-dev-level="${level}">${level}</button>`).join("")}
         </div>
-        <div class="dev-force-options">
-          <button type="button" class="dev-force-button ${forcedModifierId === QUICK_FINGERS_ID ? "active" : ""}" data-force-modifier="${QUICK_FINGERS_ID}" ${isBoss ? "disabled" : ""}>
-            FORCE QUICK
-          </button>
-          <button type="button" class="dev-force-button ${forcedModifierId === NO_BACKSPACE_ID ? "active" : ""}" data-force-modifier="${NO_BACKSPACE_ID}" ${isBoss ? "disabled" : ""}>
-            FORCE NO BACKSPACE
-          </button>
-          <button type="button" class="dev-force-button ${forcedModifierId === BLACKOUT_ID ? "active" : ""}" data-force-modifier="${BLACKOUT_ID}" ${isBoss ? "disabled" : ""}>
-            FORCE BLACKOUT
-          </button>
-          <button type="button" class="dev-force-button ${forcedModifierId === CHAIN_ID ? "active" : ""}" data-force-modifier="${CHAIN_ID}" ${isBoss ? "disabled" : ""}>
-            FORCE CHAIN
-          </button>
-        </div>
-        ${forcedModifierId && !isBoss ? `<span class="forced-modifier-label">FORCED MODIFIER: ${getModifierById(forcedModifierId)?.name.toUpperCase()}</span>` : ""}
       </div>
       <div>
         <dl class="dev-config">
@@ -560,39 +526,20 @@ export function renderLevelSelect(
   selectedLevel,
   devMode,
   bossWordBank,
-  forcedModifierId,
   developerSeed,
   handlers,
 ) {
-  const selectedModifiers = getModifiersForLevel(selectedLevel);
-  if (
-    [QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID, CHAIN_ID].includes(forcedModifierId) &&
-    selectedLevel % 10 !== 0 &&
-    !selectedModifiers.includes(forcedModifierId)
-  ) {
-    selectedModifiers.splice(0, selectedModifiers.length, forcedModifierId);
-  }
-  const selectedModifier = getModifierById(selectedModifiers[0]);
   const tiles = Array.from({ length: 100 }, (_, index) => {
     const level = index + 1;
     const locked = level > save.currentFurthestLevel;
     const result = save.levels[String(level)];
     const boss = level % 10 === 0;
-    const modifiers = getModifiersForLevel(level);
-    const quickFingers = modifiers.includes(QUICK_FINGERS_ID);
-    const noBackspace = modifiers.includes(NO_BACKSPACE_ID);
-    const blackout = modifiers.includes(BLACKOUT_ID);
-    const chain = modifiers.includes(CHAIN_ID);
     return `
       <button class="level-tile ${locked ? "locked" : ""} ${locked && devMode ? "dev-access" : ""} ${boss ? "boss" : ""} ${level === selectedLevel ? "selected" : ""}"
         data-level="${level}" ${locked && !devMode ? "disabled" : ""}>
         <span class="level-number">${String(level).padStart(2, "0")}</span>
         <span class="level-grade">${result?.grade || (locked ? "LOCKED" : "READY")}</span>
         ${boss ? '<span class="boss-mark">◆ BOSS</span>' : ""}
-        ${quickFingers ? '<span class="modifier-mark" title="Quick Fingers">Q</span>' : ""}
-        ${noBackspace ? '<span class="modifier-mark no-backspace" title="No Backspace">NB</span>' : ""}
-        ${blackout ? '<span class="modifier-mark blackout" title="Blackout">BLK</span>' : ""}
-        ${chain ? '<span class="modifier-mark chain" title="Chain">CH</span>' : ""}
       </button>`;
   }).join("");
   app().innerHTML = `
@@ -605,12 +552,10 @@ export function renderLevelSelect(
         ${menuButton("BACK", "back")}
       </header>
       ${devMode
-    ? renderDevPanel(selectedLevel, bossWordBank, forcedModifierId, developerSeed)
+    ? renderDevPanel(selectedLevel, bossWordBank, developerSeed)
     : ""}
-      <div class="level-detail ${selectedModifier ? "has-modifier" : ""}">
-        ${selectedModifier
-    ? `<strong>${selectedModifier.name}</strong><span>${selectedModifier.description}</span>`
-    : "<span>No normal-level modifier assigned.</span>"}
+      <div class="level-detail">
+        <span>Type every incoming word before it reaches the core.</span>
       </div>
       <div class="level-grid-scroll">
         <div class="level-grid" id="level-grid">${tiles}</div>
@@ -633,11 +578,6 @@ export function renderLevelSelect(
       if (event.key === "Enter") launchInputLevel();
     };
     app().querySelector('[data-dev-action="launch"]').onclick = launchInputLevel;
-    app().querySelectorAll("[data-force-modifier]").forEach((button) => {
-      if (!button.disabled) {
-        button.onclick = () => handlers.devForceModifier(button.dataset.forceModifier);
-      }
-    });
     app().querySelectorAll("[data-dev-level]").forEach((button) => {
       button.onclick = () => handlers.devLaunch(Number(button.dataset.devLevel));
     });
@@ -663,17 +603,10 @@ export function renderGameplayShell(
   lives,
   config,
   devMode = false,
-  forcedModifier = false,
   attempt = {},
 ) {
-  const quickFingers = config.modifiers?.includes(QUICK_FINGERS_ID);
-  const noBackspace = config.modifiers?.includes(NO_BACKSPACE_ID);
-  const blackout = config.modifiers?.includes(BLACKOUT_ID);
-  const chain = config.modifiers?.includes(CHAIN_ID);
-  const hasModifier = quickFingers || noBackspace || blackout || chain;
-  const modifier = getModifierById(config.modifiers?.[0]);
   app().innerHTML = `
-    <section class="screen game-screen ${hasModifier ? "has-modifier" : ""} ${noBackspace ? "no-backspace-mode" : ""} ${blackout ? "blackout-mode" : ""} ${chain ? "chain-mode" : ""}">
+    <section class="screen game-screen">
       <header class="hud">
         <div>
           <span class="micro-label">Level</span>
@@ -682,8 +615,8 @@ export function renderGameplayShell(
           <span>&nbsp; ACC <span class="hud-value" id="hud-accuracy">100%</span></span>
         </div>
         <div class="hud-center">
-          <span class="micro-label">${chain ? "Chain integrity" : "Core integrity"}</span><br>
-          <span class="${chain ? "chain-integrity" : "lives"}" id="hud-lives">${chain ? "◇ INTACT" : "◆".repeat(lives)}</span>
+          <span class="micro-label">Core integrity</span><br>
+          <span class="lives" id="hud-lives">${"◆".repeat(lives)}</span>
         </div>
         <div class="hud-right">
           <span class="micro-label">Score</span>
@@ -691,20 +624,6 @@ export function renderGameplayShell(
           <span>COMBO <span class="hud-value" id="hud-combo">x1.0</span></span>
         </div>
       </header>
-      ${hasModifier ? `
-        <div class="modifier-hud ${noBackspace ? "no-backspace" : ""} ${blackout ? "blackout" : ""} ${chain ? "chain" : ""}" id="modifier-hud">
-          <strong>${modifier.name.toUpperCase()}${forcedModifier ? " // FORCED MODIFIER" : ""}</strong>
-          <span id="modifier-phase">${quickFingers
-    ? "BRIEFING"
-    : blackout
-      ? "MEMORIZE THE WORDS"
-      : chain
-        ? "ZERO MISTAKES ALLOWED"
-        : "ZERO RECOVERY"}</span>
-          ${noBackspace ? '<span id="abandoned-count">LOST WORDS: 0</span>' : ""}
-          ${blackout ? '<span id="blackout-counts">VISIBLE 0 // FADING 0 // HIDDEN 0</span>' : ""}
-          ${devMode ? '<small id="modifier-runtime-details"></small>' : ""}
-        </div>` : ""}
       ${devMode ? `
         <aside class="dev-runtime-panel" id="dev-runtime-panel">
           actual=${levelNumber} // boss=${config.isBoss === true}
@@ -715,25 +634,12 @@ export function renderGameplayShell(
           // range=${config.minWordLength}-${config.maxWordLength}
           // avg=${Number(config.targetAverageWordLength).toFixed(2)}
           // tier=${config.wordTier}
-          // modifier=${config.modifiers?.join(",") || "none"}
           // seed=${attempt.attemptSeed} // selected=${attempt.selectedWords?.join(",")}
           // queue=${attempt.spawnQueue?.join(",")} // ${getSessionDiagnosticText()}
         </aside>` : ""}
       <div class="play-area" id="play-area">
         <div class="core" aria-label="Central core"></div>
       </div>
-      ${hasModifier ? `
-        <div class="modifier-briefing" id="modifier-briefing">
-          <span>MODIFIER DETECTED</span>
-          <strong>${modifier.name.toUpperCase()}</strong>
-          ${quickFingers
-    ? "<p>SPAWN RATE SURGES IN BURSTS</p>"
-    : noBackspace
-      ? "<p>ONE WRONG KEY CORRUPTS THE TARGET<br>CORRUPTED WORDS CANNOT BE RECOVERED</p>"
-      : blackout
-        ? "<p>WORDS VANISH AFTER TWO SECONDS<br>REMEMBER THEM BEFORE THEY DISAPPEAR</p>"
-        : "<p>ONE MISTAKE ENDS THE RUN<br>KEEP THE CHAIN ALIVE</p>"}
-        </div>` : ""}
     </section>`;
 }
 
@@ -748,118 +654,13 @@ export function updateHud(game) {
   const values = {
     "#hud-wpm": Math.round(wpm),
     "#hud-accuracy": `${accuracy.toFixed(0)}%`,
-    "#hud-lives": game.chainRuntime
-      ? game.chainRuntime.broken ? "◇ BROKEN" : "◇ INTACT"
-      : "◆".repeat(Math.max(0, game.lives)),
+    "#hud-lives": "◆".repeat(Math.max(0, game.lives)),
     "#hud-score": game.score.toLocaleString(),
     "#hud-combo": `x${multiplier.toFixed(1)}`,
   };
   for (const [selector, value] of Object.entries(values)) {
     const element = document.querySelector(selector);
     if (element) element.textContent = value;
-  }
-  const briefing = document.querySelector("#modifier-briefing");
-  if (briefing) briefing.hidden = game.phase !== "MODIFIER_BRIEFING";
-  const runtime = game.modifierRuntime?.quickFingers;
-  const modifierHud = document.querySelector("#modifier-hud");
-  if (runtime && modifierHud) {
-    const seconds = (runtime.remainingMs / 1000).toFixed(1);
-    const phaseText = runtime.phase === "complete"
-      ? "SPAWN SURGES COMPLETE"
-      : runtime.active
-        ? "BURST ACTIVE"
-        : `BURST IN ${seconds}s`;
-    const phaseElement = document.querySelector("#modifier-phase");
-    if (phaseElement) {
-      phaseElement.textContent = game.phase === "MODIFIER_BRIEFING"
-        ? "BRIEFING"
-        : phaseText;
-    }
-    modifierHud.classList.toggle("active", runtime.active);
-    modifierHud.classList.toggle(
-      "imminent",
-      !runtime.active && runtime.remainingMs <= 1000,
-    );
-    const details = document.querySelector("#modifier-runtime-details");
-    if (details) {
-      details.textContent = [
-        `phase=${runtime.phase}`,
-        `transition=${seconds}s`,
-        `bursts=${runtime.burstCount}`,
-        `base=${game.config.spawnIntervalMs}ms`,
-        `effective=${runtime.effectiveSpawnIntervalMs}ms`,
-        `active=${game.words.length}/${game.config.maxSimultaneousWords}`,
-      ].join(" // ");
-    }
-  }
-  if (game.config.modifiers?.includes(NO_BACKSPACE_ID) && modifierHud) {
-    const count = document.querySelector("#abandoned-count");
-    if (count) count.textContent = `LOST WORDS: ${game.abandonedWordCount}`;
-    const details = document.querySelector("#modifier-runtime-details");
-    if (details) {
-      const target = game.words.find((word) => word.id === game.activeTargetId);
-      const recoverable = game.words.filter((word) => !word.abandoned).length;
-      details.textContent = [
-        `target=${game.activeTargetId ?? "none"}`,
-        `targetAbandoned=${target?.abandoned === true}`,
-        `abandoned=${game.abandonedWordCount}`,
-        `charactersLost=${game.abandonedCharacters}`,
-        `recoverable=${recoverable}`,
-        `active=${game.words.length}`,
-        `lives=${game.lives}`,
-      ].join(" // ");
-    }
-  }
-  if (game.config.modifiers?.includes(BLACKOUT_ID) && modifierHud) {
-    const counts = { visible: 0, fading: 0, hidden: 0 };
-    for (const word of game.words) {
-      counts[word.blackoutPhase || "visible"] += 1;
-    }
-    const countElement = document.querySelector("#blackout-counts");
-    if (countElement) {
-      countElement.textContent = `VISIBLE ${counts.visible} // FADING ${counts.fading} // HIDDEN ${counts.hidden}`;
-    }
-    const details = document.querySelector("#modifier-runtime-details");
-    if (details) {
-      const target = game.words.find((word) => word.id === game.activeTargetId);
-      const targetAge = target
-        ? Math.max(0, game.elapsedMs - target.spawnedAtActiveMs)
-        : 0;
-      details.textContent = [
-        `targetPhase=${target?.blackoutPhase || "none"}`,
-        `targetAge=${Math.round(targetAge)}ms`,
-        `hidden=${game.blackoutStats.wordsHidden}`,
-        `hiddenCompleted=${game.blackoutStats.hiddenWordsCompleted}`,
-        `missedAfterFade=${game.blackoutStats.wordsMissedAfterFade}`,
-        `active=${game.words.length}`,
-        `lives=${game.lives}`,
-      ].join(" // ");
-    }
-  }
-  if (game.config.modifiers?.includes(CHAIN_ID) && modifierHud) {
-    modifierHud.classList.toggle("broken", game.chainRuntime.broken);
-    const phaseElement = document.querySelector("#modifier-phase");
-    if (phaseElement) {
-      phaseElement.textContent = game.phase === "MODIFIER_BRIEFING"
-        ? "BRIEFING"
-        : game.chainRuntime.broken
-          ? "CHAIN BROKEN"
-          : "ZERO MISTAKES ALLOWED";
-    }
-    const details = document.querySelector("#modifier-runtime-details");
-    if (details) {
-      details.textContent = [
-        `active=${game.chainRuntime.active}`,
-        `broken=${game.chainRuntime.broken}`,
-        `cause=${game.chainRuntime.breakCause || "none"}`,
-        `comboAtBreak=${game.chainRuntime.comboAtBreak}`,
-        `failedWord=${game.chainRuntime.failedWordId ?? "none"}`,
-        `targeting=${game.targetingState.mode}`,
-        `candidates=${game.targetingState.candidateIds.join(",") || "none"}`,
-        `target=${game.targetingState.activeTargetId ?? "none"}`,
-        `words=${game.words.length}`,
-      ].join(" // ");
-    }
   }
   const devRuntime = document.querySelector("#dev-runtime-panel");
   if (devRuntime) {
@@ -876,7 +677,6 @@ export function updateHud(game) {
       `range=${game.config.minWordLength}-${game.config.maxWordLength}`,
       `targetAvg=${Number(game.config.targetAverageWordLength).toFixed(2)}`,
       `tier=${game.config.wordTier}`,
-      `modifier=${game.config.modifiers?.join(",") || "none"}`,
       `seed=${game.attemptSeed}`,
       `selected=${game.selectedWords.join(",")}`,
       `queue=${game.wordQueue.join(",")}`,
@@ -886,13 +686,7 @@ export function updateHud(game) {
       `candidateIds=${state.candidateIds.join(",") || "none"}`,
       `candidateTexts=${candidateWords.map((word) => word.text).join(",") || "none"}`,
       `activeTarget=${state.activeTargetId ?? "none"}`,
-      `chainActive=${game.chainRuntime?.active === true}`,
-      `chainBroken=${game.chainRuntime?.broken === true}`,
-      `chainCause=${game.chainRuntime?.breakCause || "none"}`,
-      `comboAtBreak=${game.chainRuntime?.comboAtBreak ?? 0}`,
-      `failedWord=${game.chainRuntime?.failedWordId ?? "none"}`,
       `offsets=${game.words.map((word) => `${word.id}:${(word.separationX || 0).toFixed(1)},${(word.separationY || 0).toFixed(1)}`).join("|") || "none"}`,
-      `visibility=${candidateWords.map((word) => `${word.id}:${word.blackoutPhase || "visible"}`).join("|") || "none"}`,
       getSessionDiagnosticText(),
     ].join(" // ");
   }
@@ -916,13 +710,23 @@ function bossDiagnosticText(config, attempt) {
     "boss=true",
     `virtual=${getCampaignDifficultyLevel(config.level).toFixed(2)} (ignored)`,
     `seed=${attempt.attemptSeed}`,
-    `vocabulary=${config.vocabularySource || "dedicated"}`,
-    `profile=${config.segmentCount}x${config.wordsPerSegment},min${config.minimumWordLength},avg${config.requiredAverageWordLength},long${config.minimumLongestWord}`,
+    `vocabulary=${config.vocabularySource || "typing-test+curated-long"}`,
+    `profile=${config.segmentCount}x${config.wordsPerSegment}`,
     `words=${config.totalWordCount}`,
+    `sequence=${attempt.sequenceIndex ?? 1}`,
+    `segmentWords=${config.wordsPerSegment}`,
+    `tierPatterns=${(encounter.tierPatterns || config.tierPatterns || []).map((pattern) => pattern.join(",")).join(" | ")}`,
+    `wordSources=${(encounter.wordSources || config.wordSources || []).join(",")}`,
+    `short=${(encounter.tierCounts || config.tierCounts || {}).short ?? 0}`,
+    `medium=${(encounter.tierCounts || config.tierCounts || {}).medium ?? 0}`,
+    `long=${(encounter.tierCounts || config.tierCounts || {}).long ?? 0}`,
+    `veryLong=${(encounter.tierCounts || config.tierCounts || {})["very-long"] ?? 0}`,
+    `targetCharacters=${config.targetCharacters}`,
     `selectedMin=${encounter.metrics.minimumSelectedWordLength}`,
     `selectedAvg=${encounter.metrics.averageSelectedWordLength.toFixed(2)}`,
     `selectedLongest=${encounter.metrics.longestSelectedWord}`,
     `characters=${encounter.metrics.totalRequiredCharacters}`,
+    `targetRange=${config.minimumCharacters}-${config.maximumCharacters}`,
     `targetWPM=${config.targetWPM}`,
     `ideal=${encounter.timing.idealTypingSeconds.toFixed(2)}s`,
     `transitions=${encounter.timing.transitionAllowanceSeconds.toFixed(2)}s`,
@@ -962,7 +766,7 @@ export function renderBossShell(levelNumber, config, devMode = false, attempt = 
       <div class="boss-arena">
         <div class="boss-intro" id="boss-intro">
           <strong id="boss-intro-title">BOSS ENCOUNTER</strong>
-          <span>ADVANCED VOCABULARY</span>
+          <span>MIXED-LENGTH WORD SEQUENCE</span>
           <p>COMPLETE EVERY SEQUENCE BEFORE TIME EXPIRES</p>
           ${config.bossIndex >= 8 ? "<small>DIFFICULTY: EXTREME</small>" : ""}
         </div>
@@ -1030,11 +834,15 @@ export function updateBossHud(game) {
   if (devRuntime) {
     devRuntime.textContent = bossDiagnosticText(game.config, {
       attemptSeed: game.attemptSeed,
+      sequenceIndex: game.displayedSequenceNumber,
       encounter: {
         generationAttempt: game.config.generationAttempt,
         fallbackUsed: game.config.fallbackUsed,
         segments: game.phrases,
         words: game.config.words,
+        tierPatterns: game.config.tierPatterns,
+        tierCounts: game.config.tierCounts,
+        wordSources: game.config.wordSources,
         metrics: {
           minimumSelectedWordLength: game.config.minimumSelectedWordLength,
           averageSelectedWordLength: game.config.averageSelectedWordLength,
@@ -1169,7 +977,6 @@ export function renderEndlessResults(result, selectedIndex, handlers) {
           <div><span>Maximum combo</span><strong>${data.maximumCombo}</strong></div>
           <div><span>Maximum perfect streak</span><strong>${data.maximumPerfectStreak}</strong></div>
           <div><span>Core hits / breaches</span><strong>${data.coreHits} / ${data.coreBreaches}</strong></div>
-          <div><span>Modifier stages survived</span><strong>${data.modifiersSurvived}</strong></div>
           <div><span>Score breakdown</span><strong>${data.survivalPoints} + ${data.wordPoints} + ${data.stageBonusPoints}</strong></div>
           <div><span>Attempt seed</span><strong>${data.attemptSeed}</strong></div>
         </div>
@@ -1191,17 +998,6 @@ export function hidePauseOverlay() {
   document.querySelector(".speed-test-screen")?.classList.remove("paused");
 }
 
-export function getChainBreakCauseLabel(cause) {
-  const labels = {
-    [CHAIN_BREAK_CAUSES.WRONG_KEY_IDLE]: "WRONG KEY",
-    [CHAIN_BREAK_CAUSES.WRONG_KEY_AMBIGUOUS]: "AMBIGUOUS PREFIX FAILED",
-    [CHAIN_BREAK_CAUSES.WRONG_KEY_LOCKED]: "TARGET MISTYPED",
-    [CHAIN_BREAK_CAUSES.WORD_REACHED_CORE]: "WORD REACHED CORE",
-    [CHAIN_BREAK_CAUSES.OTHER_MISS]: "CHAIN MISSED",
-  };
-  return labels[cause] || "CHAIN BROKEN";
-}
-
 export function renderResults(result, selectedIndex, handlers) {
   const cleared = result.grade !== "Fail";
   const canAdvance = cleared && result.levelNumber < 100;
@@ -1214,37 +1010,10 @@ export function renderResults(result, selectedIndex, handlers) {
   app().innerHTML = `
     <section class="screen results-screen">
       <div class="results-panel">
-        <div class="eyebrow">${result.chainBroken
-    ? "CHAIN BROKEN"
-    : result.isBoss
+        <div class="eyebrow">${result.isBoss
       ? `BOSS ${result.levelNumber} ${cleared ? "CLEARED" : "FAILED"}`
       : `Level ${String(result.levelNumber).padStart(2, "0")} // ${cleared ? "Core secured" : "Core breached"}`}</div>
         <div class="grade ${cleared ? `grade-${result.grade.toLowerCase()}` : "fail"}">${result.grade}</div>
-        ${result.modifierIds?.includes(QUICK_FINGERS_ID) ? `
-          <div class="result-modifier">
-            MODIFIER: QUICK FINGERS<br>
-            BURSTS SURVIVED: ${result.burstCount}
-          </div>` : ""}
-        ${result.modifierIds?.includes(NO_BACKSPACE_ID) ? `
-          <div class="result-modifier danger">
-            MODIFIER: NO BACKSPACE<br>
-            WORDS ABANDONED: ${result.abandonedWordCount}<br>
-            CHARACTERS LOST: ${result.abandonedCharacters}
-          </div>` : ""}
-        ${result.modifierIds?.includes(BLACKOUT_ID) ? `
-          <div class="result-modifier blackout">
-            MODIFIER: BLACKOUT<br>
-            WORDS HIDDEN: ${result.wordsHidden}<br>
-            HIDDEN WORDS COMPLETED: ${result.hiddenWordsCompleted}<br>
-            WORDS MISSED AFTER FADE: ${result.wordsMissedAfterFade}
-          </div>` : ""}
-        ${result.modifierIds?.includes(CHAIN_ID) ? `
-          <div class="result-modifier chain ${result.chainBroken ? "danger" : ""}">
-            MODIFIER: CHAIN<br>
-            ${result.chainBroken
-    ? `BREAK CAUSE: ${getChainBreakCauseLabel(result.chainBreakCause)}<br>COMBO AT BREAK: ${result.chainComboAtBreak}`
-    : "CHAIN MAINTAINED"}
-          </div>` : ""}
         <div class="stats-grid">
           <div class="stat"><span class="micro-label">WPM</span><strong>${Math.round(result.wpm)}</strong></div>
           <div class="stat"><span class="micro-label">Accuracy</span><strong>${result.accuracy.toFixed(1)}%</strong></div>
@@ -1253,10 +1022,7 @@ export function renderResults(result, selectedIndex, handlers) {
           ${result.isBoss
     ? `<div class="stat"><span class="micro-label">Time remaining</span><strong>${result.timeRemaining.toFixed(1)}s</strong></div>
           <div class="stat"><span class="micro-label">Sequences</span><strong>${result.phrasesCompleted}/${result.phraseCount}</strong></div>`
-    : result.modifierIds?.includes(CHAIN_ID)
-      ? `<div class="stat"><span class="micro-label">Chain integrity</span><strong>${result.chainBroken ? "BROKEN" : "INTACT"}</strong></div>
-          <div class="stat"><span class="micro-label">Level</span><strong>${result.levelNumber}</strong></div>`
-      : `<div class="stat"><span class="micro-label">Lives</span><strong>${result.livesRemaining}/${result.startingLives}</strong></div>
+    : `<div class="stat"><span class="micro-label">Lives</span><strong>${result.livesRemaining}/${result.startingLives}</strong></div>
           <div class="stat"><span class="micro-label">Level</span><strong>${result.levelNumber}</strong></div>`}
         </div>
         <div class="menu-list">

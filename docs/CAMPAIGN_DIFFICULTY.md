@@ -2,7 +2,7 @@
 
 WORDSTRIKE's normal Campaign pressure is calculated through a continuous
 virtual legacy level. The real level remains authoritative for level labels,
-word count, boss detection, modifiers, scoring, grades, progression, and save
+word count, boss detection, scoring, grades, progression, and save
 data.
 
 ## Architecture
@@ -53,9 +53,8 @@ or below 1 clamp to legacy level 1; inputs at or above 99 clamp to legacy level
 The virtual level controls movement speed, spawn interval, active-word cap,
 word-length range and average target, target WPM, and vocabulary tier. The
 actual level controls word count, displayed/stored level, boss detection,
-modifier assignment, scoring, grades, progression, and world index. Each
-pressure formula receives the virtual level exactly once; existing modifier
-adapters run afterward.
+scoring, grades, progression, and world index. Each pressure formula receives
+the virtual level exactly once.
 
 Boss levels continue to use their dedicated boss profiles and ignore the
 normal Campaign profile. Endless Mode and Typing Test use separate generators.
@@ -94,6 +93,5 @@ boss generator.
 ## Playtest checkpoints
 
 Check normal levels 1, 5, 8, 9, 11, 15, 19, 21, 22, 40, 42, 50, 60,
-62, 70, 80, 82, 90, 97, and 99. Compare unchanged bosses against their
-adjacent normal levels, and verify modifier levels 22, 42, 62, and 82 without
-changing modifier rules.
+62, 70, 80, 82, 90, 97, and 99. Former special-rule levels now use the same
+normal moving-word rules as every other non-boss Campaign level.

@@ -12,13 +12,9 @@ const campaign = JSON.parse(
   await readFile(new URL("../data/theme-default.json", import.meta.url), "utf8"),
 );
 const bossSource = JSON.parse(
-  await readFile(new URL("../data/bossWords.json", import.meta.url), "utf8"),
+  await readFile(new URL("../data/bossCommonLongWords.json", import.meta.url), "utf8"),
 );
-const bossBank = {
-  words: Object.entries(bossSource.tiers).flatMap(([tier, words]) => (
-    words.map((word) => ({ word, tier: Number(tier) }))
-  )),
-};
+const bossBank = { words: bossSource.words };
 const vocabulary = createEndlessVocabulary({
   commonWords: common,
   campaignBank: campaign,

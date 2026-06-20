@@ -50,16 +50,6 @@ export function getEndlessDifficulty(inputStage) {
   });
 }
 
-export function getEndlessQuickFingersInterval(stage) {
-  return Math.max(
-    ENDLESS_CONFIG.quickFingersMinimumSpawnIntervalMs,
-    Math.round(
-      getEndlessDifficulty(stage).spawnIntervalMs *
-      ENDLESS_CONFIG.quickFingersSpawnMultiplier,
-    ),
-  );
-}
-
 export function estimateRequiredWpm({
   targetAverageWordLength,
   spawnIntervalMs,

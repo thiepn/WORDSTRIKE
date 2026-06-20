@@ -36,7 +36,6 @@ renderEndlessResults({
     maximumPerfectStreak: 15,
     coreHits: 3,
     coreBreaches: 4,
-    modifiersSurvived: 1,
     survivalPoints: 30000,
     wordPoints: 12000,
     stageBonusPoints: 7000,

@@ -31,7 +31,6 @@ import {
 } from "./sessionMetrics.js";
 import { handleBossKey, handleGameplayKey } from "./input.js";
 import {
-  finalizeChainFailure,
   resumeGameLoop,
   startLevelLoop,
   stopGameLoop,
@@ -42,14 +41,6 @@ import {
   startBossLoop,
   stopBossLoop,
 } from "./bossLoop.js";
-import {
-  applyForcedModifier,
-  BLACKOUT_ID,
-  CHAIN_ID,
-  isForcedModifierRequested,
-  NO_BACKSPACE_ID,
-  QUICK_FINGERS_ID,
-} from "./modifiers.js";
 import { createAttemptSeed, parseDeveloperSeed } from "./random.js";
 import {
   clearSpeedTestLayout,
@@ -196,18 +187,7 @@ function startLevel(levelNumber, source = "level-select") {
     startBossLevel(safeLevel, legitimatelyUnlocked, source);
     return;
   }
-  const baseConfig = generateLevel(safeLevel);
-  const modifiers = applyForcedModifier(
-    safeLevel,
-    baseConfig.modifiers,
-    appState.devMode ? appState.forcedModifierId : null,
-  );
-  const config = { ...baseConfig, modifiers };
-  const forcedModifier = (
-    appState.devMode &&
-    [QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID, CHAIN_ID].includes(appState.forcedModifierId) &&
-    safeLevel % 10 !== 0
-  );
+  const config = generateLevel(safeLevel);
   const attemptSeed = getAttemptSeed();
   const attempt = createNormalWordAttempt(appState.wordBank, config, attemptSeed);
   beginCampaignSession({
@@ -216,7 +196,6 @@ function startLevel(levelNumber, source = "level-select") {
     seed: attemptSeed,
     source: appState.devMode ? "developer" : source,
     developerMode: appState.devMode,
-    modifierId: config.modifiers?.[0] || null,
     difficultyData: config,
   });
   changeScreen(Screens.PLAYING);
@@ -225,7 +204,6 @@ function startLevel(levelNumber, source = "level-select") {
     config.lives,
     config,
     appState.devMode,
-    forcedModifier,
     { attemptSeed, ...attempt },
   );
   const game = startLevelLoop(
@@ -242,7 +220,6 @@ function startLevel(levelNumber, source = "level-select") {
     { attemptSeed, selectedWords: attempt.selectedWords },
   );
   game.persistResult = shouldPersistLevelResult(appState.devMode, legitimatelyUnlocked);
-  game.forcedModifier = forcedModifier;
   game.devMode = appState.devMode;
   syncCampaignSession(game);
 }
@@ -298,10 +275,6 @@ function finishEndless(game, result) {
 
 function startEndless(source = "mode-select") {
   cleanupCampaignAttempt(["retry", "restart"].includes(source) ? source : "new-session");
-  const forcedModifier = (
-    appState.devMode &&
-    [QUICK_FINGERS_ID, BLACKOUT_ID].includes(appState.forcedModifierId)
-  ) ? appState.forcedModifierId : null;
   const game = startEndlessRun({
     seed: getAttemptSeed(),
     vocabulary: createEndlessVocabulary({
@@ -310,7 +283,6 @@ function startEndless(source = "mode-select") {
       bossBank: appState.bossWordBank,
     }),
     startStage: appState.devMode ? appState.endlessStartStage : 1,
-    forcedModifier,
     recordEligible: !appState.devMode,
     developerMode: appState.devMode,
     source,
@@ -359,6 +331,10 @@ function startBossLevel(levelNumber, legitimatelyUnlocked, source) {
     timeLimitSec: encounter.timing.effectiveTimeLimitSec,
     generationAttempt: encounter.generationAttempt,
     fallbackUsed: encounter.fallbackUsed,
+    tierPatterns: encounter.tierPatterns,
+    tierCounts: encounter.tierCounts,
+    wordSources: encounter.wordSources,
+    targetSegmentCharacters: encounter.targetSegmentCharacters,
     ...encounter.metrics,
     ...encounter.timing,
   };
@@ -414,18 +390,6 @@ function finishLevel(game, success) {
     timeRemaining: isBoss ? game.remainingMs / 1000 : 0,
     phrasesCompleted: isBoss ? game.phrasesCompleted : 0,
     phraseCount: isBoss ? game.phrases.length : 0,
-    modifierIds: isBoss ? [] : [...(game.config.modifiers || [])],
-    burstCount: isBoss ? 0 : game.modifierRuntime?.quickFingers?.burstCount || 0,
-    abandonedWordCount: isBoss ? 0 : game.abandonedWordCount || 0,
-    abandonedCharacters: isBoss ? 0 : game.abandonedCharacters || 0,
-    wordsHidden: isBoss ? 0 : game.blackoutStats?.wordsHidden || 0,
-    hiddenWordsCompleted: isBoss ? 0 : game.blackoutStats?.hiddenWordsCompleted || 0,
-    wordsMissedAfterFade: isBoss ? 0 : game.blackoutStats?.wordsMissedAfterFade || 0,
-    failureReason: isBoss ? null : game.failureReason || null,
-    chainBroken: isBoss ? false : game.chainRuntime?.broken === true,
-    chainBreakCause: isBoss ? null : game.chainRuntime?.breakCause || null,
-    chainComboAtBreak: isBoss ? 0 : game.chainRuntime?.comboAtBreak || 0,
-    chainFailedWordId: isBoss ? null : game.chainRuntime?.failedWordId ?? null,
   };
   finalizeCampaignSession(game, appState.results, success);
   if (success && game.persistResult) {
@@ -590,14 +554,12 @@ function renderCurrentScreen() {
       appState.levelSelection,
       appState.devMode,
       appState.bossWordBank,
-      appState.forcedModifierId,
       appState.developerSeed,
       {
       back: openModeSelect,
       select: (level) => startLevel(level, "level-select"),
       devInspect: inspectDevLevel,
       devLaunch: (level) => startLevel(level, "developer"),
-      devForceModifier: setForcedModifier,
       },
     );
   } else if (appState.screen === Screens.RESULTS) {
@@ -620,14 +582,6 @@ function renderCurrentScreen() {
     renderDevModeIndicator();
     renderDevSessionDiagnostics();
   }
-}
-
-function setForcedModifier(modifierId) {
-  if (!appState.devMode || appState.levelSelection % 10 === 0) return;
-  appState.forcedModifierId = appState.forcedModifierId === modifierId
-    ? null
-    : modifierId;
-  renderCurrentScreen();
 }
 
 function moveLevelSelection(key) {
@@ -682,7 +636,6 @@ function handleGlobalKeydown(event) {
         appState.game,
         appState.save.settings,
         updateHud,
-        finalizeChainFailure,
       );
       updateHud(appState.game);
     }
@@ -855,9 +808,6 @@ async function bootstrap() {
   appState.devMode = isDevelopmentMode(window.location.search);
   appState.developerSeed = appState.devMode
     ? parseDeveloperSeed(window.location.search)
-    : null;
-  appState.forcedModifierId = appState.devMode
-    ? isForcedModifierRequested(window.location.search)
     : null;
   appState.endlessStartStage = appState.devMode
     ? Math.max(1, Number.parseInt(search.get("stage"), 10) || 1)

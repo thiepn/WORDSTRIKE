@@ -16,7 +16,6 @@ export const appState = {
   screen: Screens.TITLE,
   previousScreen: Screens.TITLE,
   devMode: false,
-  forcedModifierId: null,
   developerSeed: null,
   save: null,
   wordBank: null,
@@ -75,12 +74,11 @@ export function clearAttemptRuntime(game) {
     };
     if (Array.isArray(game.words)) game.words.length = 0;
     if (Array.isArray(game.wordQueue)) game.wordQueue.length = 0;
-    game.modifierRuntime = null;
+    // Clear obsolete fields if an old in-memory snapshot is supplied.
+    delete game.modifierRuntime;
     delete game.blackoutStats;
     delete game.chainRuntime;
-    delete game.failureReason;
-    game.abandonedWordCount = 0;
-    game.abandonedCharacters = 0;
+    delete game.forcedModifier;
   } else if (game.mode === "endless") {
     if (Array.isArray(game.words)) game.words.length = 0;
     if (Array.isArray(game.rollingEvents)) game.rollingEvents.length = 0;
@@ -91,7 +89,10 @@ export function clearAttemptRuntime(game) {
       activeTargetId: null,
       startedAtActiveMs: null,
     };
-    game.activeModifier = null;
+    delete game.activeModifier;
+    delete game.previousModifier;
+    delete game.modifiersSurvived;
+    delete game.blackoutStats;
     game.bannerText = "";
     game.immunityUntilMs = 0;
   } else if (game.mode === "boss") {

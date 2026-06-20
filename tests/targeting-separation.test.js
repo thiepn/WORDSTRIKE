@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { BLACKOUT_ID, NO_BACKSPACE_ID } from "../js/modifiers.js";
 
 class ClassList {
   constructor() { this.values = new Set(); }
@@ -57,7 +56,7 @@ const {
 } = await import("../js/gameLoop.js");
 const { appState } = await import("../js/state.js");
 
-function makeGame(modifiers = []) {
+function makeGame() {
   const game = createGameState(
     61,
     {
@@ -66,7 +65,6 @@ function makeGame(modifiers = []) {
       wordCount: 3,
       maxSimultaneousWords: 3,
       wordSpeedPxPerSec: 0,
-      modifiers,
     },
     [],
   );
@@ -86,7 +84,6 @@ function addWord(game, text, id, x, overrides = {}) {
     vx: 0,
     vy: 0,
     startedAt: null,
-    abandoned: false,
     missedCharactersRecorded: false,
     coreArrivalProcessed: false,
     separationX: overrides.separationX ?? 0,
@@ -137,18 +134,6 @@ handleGameplayKey(event("h"), game, { strictMode: false, particles: false });
 assert.equal(game.activeTargetId, charge.id);
 assert.equal(charge.typedIndex, 2);
 
-game = makeGame([NO_BACKSPACE_ID]);
-charge = addWord(game, "charge", 1, 30);
-control = addWord(game, "control", 2, 10);
-handleGameplayKey(event("c"), game, { strictMode: false, particles: false });
-handleGameplayKey(event("x"), game, { strictMode: false, particles: false });
-assert.equal(charge.abandoned, false);
-assert.equal(control.abandoned, false);
-handleGameplayKey(event("o"), game, { strictMode: false, particles: false });
-handleGameplayKey(event("x"), game, { strictMode: false, particles: false });
-assert.equal(control.abandoned, true);
-assert.equal(charge.abandoned, false);
-
 appState.save = { settings: { screenShake: false } };
 game = makeGame();
 charge = addWord(game, "charge", 1, 30);
@@ -161,31 +146,6 @@ assert.equal(charge.typedIndex, 1);
 game.words = [];
 reconcileTargetingState(game);
 assert.equal(game.targetingState.mode, "idle");
-
-game = makeGame([BLACKOUT_ID]);
-charge = addWord(game, "charge", 1, 30, {
-  blackoutPhase: "hidden",
-  blackoutTextOpacity: 0,
-  blackoutHidden: true,
-  blackoutHiddenCounted: true,
-});
-control = addWord(game, "control", 2, 10, {
-  blackoutPhase: "hidden",
-  blackoutTextOpacity: 0,
-  blackoutHidden: true,
-  blackoutHiddenCounted: true,
-});
-handleGameplayKey(event("c"), game, { strictMode: false, particles: false });
-for (const position of playArea.children.slice(-2)) {
-  const visual = position.children[0].children[0];
-  assert.equal(visual.classList.contains("candidate"), true);
-  assert.match(visual.html, /opacity:0/);
-  assert.match(visual.html, /&#9671;/);
-  assert.doesNotMatch(position.attributes["aria-label"], /charge|control/);
-}
-handleGameplayKey(event("o"), game, { strictMode: false, particles: false });
-assert.equal(control.blackoutHidden, true);
-assert.equal(game.activeTargetId, control.id);
 
 game = makeGame();
 const locked = addWord(game, "alpha", 1, 200, { y: 200 });
@@ -213,4 +173,4 @@ assert.ok(
   Math.abs(normal.separationX) + Math.abs(normal.separationY) < previousOffset,
 );
 
-console.log("Ambiguous targeting, modifier compatibility, and separation tests passed.");
+console.log("Ambiguous targeting and word separation tests passed.");

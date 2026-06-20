@@ -16,7 +16,7 @@
 
 - Campaign adapts existing normal and boss loops through `campaignSession.js`.
 - Typing Test owns its ready/active buffer and deadline loop in `speedTest.js`.
-- Endless owns its standardized survival runtime in `endlessMode.js`, reusing Campaign word rendering, prefix targeting, movement geometry, separation, and compatible modifiers.
+- Endless owns its standardized survival runtime in `endlessMode.js`, reusing Campaign word rendering, prefix targeting, movement geometry, and separation.
 
 Exactly one gameplay controller is active. Shared cleanup stops all loops before clearing mode runtime and session state.
 
@@ -26,7 +26,7 @@ Exactly one gameplay controller is active. Shared cleanup stops all loops before
 - Typing Test: Title → Mode Select → Ready Test → Results.
 - Endless: Title → Mode Select → Endless Ready → Run → Results.
 
-Mode Select and Endless Ready create no session. Endless begins its session only when the player starts. Stage and modifier banners remain active gameplay and do not exclude survival time.
+Mode Select and Endless Ready create no session. Endless begins its session only when the player starts. Stage banners remain active gameplay and do not exclude survival time.
 
 ## Adding a future mode
 

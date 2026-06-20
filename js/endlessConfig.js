@@ -3,12 +3,9 @@ export const ENDLESS_CONFIG = Object.freeze({
   wordsPerStage: 20,
   spawnPauseMs: 1000,
   stageBannerMs: 1250,
-  modifierBannerMs: 1250,
   collisionImmunityMs: 650,
   initialSpawnIntervalMs: 1700,
   lateGameSpawnIntervalMs: 803,
-  quickFingersSpawnMultiplier: 0.85,
-  quickFingersMinimumSpawnIntervalMs: 680,
   maxActiveWords: 9,
   movementCapStage: 10,
   movementSpeedCapPxPerSec: 66,
@@ -21,8 +18,6 @@ export const ENDLESS_CONFIG = Object.freeze({
 export const STANDARD_ENDLESS_RUNTIME = Object.freeze({
   startStage: 1,
   maximumStages: null,
-  modifierSchedule: null,
-  forcedModifier: null,
   recordEligible: true,
 });
 
@@ -31,8 +26,6 @@ export function isStandardEndlessConfiguration(config = {}, developerMode = fals
     developerMode !== true &&
     config.startStage === 1 &&
     config.maximumStages == null &&
-    config.modifierSchedule == null &&
-    config.forcedModifier == null &&
     config.recordEligible === true
   );
 }
