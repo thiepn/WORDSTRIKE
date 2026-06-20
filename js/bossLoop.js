@@ -12,6 +12,7 @@ export function createBossGameState(levelNumber, config, phrases) {
     mode: "boss",
     levelNumber,
     config,
+    attemptSeed: config.attemptSeed ?? null,
     phrases: [...phrases],
     currentPhrase: phrases[0] || "",
     phraseIndex: 0,

@@ -16,26 +16,35 @@ export function createWordElement(word) {
   const area = playArea();
   if (!area) return;
   const position = document.createElement("div");
+  const separation = document.createElement("div");
   const visual = document.createElement("div");
   position.className = "word-position";
+  separation.className = "word-separation";
   visual.className = "word-visual";
   position.dataset.wordId = word.id;
   position.setAttribute("aria-label", word.text);
   visual.addEventListener("animationend", (event) => {
     if (event.animationName === "wrong") visual.classList.remove("wrong");
   });
-  position.append(visual);
+  separation.append(visual);
+  position.append(separation);
   area.append(position);
-  wordElements.set(word.id, { position, visual });
+  wordElements.set(word.id, { position, separation, visual });
   updateWordElement(word, false);
 }
 
-export function updateWordElement(word, isActive) {
+export function updateWordElement(word, isActive, candidateState = null) {
   const elements = wordElements.get(word.id);
   if (!elements) return;
-  const { position, visual } = elements;
+  const { position, separation, visual } = elements;
+  const isCandidate = candidateState?.candidate === true;
+  const candidatePrefixLength = isCandidate
+    ? Math.max(0, candidateState.prefixLength || 0)
+    : 0;
   position.style.transform = `translate(${word.x}px, ${word.y}px) translate(-50%, -50%)`;
+  separation.style.transform = `translate(${word.separationX || 0}px, ${word.separationY || 0}px)`;
   visual.classList.toggle("active", isActive);
+  visual.classList.toggle("candidate", isCandidate);
   visual.classList.toggle("word-abandoned", word.abandoned === true);
   visual.classList.toggle("word-blackout-visible", word.blackoutPhase === "visible");
   visual.classList.toggle("word-blackout-fading", word.blackoutPhase === "fading");
@@ -44,8 +53,9 @@ export function updateWordElement(word, isActive) {
     "aria-label",
     word.blackoutHidden ? "Hidden incoming word" : word.text,
   );
-  const typed = word.text.slice(0, word.typedIndex);
-  const remaining = word.text.slice(word.typedIndex);
+  const displayTypedIndex = isCandidate ? candidatePrefixLength : word.typedIndex;
+  const typed = word.text.slice(0, displayTypedIndex);
+  const remaining = word.text.slice(displayTypedIndex);
   visual.innerHTML = `
     <span class="word-text" style="opacity:${word.blackoutTextOpacity ?? 1}" aria-hidden="${word.blackoutHidden === true}">
       <span class="typed-letter">${typed}</span><span class="remaining-letter">${remaining}</span>
@@ -80,6 +90,10 @@ export function flashWrong(wordId) {
   visual.classList.add("wrong");
 }
 
+export function flashCandidateWrong(candidateIds) {
+  for (const wordId of candidateIds) flashWrong(wordId);
+}
+
 export function flashDamage(screenShake = true) {
   const area = playArea();
   if (!area) return;
@@ -101,7 +115,10 @@ export function flashDamage(screenShake = true) {
 }
 
 export function clearBossPhrase() {
-  if (bossPhraseElement) bossPhraseElement.innerHTML = "";
+  if (bossPhraseElement) {
+    bossPhraseElement.innerHTML = "";
+    if (bossPhraseElement.dataset) delete bossPhraseElement.dataset.phrase;
+  }
   bossPhraseElement = null;
 }
 
@@ -109,15 +126,29 @@ export function renderBossPhrase(game) {
   const container = document.querySelector("#boss-phrase");
   if (!container) return;
   bossPhraseElement = container;
-  const typed = game.currentPhrase.slice(0, game.phraseCharIndex);
-  const current = game.currentPhrase[game.phraseCharIndex] || "";
-  const remaining = game.currentPhrase.slice(game.phraseCharIndex + (current ? 1 : 0));
-  const currentDisplay = current === " " ? "&nbsp;" : current;
-  container.innerHTML = [
-    `<span class="boss-typed">${typed}</span>`,
-    current ? `<span class="boss-current">${currentDisplay}</span>` : "",
-    `<span class="boss-remaining">${remaining}</span>`,
-  ].join("");
+  const renderedPhrase = container.dataset?.phrase ?? container._bossPhrase;
+  if (renderedPhrase !== game.currentPhrase) {
+    let globalIndex = 0;
+    container.innerHTML = game.currentPhrase.split(" ").map((word, wordIndex, words) => {
+      const characters = [...word].map((character) => {
+        const index = globalIndex;
+        globalIndex += 1;
+        return `<span class="boss-char" data-char-index="${index}">${character}</span>`;
+      }).join("");
+      const trailingSpace = wordIndex < words.length - 1
+        ? `<span class="boss-char boss-space" data-char-index="${globalIndex++}">&nbsp;</span>`
+        : "";
+      return `<span class="boss-word-group">${characters}${trailingSpace}</span>`;
+    }).join('<wbr class="boss-wrap-opportunity">');
+    if (container.dataset) container.dataset.phrase = game.currentPhrase;
+    else container._bossPhrase = game.currentPhrase;
+  }
+  container.querySelectorAll?.(".boss-char").forEach((character) => {
+    const index = Number(character.dataset.charIndex);
+    character.classList.toggle("boss-typed", index < game.phraseCharIndex);
+    character.classList.toggle("boss-current", index === game.phraseCharIndex);
+    character.classList.toggle("boss-remaining", index > game.phraseCharIndex);
+  });
   const progress = document.querySelector("#boss-progress-fill");
   if (progress) {
     const percent = game.currentPhrase.length

@@ -2,19 +2,27 @@ import {
   appState,
   canLaunchLevel,
   changeScreen,
+  clearAttemptRuntime,
   isDevelopmentMode,
+  getDefaultResultsIndex,
+  getResultsActions,
+  isResultsInputBlocked,
   moveLevelGridSelection,
   returnFromSettings,
   Screens,
   shouldPersistLevelResult,
 } from "./state.js";
-import { generateBossLevel, generateLevel } from "./levelGenerator.js";
+import {
+  calculateBossTiming,
+  generateBossLevel,
+  generateLevel,
+} from "./levelGenerator.js";
 import { loadSave, resetProgress, updateLevelResult, updateSetting } from "./storage.js";
 import {
   loadBossPhraseBank,
   loadWordBank,
   selectBossPhrases,
-  selectWordsForLevel,
+  createNormalWordAttempt,
 } from "./wordBank.js";
 import { calculateAccuracy, calculateGrade, calculateWPM } from "./scoring.js";
 import { handleBossKey, handleGameplayKey } from "./input.js";
@@ -32,6 +40,7 @@ import {
   NO_BACKSPACE_ID,
   QUICK_FINGERS_ID,
 } from "./modifiers.js";
+import { createAttemptSeed, parseDeveloperSeed } from "./random.js";
 import {
   hidePauseOverlay,
   renderBossShell,
@@ -47,15 +56,28 @@ import {
 } from "./ui.js";
 
 const titleActions = ["start", "levels", "settings"];
+const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
 
 function stopActiveLoops() {
   stopGameLoop();
   stopBossLoop();
 }
 
+function discardActiveAttempt() {
+  clearAttemptRuntime(appState.game);
+}
+
+function getAttemptSeed() {
+  return appState.devMode && appState.developerSeed
+    ? appState.developerSeed
+    : createAttemptSeed();
+}
+
 function openTitle() {
   stopActiveLoops();
+  discardActiveAttempt();
   appState.game = null;
+  appState.pauseIndex = 0;
   changeScreen(Screens.TITLE);
   appState.menuIndex = 0;
   renderCurrentScreen();
@@ -63,7 +85,9 @@ function openTitle() {
 
 function openLevelSelect() {
   stopActiveLoops();
+  discardActiveAttempt();
   appState.game = null;
+  appState.pauseIndex = 0;
   changeScreen(Screens.LEVEL_SELECT);
   const selectionLimit = appState.devMode ? 100 : appState.save.currentFurthestLevel;
   appState.levelSelection = Math.min(appState.currentLevel || 1, selectionLimit, 100);
@@ -103,28 +127,52 @@ function startLevel(levelNumber) {
     [QUICK_FINGERS_ID, NO_BACKSPACE_ID, BLACKOUT_ID].includes(appState.forcedModifierId) &&
     safeLevel % 10 !== 0
   );
-  const words = selectWordsForLevel(appState.wordBank, config, safeLevel);
+  const attemptSeed = getAttemptSeed();
+  const attempt = createNormalWordAttempt(appState.wordBank, config, attemptSeed);
   changeScreen(Screens.PLAYING);
-  renderGameplayShell(safeLevel, config.lives, config, appState.devMode, forcedModifier);
-  const game = startLevelLoop(safeLevel, config, words, {
-    onHudUpdate: updateHud,
-    onEnd: finishLevel,
-  });
+  renderGameplayShell(
+    safeLevel,
+    config.lives,
+    config,
+    appState.devMode,
+    forcedModifier,
+    { attemptSeed, ...attempt },
+  );
+  const game = startLevelLoop(
+    safeLevel,
+    config,
+    attempt.spawnQueue,
+    {
+      onHudUpdate: updateHud,
+      onEnd: finishLevel,
+    },
+    { attemptSeed, selectedWords: attempt.selectedWords },
+  );
   game.persistResult = shouldPersistLevelResult(appState.devMode, legitimatelyUnlocked);
   game.forcedModifier = forcedModifier;
   game.devMode = appState.devMode;
 }
 
 function startBossLevel(levelNumber, legitimatelyUnlocked) {
-  const config = generateBossLevel(levelNumber);
-  const phrases = selectBossPhrases(appState.bossPhraseBank, config);
+  const baseConfig = generateBossLevel(levelNumber);
+  const attemptSeed = getAttemptSeed();
+  const phrases = selectBossPhrases(appState.bossPhraseBank, baseConfig, attemptSeed);
+  const timing = calculateBossTiming(levelNumber, phrases);
+  const config = {
+    ...baseConfig,
+    attemptSeed,
+    baselineTimeLimitSec: baseConfig.timeLimitSec,
+    timeLimitSec: timing.effectiveTimeLimitSec,
+    ...timing,
+  };
   changeScreen(Screens.PLAYING);
-  renderBossShell(levelNumber, config);
+  renderBossShell(levelNumber, config, appState.devMode, { attemptSeed, phrases });
   const game = startBossLoop(levelNumber, config, phrases, {
     onUpdate: updateBossHud,
     onEnd: finishLevel,
   });
   game.persistResult = shouldPersistLevelResult(appState.devMode, legitimatelyUnlocked);
+  game.attemptSeed = attemptSeed;
 }
 
 function finishLevel(game, success) {
@@ -163,7 +211,8 @@ function finishLevel(game, success) {
   if (success && game.persistResult) {
     updateLevelResult(appState.save, game.levelNumber, appState.results);
   }
-  appState.resultsIndex = 0;
+  appState.resultsIndex = getDefaultResultsIndex(appState.results);
+  appState.resultsReadyAt = currentTimeMs() + 200;
   changeScreen(Screens.RESULTS);
   renderCurrentScreen();
 }
@@ -172,7 +221,21 @@ function pauseGame() {
   if (appState.screen !== Screens.PLAYING) return;
   changeScreen(Screens.PAUSED);
   appState.pauseIndex = 0;
-  showPauseOverlay(appState.pauseIndex, { resume: resumeGame, levels: openLevelSelect });
+  renderPauseOverlay();
+}
+
+function retryCurrentLevel() {
+  startLevel(appState.currentLevel);
+}
+
+function renderPauseOverlay() {
+  showPauseOverlay(appState.pauseIndex, {
+    resume: resumeGame,
+    retry: retryCurrentLevel,
+    levels: openLevelSelect,
+    title: openTitle,
+    select: (index) => { appState.pauseIndex = index; },
+  });
 }
 
 function resumeGame() {
@@ -217,6 +280,7 @@ function renderCurrentScreen() {
       appState.devMode,
       appState.bossPhraseBank,
       appState.forcedModifierId,
+      appState.developerSeed,
       {
       back: openTitle,
       select: startLevel,
@@ -230,6 +294,7 @@ function renderCurrentScreen() {
       retry: () => startLevel(appState.results.levelNumber),
       next: () => startLevel(appState.results.levelNumber + 1),
       levels: openLevelSelect,
+      select: (index) => { appState.resultsIndex = index; },
     });
   } else if (appState.screen === Screens.SETTINGS) {
     renderSettings(appState.save, appState.settingsIndex, {
@@ -293,10 +358,11 @@ function handleGlobalKeydown(event) {
     if (event.key === "Escape") {
       resumeGame();
     } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-      appState.pauseIndex = appState.pauseIndex === 0 ? 1 : 0;
-      showPauseOverlay(appState.pauseIndex, { resume: resumeGame, levels: openLevelSelect });
+      const direction = event.key === "ArrowUp" ? -1 : 1;
+      appState.pauseIndex = (appState.pauseIndex + direction + 4) % 4;
+      renderPauseOverlay();
     } else if (event.key === "Enter") {
-      appState.pauseIndex === 0 ? resumeGame() : openLevelSelect();
+      [resumeGame, retryCurrentLevel, openLevelSelect, openTitle][appState.pauseIndex]();
     }
     return;
   }
@@ -320,17 +386,20 @@ function handleGlobalKeydown(event) {
   }
 
   if (appState.screen === Screens.RESULTS) {
-    const canAdvance = appState.results.grade !== "Fail" && appState.results.levelNumber < 100;
-    const actionCount = canAdvance ? 3 : 2;
+    const actions = getResultsActions(appState.results);
+    if (isResultsInputBlocked(event, currentTimeMs(), appState.resultsReadyAt)) return;
     if (event.key === "Escape") {
       openLevelSelect();
     } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
       const direction = event.key === "ArrowUp" ? -1 : 1;
-      appState.resultsIndex = (appState.resultsIndex + direction + actionCount) % actionCount;
+      appState.resultsIndex = (
+        appState.resultsIndex + direction + actions.length
+      ) % actions.length;
       renderCurrentScreen();
     } else if (event.key === "Enter") {
-      if (appState.resultsIndex === 0) startLevel(appState.results.levelNumber);
-      else if (canAdvance && appState.resultsIndex === 1) startLevel(appState.results.levelNumber + 1);
+      const action = actions[appState.resultsIndex];
+      if (action === "retry") startLevel(appState.results.levelNumber);
+      else if (action === "next") startLevel(appState.results.levelNumber + 1);
       else openLevelSelect();
     }
     return;
@@ -354,6 +423,9 @@ function handleGlobalKeydown(event) {
 
 async function bootstrap() {
   appState.devMode = isDevelopmentMode(window.location.search);
+  appState.developerSeed = appState.devMode
+    ? parseDeveloperSeed(window.location.search)
+    : null;
   appState.forcedModifierId = appState.devMode
     ? isForcedModifierRequested(window.location.search)
     : null;

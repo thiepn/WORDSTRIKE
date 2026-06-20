@@ -51,26 +51,7 @@ export async function loadBossPhraseBank() {
   }
 }
 
-function seededRandom(seed) {
-  let value = seed % 2147483647;
-  if (value <= 0) value += 2147483646;
-  return () => {
-    value = (value * 16807) % 2147483647;
-    return (value - 1) / 2147483646;
-  };
-}
-
-function shuffled(items, seed) {
-  const result = [...items];
-  const random = seededRandom(seed);
-  for (let index = result.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(random() * (index + 1));
-    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
-  }
-  return result;
-}
-
-export function selectBossPhrases(bank, config) {
+export function selectBossPhrases(bank, config, attemptSeed = config.level * 104729) {
   const valid = (bank?.phrases || []).filter((entry) => (
     entry.tier === config.wordTier &&
     typeof entry.text === "string" &&
@@ -105,7 +86,7 @@ export function selectBossPhrases(bank, config) {
     : preferred.length >= config.phraseCount
       ? preferred
       : ranked;
-  const ordered = shuffled(candidates, config.level * 104729);
+  const ordered = shuffleSeeded(candidates, mixSeed(attemptSeed, config.level * 104729));
   const selected = [];
   for (let index = 0; index < config.phraseCount; index += 1) {
     selected.push(ordered[index % ordered.length]?.text || FALLBACK_BOSS_PHRASES[index].text);
@@ -113,20 +94,63 @@ export function selectBossPhrases(bank, config) {
   return selected;
 }
 
-export function selectWordsForLevel(bank, config, levelNumber) {
-  const tierNumbers = Object.keys(bank.tiers).map(Number).sort((a, b) => a - b);
-  const preferredTiers = tierNumbers.filter((tier) => tier <= config.wordTier);
-  const sourceTiers = preferredTiers.length ? preferredTiers : tierNumbers;
-  const allWords = sourceTiers.flatMap((tier) => bank.tiers[String(tier)] || bank.tiers[tier] || []);
-  const inRange = allWords.filter(
-    (word) => word.length >= config.minWordLength && word.length <= config.maxWordLength,
-  );
-  const pool = [...new Set(inRange.length ? inRange : allWords.length ? allWords : FALLBACK_WORDS)];
-  const ordered = shuffled(pool, levelNumber * 7919 + config.wordCount);
-
-  const selected = [];
-  for (let index = 0; index < config.wordCount; index += 1) {
-    selected.push(ordered[index % ordered.length]);
-  }
-  return selected;
+function isValidWord(word) {
+  return typeof word === "string" && /^[a-z]+$/.test(word);
 }
+
+export function createNormalWordAttempt(bank, config, attemptSeed) {
+  const tiers = Object.keys(bank?.tiers || {})
+    .map(Number)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  const tierDistance = (tier) => Math.abs(tier - config.wordTier);
+  const orderedTiers = [...tiers].sort(
+    (a, b) => tierDistance(a) - tierDistance(b) || a - b,
+  );
+  const exactLength = (word) => (
+    word.length >= config.minWordLength &&
+    word.length <= config.maxWordLength
+  );
+  const pool = [];
+  const seen = new Set();
+  const addWords = (words, requireLength = true) => {
+    for (const word of words || []) {
+      if (
+        isValidWord(word) &&
+        (!requireLength || exactLength(word)) &&
+        !seen.has(word)
+      ) {
+        seen.add(word);
+        pool.push(word);
+      }
+    }
+  };
+
+  for (const tier of orderedTiers) {
+    addWords(bank.tiers[String(tier)] || bank.tiers[tier]);
+    if (pool.length >= config.wordCount) break;
+  }
+  if (pool.length < config.wordCount) {
+    for (const tier of orderedTiers) {
+      addWords(bank.tiers[String(tier)] || bank.tiers[tier], false);
+      if (pool.length >= config.wordCount) break;
+    }
+  }
+  if (!pool.length) addWords(FALLBACK_WORDS, false);
+
+  const selectionOrder = shuffleSeeded(pool, mixSeed(attemptSeed, 0x51ec7));
+  const selectedWords = [];
+  for (let index = 0; index < config.wordCount; index += 1) {
+    selectedWords.push(selectionOrder[index % selectionOrder.length]);
+  }
+  const spawnQueue = shuffleSeeded(
+    selectedWords,
+    mixSeed(attemptSeed, 0x5a17e),
+  );
+  return { selectedWords, spawnQueue };
+}
+
+export function selectWordsForLevel(bank, config, attemptSeed) {
+  return createNormalWordAttempt(bank, config, attemptSeed).spawnQueue;
+}
+import { mixSeed, shuffleSeeded } from "./random.js";

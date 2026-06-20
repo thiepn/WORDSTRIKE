@@ -16,6 +16,8 @@ import {
   NO_BACKSPACE_ID,
   QUICK_FINGERS_ID,
 } from "./modifiers.js";
+import { createSeededRandom, mixSeed } from "./random.js";
+import { reconcileTargetingState } from "./input.js";
 
 let animationFrameId = null;
 let callbacks = {};
@@ -34,7 +36,7 @@ function createModifierRuntime(config) {
   };
 }
 
-export function createGameState(levelNumber, config, words) {
+export function createGameState(levelNumber, config, words, attempt = {}) {
   const hasModifier = config.modifiers?.some((id) => (
     id === QUICK_FINGERS_ID || id === NO_BACKSPACE_ID || id === BLACKOUT_ID
   ));
@@ -44,11 +46,21 @@ export function createGameState(levelNumber, config, words) {
     levelNumber,
     config,
     wordQueue: [...words],
+    selectedWords: [...(attempt.selectedWords || words)],
+    attemptSeed: attempt.attemptSeed ?? null,
+    random: createSeededRandom(mixSeed(attempt.attemptSeed ?? levelNumber, 0x5f3759df)),
     words: [],
     spawnedCount: 0,
     nextWordId: 1,
     lastSpawnAt: -config.spawnIntervalMs,
     activeTargetId: null,
+    targetingState: {
+      mode: "idle",
+      prefix: "",
+      candidateIds: [],
+      activeTargetId: null,
+      startedAtActiveMs: null,
+    },
     lives: config.lives,
     score: 0,
     combo: 0,
@@ -97,22 +109,26 @@ function getDimensions(game) {
 
 function spawnWord(game, dimensions) {
   const { width, height } = dimensions;
-  const edge = Math.floor(Math.random() * 4);
-  const margin = 0;
-  let x;
-  let y;
-  if (edge === 0) {
-    x = Math.random() * width;
-    y = margin;
-  } else if (edge === 1) {
-    x = width - margin;
-    y = Math.random() * height;
-  } else if (edge === 2) {
-    x = Math.random() * width;
-    y = height - margin;
-  } else {
-    x = margin;
-    y = Math.random() * height;
+  const edge = Math.floor(game.random() * 4);
+  const margin = 32;
+  let x = 0;
+  let y = 0;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    if (edge === 0) {
+      x = game.random() * width;
+      y = margin;
+    } else if (edge === 1) {
+      x = width - margin;
+      y = game.random() * height;
+    } else if (edge === 2) {
+      x = game.random() * width;
+      y = height - margin;
+    } else {
+      x = margin;
+      y = game.random() * height;
+    }
+    const clear = game.words.every((word) => Math.hypot(word.x - x, word.y - y) >= 72);
+    if (clear) break;
   }
   const dx = game.coreX - x;
   const dy = game.coreY - y;
@@ -133,6 +149,8 @@ function spawnWord(game, dimensions) {
     abandonedAt: null,
     missedCharactersRecorded: false,
     coreArrivalProcessed: false,
+    separationX: 0,
+    separationY: 0,
     ...(hasBlackout ? {
       spawnedAtActiveMs: game.elapsedMs,
       blackoutPhase: "visible",
@@ -161,7 +179,7 @@ export function processWordCoreArrival(game, word) {
   }
   registerMissedWord(game, word);
   game.words = game.words.filter((candidate) => candidate.id !== word.id);
-  if (game.activeTargetId === word.id) game.activeTargetId = null;
+  reconcileTargetingState(game);
   game.lives -= 1;
   game.combo = 0;
   removeWordElement(word);
@@ -183,6 +201,89 @@ export function updateBlackoutWordState(game, word) {
     game.blackoutStats.wordsHidden += 1;
   }
   return word;
+}
+
+function wordVisualSize(word) {
+  if (word.blackoutHidden) return { width: 34, height: 34 };
+  return {
+    width: Math.min(220, Math.max(50, word.text.length * 17 + 18)),
+    height: 38,
+  };
+}
+
+function wordMobility(game, word) {
+  if (game.targetingState.activeTargetId === word.id) return 0.25;
+  if (game.targetingState.candidateIds.includes(word.id)) return 0.65;
+  if (word.abandoned) return 1.2;
+  return 1;
+}
+
+export function updateWordSeparation(game, dimensions, deltaMs = 16) {
+  const targets = new Map(game.words.map((word) => [word.id, { x: 0, y: 0 }]));
+  const gap = 8;
+  for (let firstIndex = 0; firstIndex < game.words.length; firstIndex += 1) {
+    const first = game.words[firstIndex];
+    const firstSize = wordVisualSize(first);
+    for (let secondIndex = firstIndex + 1; secondIndex < game.words.length; secondIndex += 1) {
+      const second = game.words[secondIndex];
+      const secondSize = wordVisualSize(second);
+      const dx = (second.x + (second.separationX || 0))
+        - (first.x + (first.separationX || 0));
+      const dy = (second.y + (second.separationY || 0))
+        - (first.y + (first.separationY || 0));
+      const overlapX = (firstSize.width + secondSize.width) / 2 + gap - Math.abs(dx);
+      const overlapY = (firstSize.height + secondSize.height) / 2 + gap - Math.abs(dy);
+      if (overlapX <= 0 || overlapY <= 0) continue;
+      const firstMobility = wordMobility(game, first);
+      const secondMobility = wordMobility(game, second);
+      const mobilityTotal = firstMobility + secondMobility;
+      const firstShare = firstMobility / mobilityTotal;
+      const secondShare = secondMobility / mobilityTotal;
+      const firstTarget = targets.get(first.id);
+      const secondTarget = targets.get(second.id);
+      if (overlapX < overlapY) {
+        const direction = dx >= 0 ? 1 : -1;
+        firstTarget.x -= direction * overlapX * firstShare;
+        secondTarget.x += direction * overlapX * secondShare;
+      } else {
+        const direction = dy >= 0 ? 1 : -1;
+        firstTarget.y -= direction * overlapY * firstShare;
+        secondTarget.y += direction * overlapY * secondShare;
+      }
+    }
+  }
+
+  const smoothing = Math.min(1, Math.max(0, deltaMs) / 80);
+  const cap = 30;
+  for (const word of game.words) {
+    const target = targets.get(word.id);
+    const size = wordVisualSize(word);
+    let nextX = (word.separationX || 0) + (target.x - (word.separationX || 0)) * smoothing;
+    let nextY = (word.separationY || 0) + (target.y - (word.separationY || 0)) * smoothing;
+    if (dimensions) {
+      nextX = Math.max(size.width / 2 - word.x, Math.min(
+        dimensions.width - size.width / 2 - word.x,
+        nextX,
+      ));
+      nextY = Math.max(size.height / 2 - word.y, Math.min(
+        dimensions.height - size.height / 2 - word.y,
+        nextY,
+      ));
+    }
+    nextX = Math.max(-cap, Math.min(cap, nextX));
+    nextY = Math.max(-cap, Math.min(cap, nextY));
+    word.separationX = nextX;
+    word.separationY = nextY;
+  }
+}
+
+function targetingVisualState(game, word) {
+  const state = game.targetingState;
+  return {
+    active: state.mode === "locked" && state.activeTargetId === word.id,
+    candidate: state.mode === "ambiguous" && state.candidateIds.includes(word.id),
+    prefixLength: state.prefix.length,
+  };
 }
 
 function finish(game, success) {
@@ -265,9 +366,12 @@ function tick(timestamp) {
         finish(game, false);
         return;
       }
-    } else {
-      updateWordElement(word, word.id === game.activeTargetId);
     }
+  }
+  updateWordSeparation(game, dimensions, deltaMs);
+  for (const word of game.words) {
+    const targeting = targetingVisualState(game, word);
+    updateWordElement(word, targeting.active, targeting);
   }
 
   callbacks.onHudUpdate?.(game);
@@ -278,12 +382,18 @@ function tick(timestamp) {
   animationFrameId = requestAnimationFrame(tick);
 }
 
-export function startLevelLoop(levelNumber, config, words, nextCallbacks = {}) {
+export function startLevelLoop(
+  levelNumber,
+  config,
+  words,
+  nextCallbacks = {},
+  attempt = {},
+) {
   stopGameLoop();
   clearBossPhrase();
   clearWordElements();
   callbacks = nextCallbacks;
-  appState.game = createGameState(levelNumber, config, words);
+  appState.game = createGameState(levelNumber, config, words, attempt);
   animationFrameId = requestAnimationFrame(tick);
   return appState.game;
 }
@@ -291,6 +401,7 @@ export function startLevelLoop(levelNumber, config, words, nextCallbacks = {}) {
 export function stopGameLoop() {
   if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
   animationFrameId = null;
+  clearWordElements();
   if (appState.game?.mode === "normal") appState.game.lastTimestamp = null;
 }
 

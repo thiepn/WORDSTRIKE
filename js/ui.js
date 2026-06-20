@@ -1,5 +1,9 @@
 import { calculateAccuracy, calculateWPM } from "./scoring.js";
-import { generateBossLevel, generateLevel } from "./levelGenerator.js";
+import {
+  calculateBossTiming,
+  generateBossLevel,
+  generateLevel,
+} from "./levelGenerator.js";
 import { selectBossPhrases } from "./wordBank.js";
 import {
   BLACKOUT_FADE_MS,
@@ -44,17 +48,32 @@ export function renderTitle(menuIndex, handlers) {
   app().querySelector('[data-action="settings"]').onclick = handlers.settings;
 }
 
-function renderDevPanel(selectedLevel, bossPhraseBank, forcedModifierId) {
+function renderDevPanel(
+  selectedLevel,
+  bossPhraseBank,
+  forcedModifierId,
+  developerSeed,
+) {
   const isBoss = selectedLevel % 10 === 0;
   const config = isBoss ? generateBossLevel(selectedLevel) : generateLevel(selectedLevel);
-  const phrases = isBoss ? selectBossPhrases(bossPhraseBank, config) : [];
+  const previewSeed = developerSeed || selectedLevel * 104729;
+  const phrases = isBoss
+    ? selectBossPhrases(bossPhraseBank, config, previewSeed)
+    : [];
+  const timing = isBoss ? calculateBossTiming(selectedLevel, phrases) : null;
   const fields = isBoss
     ? [
       ["level", selectedLevel],
       ["bossIndex", config.bossIndex],
       ["phraseCount", config.phraseCount],
       ["wordsPerPhrase", config.wordsPerPhrase],
-      ["timeLimitSec", config.timeLimitSec],
+      ["baselineTimeLimitSec", config.timeLimitSec],
+      ["attemptSeed", previewSeed],
+      ["totalRequiredCharacters", timing.totalRequiredCharacters],
+      ["bossTargetWPM", timing.bossTargetWPM],
+      ["idealTypingSeconds", timing.idealTypingSeconds.toFixed(2)],
+      ["transitionAllowance", timing.transitionAllowanceSeconds.toFixed(2)],
+      ["effectiveTimeLimitSec", timing.effectiveTimeLimitSec.toFixed(2)],
       ["wordTier", config.wordTier],
       ["world", config.world],
       ["totalCharacters", phrases.reduce((sum, phrase) => sum + phrase.length, 0)],
@@ -117,6 +136,7 @@ export function renderLevelSelect(
   devMode,
   bossPhraseBank,
   forcedModifierId,
+  developerSeed,
   handlers,
 ) {
   const selectedModifiers = getModifiersForLevel(selectedLevel);
@@ -157,7 +177,9 @@ export function renderLevelSelect(
         </div>
         ${menuButton("BACK", "back")}
       </header>
-      ${devMode ? renderDevPanel(selectedLevel, bossPhraseBank, forcedModifierId) : ""}
+      ${devMode
+    ? renderDevPanel(selectedLevel, bossPhraseBank, forcedModifierId, developerSeed)
+    : ""}
       <div class="level-detail ${selectedModifier ? "has-modifier" : ""}">
         ${selectedModifier
     ? `<strong>${selectedModifier.name}</strong><span>${selectedModifier.description}</span>`
@@ -202,7 +224,14 @@ export function renderDevModeIndicator() {
   document.body.append(indicator);
 }
 
-export function renderGameplayShell(levelNumber, lives, config, devMode = false, forcedModifier = false) {
+export function renderGameplayShell(
+  levelNumber,
+  lives,
+  config,
+  devMode = false,
+  forcedModifier = false,
+  attempt = {},
+) {
   const quickFingers = config.modifiers?.includes(QUICK_FINGERS_ID);
   const noBackspace = config.modifiers?.includes(NO_BACKSPACE_ID);
   const blackout = config.modifiers?.includes(BLACKOUT_ID);
@@ -239,6 +268,11 @@ export function renderGameplayShell(levelNumber, lives, config, devMode = false,
           ${blackout ? '<span id="blackout-counts">VISIBLE 0 // FADING 0 // HIDDEN 0</span>' : ""}
           ${devMode ? '<small id="modifier-runtime-details"></small>' : ""}
         </div>` : ""}
+      ${devMode ? `
+        <aside class="dev-runtime-panel" id="dev-runtime-panel">
+          seed=${attempt.attemptSeed} // selected=${attempt.selectedWords?.join(",")}
+          // queue=${attempt.spawnQueue?.join(",")}
+        </aside>` : ""}
       <div class="play-area" id="play-area">
         <div class="core" aria-label="Central core"></div>
       </div>
@@ -352,6 +386,24 @@ export function updateHud(game) {
       ].join(" // ");
     }
   }
+  const devRuntime = document.querySelector("#dev-runtime-panel");
+  if (devRuntime) {
+    const state = game.targetingState;
+    const candidateWords = game.words.filter((word) => state.candidateIds.includes(word.id));
+    devRuntime.textContent = [
+      `seed=${game.attemptSeed}`,
+      `selected=${game.selectedWords.join(",")}`,
+      `queue=${game.wordQueue.join(",")}`,
+      `targeting=${state.mode}`,
+      `prefixLength=${state.prefix.length}`,
+      `candidates=${state.candidateIds.length}`,
+      `candidateIds=${state.candidateIds.join(",") || "none"}`,
+      `candidateTexts=${candidateWords.map((word) => word.text).join(",") || "none"}`,
+      `activeTarget=${state.activeTargetId ?? "none"}`,
+      `offsets=${game.words.map((word) => `${word.id}:${(word.separationX || 0).toFixed(1)},${(word.separationY || 0).toFixed(1)}`).join("|") || "none"}`,
+      `visibility=${candidateWords.map((word) => `${word.id}:${word.blackoutPhase || "visible"}`).join("|") || "none"}`,
+    ].join(" // ");
+  }
 }
 
 function bossIntroLabel(game) {
@@ -364,7 +416,7 @@ function bossIntroLabel(game) {
   return "TYPE";
 }
 
-export function renderBossShell(levelNumber, config) {
+export function renderBossShell(levelNumber, config, devMode = false, attempt = {}) {
   app().innerHTML = `
     <section class="screen boss-screen">
       <header class="boss-hud">
@@ -383,6 +435,15 @@ export function renderBossShell(levelNumber, config) {
           <span>&nbsp; ACC <span class="boss-hud-value" id="boss-accuracy">100%</span></span>
         </div>
       </header>
+      ${devMode ? `
+        <aside class="dev-runtime-panel boss-dev-runtime" id="dev-runtime-panel">
+          seed=${attempt.attemptSeed} // totalCharacters=${config.totalRequiredCharacters}
+          // targetWPM=${config.bossTargetWPM}
+          // ideal=${config.idealTypingSeconds.toFixed(2)}s
+          // transitions=${config.transitionAllowanceSeconds.toFixed(2)}s
+          // effective=${config.effectiveTimeLimitSec.toFixed(2)}s
+          // phrases=${attempt.phrases?.join(" | ")}
+        </aside>` : ""}
       <div class="boss-arena">
         <div class="boss-intro" id="boss-intro">BOSS NODE ${levelNumber}</div>
         <div class="boss-phrase-frame">
@@ -427,6 +488,18 @@ export function updateBossHud(game) {
     const element = document.querySelector(selector);
     if (element) element.textContent = value;
   }
+  const devRuntime = document.querySelector("#dev-runtime-panel");
+  if (devRuntime) {
+    devRuntime.textContent = [
+      `seed=${game.attemptSeed}`,
+      `totalCharacters=${game.config.totalRequiredCharacters}`,
+      `targetWPM=${game.config.bossTargetWPM}`,
+      `ideal=${game.config.idealTypingSeconds.toFixed(2)}s`,
+      `transitions=${game.config.transitionAllowanceSeconds.toFixed(2)}s`,
+      `effective=${game.config.effectiveTimeLimitSec.toFixed(2)}s`,
+      `phrases=${game.phrases.join(" | ")}`,
+    ].join(" // ");
+  }
 }
 
 export function showPauseOverlay(selectedIndex, handlers) {
@@ -439,13 +512,26 @@ export function showPauseOverlay(selectedIndex, handlers) {
       <h2>PAUSED</h2>
       <div class="menu-list">
         ${menuButton("RESUME", "resume", selectedIndex === 0)}
-        ${menuButton("LEVEL SELECT", "levels", selectedIndex === 1)}
+        ${menuButton("RETRY", "retry", selectedIndex === 1)}
+        ${menuButton("LEVEL SELECT", "levels", selectedIndex === 2)}
+        ${menuButton("MAIN MENU", "title", selectedIndex === 3)}
       </div>
       <p class="footer-hint">ESC RESUME</p>
     </div>`;
   document.querySelector(".game-screen, .boss-screen")?.append(overlay);
   overlay.querySelector('[data-action="resume"]').onclick = handlers.resume;
+  overlay.querySelector('[data-action="retry"]').onclick = handlers.retry;
   overlay.querySelector('[data-action="levels"]').onclick = handlers.levels;
+  overlay.querySelector('[data-action="title"]').onclick = handlers.title;
+  overlay.querySelectorAll(".arcade-button").forEach((button, index) => {
+    button.onmouseenter = () => {
+      overlay.querySelectorAll(".arcade-button").forEach(
+        (item) => item.classList.remove("selected"),
+      );
+      button.classList.add("selected");
+      handlers.select?.(index);
+    };
+  });
 }
 
 export function hidePauseOverlay() {
@@ -506,6 +592,15 @@ export function renderResults(result, selectedIndex, handlers) {
   app().querySelector('[data-action="retry"]').onclick = handlers.retry;
   app().querySelector('[data-action="next"]')?.addEventListener("click", handlers.next);
   app().querySelector('[data-action="levels"]').onclick = handlers.levels;
+  app().querySelectorAll(".results-panel .arcade-button").forEach((button, index) => {
+    button.onmouseenter = () => {
+      app().querySelectorAll(".results-panel .arcade-button").forEach(
+        (item) => item.classList.remove("selected"),
+      );
+      button.classList.add("selected");
+      handlers.select?.(index);
+    };
+  });
 }
 
 export function renderSettings(save, selectedIndex, handlers) {

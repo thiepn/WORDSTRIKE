@@ -146,7 +146,8 @@ assert.equal(game.blackoutStats.wordsHidden, 1);
 assert.equal(second.blackoutHidden, false);
 
 const firstPosition = playArea.children.at(-2);
-const firstVisual = firstPosition.children[0];
+const firstSeparation = firstPosition.children[0];
+const firstVisual = firstSeparation.children[0];
 const transformBefore = firstPosition.style.transform;
 updateWordElement(first, true);
 assert.equal(firstPosition.style.transform, transformBefore);
@@ -157,7 +158,7 @@ assert.match(firstVisual.html, /0 \/ 3/);
 assert.equal(firstPosition.attributes["aria-label"], "Hidden incoming word");
 
 const secondPosition = playArea.children.at(-1);
-const secondVisual = secondPosition.children[0];
+const secondVisual = secondPosition.children[0].children[0];
 updateWordElement(second, false);
 assert.equal(secondVisual.classList.contains("word-blackout-visible"), true);
 assert.match(secondVisual.html, /opacity:1/);
@@ -185,10 +186,12 @@ second = addWord(game, {
   blackoutHidden: true,
 });
 handleGameplayKey(event("c"), game, { strictMode: false, particles: false });
-assert.equal(game.activeTargetId, second.id);
-assert.equal(second.typedIndex, 1);
+assert.equal(game.targetingState.mode, "ambiguous");
+assert.deepEqual(game.targetingState.candidateIds, [second.id, first.id]);
+assert.equal(second.typedIndex, 0);
 assert.equal(second.blackoutHidden, true);
 handleGameplayKey(event("a"), game, { strictMode: false, particles: false });
+assert.equal(game.targetingState.mode, "ambiguous");
 handleGameplayKey(event("r"), game, { strictMode: false, particles: false });
 assert.equal(game.words.includes(second), false);
 assert.equal(game.blackoutStats.hiddenWordsCompleted, 1);

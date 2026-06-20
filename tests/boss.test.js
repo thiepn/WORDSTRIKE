@@ -38,8 +38,8 @@ const bank = await loadBossPhraseBank();
 assert.ok(bank.phrases.length >= 100);
 for (const level of [10, 50, 100]) {
   const config = generateBossLevel(level);
-  const first = selectBossPhrases(bank, config);
-  const second = selectBossPhrases(bank, config);
+  const first = selectBossPhrases(bank, config, 12345);
+  const second = selectBossPhrases(bank, config, 12345);
   assert.deepEqual(first, second);
   assert.equal(first.length, config.phraseCount);
   assert.equal(new Set(first).size, first.length);
@@ -87,11 +87,18 @@ const press = (key, strictMode = false) => handleBossKey(
 );
 
 press("g");
+const stablePhraseMarkup = phraseElement.innerHTML;
+assert.match(stablePhraseMarkup, /boss-word-group/);
+assert.match(stablePhraseMarkup, /boss-char/);
+assert.match(stablePhraseMarkup, /boss-space/);
+assert.match(stablePhraseMarkup, /boss-wrap-opportunity/);
 press("x");
 assert.equal(inputGame.combo, 0);
 assert.equal(inputGame.totalKeystrokes, 2);
 press("o");
+assert.equal(phraseElement.innerHTML, stablePhraseMarkup);
 press(" ");
+assert.equal(phraseElement.innerHTML, stablePhraseMarkup);
 assert.equal(inputGame.combo, 1);
 for (const key of "now") press(key);
 assert.equal(completed, 1);

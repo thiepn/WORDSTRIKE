@@ -108,7 +108,10 @@ assert.equal(game.missedCharacters, 4);
 assert.equal(game.abandonedCharacters, 4);
 assert.equal(game.abandonedWordCount, 1);
 assert.equal(game.combo, 4);
-assert.equal(movementWrapper.children[0].classList.contains("word-abandoned"), true);
+assert.equal(
+  movementWrapper.children[0].children[0].classList.contains("word-abandoned"),
+  true,
+);
 assert.equal(movementWrapper.style.transform, positionBeforeCorruption);
 
 handleGameplayKey(event("l"), game, { strictMode: false, particles: false });

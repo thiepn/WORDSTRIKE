@@ -43,3 +43,29 @@ export function generateBossLevel(n) {
     world: Math.floor((n - 1) / 100),
   };
 }
+
+export function calculateBossTiming(level, selectedPhrases) {
+  const phrases = Array.isArray(selectedPhrases) ? selectedPhrases : [];
+  const totalRequiredCharacters = phrases.reduce(
+    (sum, phrase) => sum + String(phrase).length,
+    0,
+  );
+  const bossIndex = level / 10;
+  const bossTargetWPM = clamp(30 + bossIndex * 4, 34, 70);
+  const idealTypingSeconds = (
+    ((totalRequiredCharacters / 5) / bossTargetWPM) * 60
+  );
+  const transitionAllowanceSeconds = Math.max(0, phrases.length - 1) * 0.45;
+  const effectiveTimeLimitSec = clamp(
+    idealTypingSeconds * 1.35 + transitionAllowanceSeconds,
+    12,
+    38,
+  );
+  return {
+    totalRequiredCharacters,
+    bossTargetWPM,
+    idealTypingSeconds,
+    transitionAllowanceSeconds,
+    effectiveTimeLimitSec,
+  };
+}
