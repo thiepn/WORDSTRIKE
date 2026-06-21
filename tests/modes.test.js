@@ -12,11 +12,12 @@ assert.equal(getModeDefinition(MODE_IDS.CAMPAIGN).enabled, true);
 assert.equal(getModeDefinition(MODE_IDS.SPEED_TEST).enabled, true);
 assert.equal(getModeDefinition(MODE_IDS.SPEED_TEST).supportsPause, true);
 assert.equal(getModeDefinition(MODE_IDS.ENDLESS).enabled, true);
-assert.equal(getModeDefinition(MODE_IDS.DAILY).enabled, false);
+assert.equal(getModeDefinition(MODE_IDS.DAILY).enabled, true);
+assert.equal(getModeDefinition(MODE_IDS.DAILY).route, "daily-ready");
 assert.equal(getModeDefinition(MODE_IDS.PRACTICE).enabled, false);
 assert.deepEqual(
   getEnabledModes().map(({ id }) => id),
-  [MODE_IDS.CAMPAIGN, MODE_IDS.SPEED_TEST, MODE_IDS.ENDLESS],
+  [MODE_IDS.CAMPAIGN, MODE_IDS.SPEED_TEST, MODE_IDS.ENDLESS, MODE_IDS.DAILY],
 );
 assert.equal(isModeEnabled(MODE_IDS.CAMPAIGN), true);
 assert.equal(isModeEnabled(MODE_IDS.ENDLESS), true);

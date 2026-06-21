@@ -1,5 +1,13 @@
 import { getAllModes, getModeDefinition } from "./modes.js";
 import { SPEED_TEST_CONFIG_IDS } from "./speedTestConfig.js";
+import {
+  createDefaultDailyRecords,
+  MAX_DAILY_RECORD_DAYS,
+  updateDailyRecords,
+} from "./dailyRecords.js";
+import { getUtcDateKey, isValidDailyDateKey } from "./dailyDate.js";
+import { DAILY_CHALLENGE_VERSION, DAILY_TOTAL_WORDS } from "./dailyConfig.js";
+import { getDailyChallengeSeed } from "./dailyGenerator.js";
 
 export const MODE_DATA_STORAGE_KEY = "wordstrike_mode_data_v1";
 export const MODE_DATA_SCHEMA_VERSION = 1;
@@ -61,6 +69,7 @@ function createModeSummary(modeId) {
     summary.highestStage = null;
     summary.records = createEndlessRecords();
   }
+  if (modeId === "daily") summary.records = createDefaultDailyRecords();
   return summary;
 }
 
@@ -138,6 +147,42 @@ function sanitizeEndlessRecords(value) {
   };
 }
 
+function sanitizeDailyBest(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    success: value.success === true,
+    score: finiteNonNegative(value.score),
+    activeDurationMs: finiteNonNegative(value.activeDurationMs),
+    accuracy: Math.max(0, Math.min(100, finiteNonNegative(value.accuracy))),
+    wordsCompleted: finiteNonNegative(value.wordsCompleted),
+    wordsResolved: finiteNonNegative(value.wordsResolved),
+    integrityRemaining: finiteNonNegative(value.integrityRemaining),
+    endedAt: finiteNonNegative(value.endedAt),
+    sessionId: typeof value.sessionId === "string" ? value.sessionId : null,
+  };
+}
+
+function sanitizeDailyRecords(value) {
+  const entries = Object.entries(value?.days || {})
+    .filter(([dateKey]) => isValidDailyDateKey(dateKey))
+    .sort(([a], [b]) => b.localeCompare(a))
+    .slice(0, MAX_DAILY_RECORD_DAYS)
+    .map(([dateKey, day]) => [dateKey, {
+      attempts: finiteNonNegative(day?.attempts),
+      best: sanitizeDailyBest(day?.best),
+      firstCompletedAt: nullableFinite(day?.firstCompletedAt),
+      lastAttemptAt: nullableFinite(day?.lastAttemptAt),
+    }]);
+  return {
+    currentStreak: finiteNonNegative(value?.currentStreak),
+    bestStreak: finiteNonNegative(value?.bestStreak),
+    lastSuccessfulDateKey: isValidDailyDateKey(value?.lastSuccessfulDateKey)
+      ? value.lastSuccessfulDateKey
+      : null,
+    days: Object.fromEntries(entries),
+  };
+}
+
 function sanitizeModeSummary(value, modeId) {
   const defaults = createModeSummary(modeId);
   const summary = {
@@ -159,6 +204,7 @@ function sanitizeModeSummary(value, modeId) {
     summary.highestStage = nullableFinite(value?.highestStage);
     summary.records = sanitizeEndlessRecords(value?.records);
   }
+  if (modeId === "daily") summary.records = sanitizeDailyRecords(value?.records);
   return summary;
 }
 
@@ -196,6 +242,10 @@ function sanitizeRecentSummary(value) {
       highestStage: nullableFinite(value.modeData?.highestStage),
       wordsCompleted: finiteNonNegative(value.modeData?.wordsCompleted),
       survivalTimeMs: finiteNonNegative(value.modeData?.survivalTimeMs),
+      dateKey: isValidDailyDateKey(value.modeData?.dateKey) ? value.modeData.dateKey : null,
+      challengeVersion: finiteNonNegative(value.modeData?.challengeVersion),
+      wordsResolved: finiteNonNegative(value.modeData?.wordsResolved),
+      integrityRemaining: finiteNonNegative(value.modeData?.integrityRemaining),
     },
   };
 }
@@ -328,6 +378,20 @@ function updateIndependentRecord(records, key, next, valueField) {
   }
 }
 
+function isEligibleDailyResult(result) {
+  const dateKey = result?.modeData?.dateKey;
+  return (
+    result?.developerMode !== true &&
+    result?.variantId === `v${DAILY_CHALLENGE_VERSION}` &&
+    result?.modeData?.challengeVersion === DAILY_CHALLENGE_VERSION &&
+    result?.modeData?.dateOverride !== true &&
+    result?.modeData?.totalWords === DAILY_TOTAL_WORDS &&
+    result?.modeData?.recordEligible === true &&
+    dateKey === getUtcDateKey() &&
+    result?.seed === getDailyChallengeSeed(dateKey)
+  );
+}
+
 export function getSpeedTestRecord(configId) {
   if (!SPEED_TEST_CONFIG_IDS.includes(configId)) return null;
   return {
@@ -355,6 +419,10 @@ export function recordCompletedSession(result) {
     (
       result.modeId === "endless" &&
       result.modeData?.recordEligible !== true
+    ) ||
+    (
+      result.modeId === "daily" &&
+      !isEligibleDailyResult(result)
     ) ||
     result.state === "aborted" ||
     result.sessionState === "aborted" ||
@@ -451,6 +519,9 @@ export function recordCompletedSession(result) {
     }, "value");
     mode.highestStage = better(mode.highestStage, stage);
   }
+  if (result.modeId === "daily") {
+    mode.records = updateDailyRecords(mode.records, result);
+  }
 
   const summary = sanitizeRecentSummary(result);
   data.recentSessions = [
@@ -467,6 +538,27 @@ export function recordCompletedSession(result) {
 export function getModeSummary(modeId) {
   if (!getModeDefinition(modeId)) return null;
   return { ...loadModeData().modes[modeId] };
+}
+
+export function getDailyRecord(dateKey) {
+  if (!isValidDailyDateKey(dateKey)) return null;
+  const records = loadModeData().modes.daily.records;
+  const day = records.days[dateKey];
+  return day ? {
+    ...day,
+    best: day.best ? { ...day.best } : null,
+    currentStreak: records.currentStreak,
+    bestStreak: records.bestStreak,
+    lastSuccessfulDateKey: records.lastSuccessfulDateKey,
+  } : {
+    attempts: 0,
+    best: null,
+    firstCompletedAt: null,
+    lastAttemptAt: null,
+    currentStreak: records.currentStreak,
+    bestStreak: records.bestStreak,
+    lastSuccessfulDateKey: records.lastSuccessfulDateKey,
+  };
 }
 
 export function getRecentSessions() {

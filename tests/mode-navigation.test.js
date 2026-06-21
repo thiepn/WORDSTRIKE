@@ -45,17 +45,19 @@ renderModeSelect(getAllModes(), 0, {
 });
 assert.match(app.html, /MODE SELECT/);
 assert.match(app.html, /CAMPAIGN/i);
-assert.equal((app.html.match(/COMING SOON/g) || []).length, 2);
-assert.equal(app.cards.filter((card) => card.button).length, 3);
-app.cards[3].onmouseenter();
-assert.equal(selected.at(-1), 3);
-assert.equal(app.cards[3].onclick, undefined);
+assert.equal((app.html.match(/COMING SOON/g) || []).length, 1);
+assert.equal(app.cards.filter((card) => card.button).length, 4);
+app.cards[4].onmouseenter();
+assert.equal(selected.at(-1), 4);
+assert.equal(app.cards[4].onclick, undefined);
 app.cards[0].onclick();
 assert.equal(activated.at(-1), "campaign");
 app.cards[1].onclick();
 assert.equal(activated.at(-1), "speed-test");
 app.cards[2].onclick();
 assert.equal(activated.at(-1), "endless");
+app.cards[3].onclick();
+assert.equal(activated.at(-1), "daily");
 
 const mainSource = await readFile(new URL("../js/main.js", import.meta.url), "utf8");
 assert.match(mainSource, /Screens\.MODE_SELECT/);

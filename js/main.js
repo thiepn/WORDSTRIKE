@@ -49,6 +49,9 @@ import {
   renderEndlessReady,
   renderEndlessResults,
   renderEndlessShell,
+  renderDailyReady,
+  renderDailyResults,
+  renderDailyShell,
   renderGameplayShell,
   renderLevelSelect,
   renderModeSelect,
@@ -61,8 +64,10 @@ import {
   renderTitle,
   showPauseOverlay,
   showEndlessPauseOverlay,
+  showDailyPauseOverlay,
   showSpeedTestPauseOverlay,
   updateEndlessHud,
+  updateDailyHud,
   updateBossHud,
   updateHud,
   updateSpeedTestRun,
@@ -102,6 +107,16 @@ import {
   startEndlessRun,
   stopEndlessLoop,
 } from "./endlessMode.js";
+import { createDailyVocabulary, generateDailyPlan } from "./dailyGenerator.js";
+import { getUtcDateKey, isValidDailyDateKey, parseDailyDateOverride } from "./dailyDate.js";
+import { getDailyRecord } from "./modeStorage.js";
+import {
+  clearDailyRuntime,
+  handleDailyKey,
+  resumeDailyLoop,
+  startDailyRun,
+  stopDailyLoop,
+} from "./dailyMode.js";
 
 const titleActions = ["modes", "settings"];
 const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
@@ -111,6 +126,7 @@ function stopActiveLoops() {
   stopBossLoop();
   stopSpeedTestLoop();
   stopEndlessLoop();
+  stopDailyLoop();
 }
 
 function discardActiveAttempt() {
@@ -118,6 +134,7 @@ function discardActiveAttempt() {
   clearSpeedTestLayout();
   clearSpeedTestRuntime();
   clearEndlessRuntime();
+  clearDailyRuntime();
 }
 
 function cleanupCampaignAttempt(reason, { clearSessionState = true } = {}) {
@@ -155,6 +172,17 @@ function openModeSelect() {
 function openEndlessReady(reason = "endless-ready") {
   cleanupCampaignAttempt(reason);
   changeScreen(Screens.ENDLESS_READY);
+  renderCurrentScreen();
+}
+
+function openDailyReady(reason = "daily-ready") {
+  cleanupCampaignAttempt(reason);
+  if (!appState.devMode || !appState.dailyDateOverride) {
+    appState.dailyDateKey = getUtcDateKey();
+  }
+  appState.dailyResult = null;
+  appState.dailyRecordFlags = null;
+  changeScreen(Screens.DAILY_READY);
   renderCurrentScreen();
 }
 
@@ -271,6 +299,42 @@ function finishEndless(game, result) {
   appState.endlessResultsReadyAt = currentTimeMs() + 200;
   changeScreen(Screens.ENDLESS_RESULTS);
   renderCurrentScreen();
+}
+
+function finishDaily(game, result) {
+  if (!result || appState.screen === Screens.DAILY_RESULTS) return;
+  appState.dailyResult = result;
+  appState.dailyRecordFlags = { ...game.recordFlags };
+  appState.dailyResultsIndex = 0;
+  appState.dailyResultsReadyAt = currentTimeMs() + 200;
+  changeScreen(Screens.DAILY_RESULTS);
+  renderCurrentScreen();
+}
+
+function startDaily(source = "daily-ready", dateKey = appState.dailyDateKey) {
+  cleanupCampaignAttempt(source === "retry" ? "retry" : "new-session");
+  const challengeDateKey = isValidDailyDateKey(dateKey) ? dateKey : getUtcDateKey();
+  const vocabulary = createDailyVocabulary({
+    commonWords: appState.speedTestWordBank.words,
+    campaignBank: appState.wordBank,
+  });
+  const plan = generateDailyPlan({ dateKey: challengeDateKey, vocabulary });
+  const game = startDailyRun({
+    plan,
+    developerMode: appState.devMode,
+    dateOverride: appState.dailyDateOverride,
+    source,
+    onUpdate: updateDailyHud,
+    onComplete: finishDaily,
+  });
+  if (!game) {
+    openDailyReady("start-failed");
+    return;
+  }
+  appState.dailyDateKey = challengeDateKey;
+  changeScreen(Screens.PLAYING);
+  renderDailyShell(game, appState.devMode);
+  updateDailyHud(game);
 }
 
 function startEndless(source = "mode-select") {
@@ -406,6 +470,7 @@ function pauseGame() {
   changeScreen(Screens.PAUSED);
   pauseSession();
   if (appState.game?.mode === "endless") stopEndlessLoop();
+  if (appState.game?.mode === "daily") stopDailyLoop();
   appState.pauseIndex = 0;
   renderPauseOverlay();
 }
@@ -435,6 +500,16 @@ function renderPauseOverlay() {
     });
     return;
   }
+  if (appState.game?.mode === "daily") {
+    showDailyPauseOverlay(appState.pauseIndex, {
+      resume: resumeGame,
+      retry: () => startDaily("retry", appState.game.config.dateKey),
+      modes: openModeSelect,
+      title: openTitle,
+      select: (index) => { appState.pauseIndex = index; },
+    });
+    return;
+  }
   showPauseOverlay(appState.pauseIndex, {
     resume: resumeGame,
     retry: retryCurrentLevel,
@@ -457,6 +532,7 @@ function resumeGame() {
   resumeSession();
   if (appState.game?.mode === "boss") resumeBossLoop();
   else if (appState.game?.mode === "endless") resumeEndlessLoop();
+  else if (appState.game?.mode === "daily") resumeDailyLoop();
   else resumeGameLoop();
 }
 
@@ -475,6 +551,7 @@ function activateSelectedMode(modeId = getAllModes()[appState.modeSelection]?.id
     resetSpeedTestAttempt("mode-select");
   }
   else if (route === "endless-ready") openEndlessReady("mode-select");
+  else if (route === "daily-ready") openDailyReady("mode-select");
   else return false;
   return true;
 }
@@ -519,6 +596,29 @@ function renderCurrentScreen() {
         title: openTitle,
         select: (index) => {
           appState.endlessResultsIndex = index;
+          renderCurrentScreen();
+        },
+      },
+    );
+  } else if (appState.screen === Screens.DAILY_READY) {
+    renderDailyReady({
+      dateKey: appState.dailyDateKey,
+      record: getDailyRecord(appState.dailyDateKey),
+      developer: appState.devMode,
+    }, {
+      start: () => startDaily("daily-ready", appState.dailyDateKey),
+    });
+  } else if (appState.screen === Screens.DAILY_RESULTS) {
+    renderDailyResults(
+      appState.dailyResult,
+      appState.dailyRecordFlags,
+      appState.dailyResultsIndex,
+      {
+        retry: () => startDaily("retry", appState.dailyResult.modeData.dateKey),
+        modes: openModeSelect,
+        title: openTitle,
+        select: (index) => {
+          appState.dailyResultsIndex = index;
           renderCurrentScreen();
         },
       },
@@ -627,6 +727,9 @@ function handleGlobalKeydown(event) {
     if (appState.game?.mode === "endless") {
       handleEndlessKey(event, appState.game);
       updateEndlessHud(appState.game);
+    } else if (appState.game?.mode === "daily") {
+      handleDailyKey(event, appState.game);
+      updateDailyHud(appState.game);
     } else if (appState.game?.mode === "boss") {
       handleBossKey(event, appState.game, appState.save.settings, completeBossPhrase);
       updateBossHud(appState.game);
@@ -663,6 +766,8 @@ function handleGlobalKeydown(event) {
         ][appState.pauseIndex]();
       } else if (appState.game?.mode === "endless") {
         [resumeGame, () => startEndless("restart"), openModeSelect, openTitle][appState.pauseIndex]();
+      } else if (appState.game?.mode === "daily") {
+        [resumeGame, () => startDaily("retry", appState.game.config.dateKey), openModeSelect, openTitle][appState.pauseIndex]();
       } else {
         [resumeGame, retryCurrentLevel, openLevelSelect, openTitle][appState.pauseIndex]();
       }
@@ -722,6 +827,32 @@ function handleGlobalKeydown(event) {
     } else if (event.key === "Enter") {
       const action = actions[appState.endlessResultsIndex];
       if (action === "retry") startEndless("retry");
+      else if (action === "modes") openModeSelect();
+      else openTitle();
+    }
+    return;
+  }
+
+  if (appState.screen === Screens.DAILY_READY) {
+    if (event.key === "Escape") openModeSelect();
+    else if (event.key === "Enter") startDaily("daily-ready", appState.dailyDateKey);
+    return;
+  }
+
+  if (appState.screen === Screens.DAILY_RESULTS) {
+    const actions = ["retry", "modes", "title"];
+    if (isResultsInputBlocked(event, currentTimeMs(), appState.dailyResultsReadyAt)) return;
+    if (event.key === "Escape") {
+      openModeSelect();
+    } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      const direction = event.key === "ArrowUp" ? -1 : 1;
+      appState.dailyResultsIndex = (
+        appState.dailyResultsIndex + direction + actions.length
+      ) % actions.length;
+      renderCurrentScreen();
+    } else if (event.key === "Enter") {
+      const action = actions[appState.dailyResultsIndex];
+      if (action === "retry") startDaily("retry", appState.dailyResult.modeData.dateKey);
       else if (action === "modes") openModeSelect();
       else openTitle();
     }
@@ -812,6 +943,10 @@ async function bootstrap() {
   appState.endlessStartStage = appState.devMode
     ? Math.max(1, Number.parseInt(search.get("stage"), 10) || 1)
     : 1;
+  appState.dailyDateOverride = appState.devMode && isValidDailyDateKey(search.get("date"));
+  appState.dailyDateKey = appState.devMode
+    ? parseDailyDateOverride(window.location.search)
+    : getUtcDateKey();
   appState.save = loadSave();
   [appState.wordBank, appState.bossWordBank, appState.speedTestWordBank] = await Promise.all([
     loadWordBank(),
@@ -829,6 +964,8 @@ async function bootstrap() {
     resetSpeedTestAttempt("developer");
   } else if (appState.devMode && search.get("mode") === MODE_IDS.ENDLESS) {
     openEndlessReady("developer");
+  } else if (appState.devMode && search.get("mode") === MODE_IDS.DAILY) {
+    openDailyReady("developer");
   } else {
     renderCurrentScreen();
   }

@@ -109,12 +109,14 @@ export function reconcileTargetingState(game) {
   return null;
 }
 
-function completeTarget(game, target, settings, onWordCompleted) {
+function completeTarget(game, target, settings, onWordCompleted, rules = {}) {
   const actualTimeSeconds = Math.max(
     (game.elapsedMs - target.startedAt) / 1000,
     0.05,
   );
-  game.score += calculateWordScore(target.text.length, actualTimeSeconds, game.combo);
+  game.score += typeof rules.calculateWordScore === "function"
+    ? rules.calculateWordScore(game, target, actualTimeSeconds)
+    : calculateWordScore(target.text.length, actualTimeSeconds, game.combo);
   game.combo += 1;
   game.completedWordCount = (game.completedWordCount || 0) + 1;
   game.maxCombo = Math.max(game.maxCombo, game.combo);
@@ -129,6 +131,7 @@ export function handleGameplayKey(
   game,
   settings,
   onWordCompleted,
+  rules = {},
 ) {
   if (game.phase !== "ACTIVE" || game.ended) return false;
   if (IGNORED_KEYS.has(event.key) || event.key.length !== 1) return false;
@@ -157,7 +160,7 @@ export function handleGameplayKey(
       const target = exact[0] || candidates[0];
       lockTarget(game, target, nextPrefix, state.startedAtActiveMs);
       if (target.typedIndex >= target.text.length) {
-        completeTarget(game, target, settings, onWordCompleted);
+        completeTarget(game, target, settings, onWordCompleted, rules);
       }
       return true;
     }
@@ -189,7 +192,7 @@ export function handleGameplayKey(
     }
     const target = lockTarget(game, candidates[0], key, game.elapsedMs);
     if (target.typedIndex >= target.text.length) {
-      completeTarget(game, target, settings, onWordCompleted);
+      completeTarget(game, target, settings, onWordCompleted, rules);
     }
     return true;
   }
@@ -211,7 +214,7 @@ export function handleGameplayKey(
   updateWordElement(target, true);
 
   if (target.typedIndex >= target.text.length) {
-    completeTarget(game, target, settings, onWordCompleted);
+    completeTarget(game, target, settings, onWordCompleted, rules);
   }
   return true;
 }

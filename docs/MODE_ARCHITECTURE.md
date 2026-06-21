@@ -2,7 +2,7 @@
 
 ## Mode registry
 
-`js/modes.js` is the source of truth for mode IDs, availability, routes, and capabilities. Campaign, Typing Test, and Endless are enabled. Daily Strike and Practice Lab remain immutable disabled entries.
+`js/modes.js` is the source of truth for mode IDs, availability, routes, and capabilities. Campaign, Typing Test, Endless, and Daily Strike are enabled. Practice Lab remains disabled.
 
 ## Shared session lifecycle
 
@@ -17,6 +17,7 @@
 - Campaign adapts existing normal and boss loops through `campaignSession.js`.
 - Typing Test owns its ready/active buffer and deadline loop in `speedTest.js`.
 - Endless owns its standardized survival runtime in `endlessMode.js`, reusing Campaign word rendering, prefix targeting, movement geometry, and separation.
+- Daily Strike owns a finite deterministic runtime in `dailyMode.js`, with separate date, generation, scoring, and record modules.
 
 Exactly one gameplay controller is active. Shared cleanup stops all loops before clearing mode runtime and session state.
 
@@ -26,7 +27,7 @@ Exactly one gameplay controller is active. Shared cleanup stops all loops before
 - Typing Test: Title → Mode Select → Ready Test → Results.
 - Endless: Title → Mode Select → Endless Ready → Run → Results.
 
-Mode Select and Endless Ready create no session. Endless begins its session only when the player starts. Stage banners remain active gameplay and do not exclude survival time.
+Mode Select and mode ready screens create no session. Controllers begin sessions only when play starts. Transition banners remain active gameplay time.
 
 ## Adding a future mode
 

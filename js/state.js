@@ -3,6 +3,8 @@ export const Screens = Object.freeze({
   MODE_SELECT: "MODE_SELECT",
   ENDLESS_READY: "ENDLESS_READY",
   ENDLESS_RESULTS: "ENDLESS_RESULTS",
+  DAILY_READY: "DAILY_READY",
+  DAILY_RESULTS: "DAILY_RESULTS",
   SPEED_TEST_RUN: "SPEED_TEST_RUN",
   SPEED_TEST_RESULTS: "SPEED_TEST_RESULTS",
   LEVEL_SELECT: "LEVEL_SELECT",
@@ -35,6 +37,12 @@ export const appState = {
   endlessResultsIndex: 0,
   endlessResultsReadyAt: 0,
   endlessStartStage: 1,
+  dailyDateKey: null,
+  dailyDateOverride: false,
+  dailyResult: null,
+  dailyRecordFlags: null,
+  dailyResultsIndex: 0,
+  dailyResultsReadyAt: 0,
   levelSelection: 1,
   pauseIndex: 0,
   resultsIndex: 0,
@@ -100,6 +108,17 @@ export function clearAttemptRuntime(game) {
     if (Array.isArray(game.phrases)) game.phrases.length = 0;
     game.currentPhrase = "";
     game.transitionElapsedMs = 0;
+  } else if (game.mode === "daily") {
+    if (Array.isArray(game.words)) game.words.length = 0;
+    game.bannerText = "";
+    game.immunityUntilMs = 0;
+    game.targetingState = {
+      mode: "idle",
+      prefix: "",
+      candidateIds: [],
+      activeTargetId: null,
+      startedAtActiveMs: null,
+    };
   }
 }
 
