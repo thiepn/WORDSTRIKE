@@ -3,22 +3,21 @@ import { readFile } from "node:fs/promises";
 import {
   createSpeedTestWordStream,
   generateSpeedTestWords,
+  SPEED_TEST_WORD_SET,
   validateSpeedTestVocabulary,
 } from "../js/speedTestWords.js";
 
 const source = JSON.parse(
-  await readFile(new URL("../data/typingTestWords.json", import.meta.url), "utf8"),
+  await readFile(new URL("../data/english200.json", import.meta.url), "utf8"),
 );
 const validation = validateSpeedTestVocabulary(source);
 assert.equal(validation.valid, true, validation.errors.join("\n"));
-assert.ok(validation.words.length >= 500);
+assert.equal(validation.words.length, 199);
 assert.equal(new Set(validation.words).size, validation.words.length);
-assert.ok(validation.words.every((word) => /^[a-z]{2,10}$/.test(word)));
-assert.ok(
-  validation.words.filter((word) => word.length >= 3 && word.length <= 7).length
-    > validation.words.length / 2,
-);
-assert.ok(!validation.words.includes("electromagnetic"));
+assert.ok(validation.words.every((word) => /^[a-z]{1,10}$/.test(word)));
+assert.deepEqual(SPEED_TEST_WORD_SET, {
+  id: "english-200", name: "English 200", version: 1, wordCount: 199,
+});
 
 const first = generateSpeedTestWords(validation.words, 12345, "time-60", 600);
 const repeat = generateSpeedTestWords(validation.words, 12345, "time-60", 600);
@@ -32,7 +31,7 @@ const stream = createSpeedTestWordStream(validation.words, 77, "time-120");
 stream.ensure(validation.words.length + 10);
 assert.ok(stream.words.length >= validation.words.length + 10);
 assert.equal(
-  stream.words[199] === stream.words[200],
+  stream.words[198] === stream.words[199],
   false,
 );
 assert.equal(typeof stream.baseSeed, "number");
@@ -41,10 +40,10 @@ assert.ok(stream.batchCount > 1);
 assert.equal(generateSpeedTestWords(validation.words, 9, "words-100", 100).length, 100);
 
 const invalid = validateSpeedTestVocabulary({
-  words: ["a", "Bad", "two-two", "valid", "valid"],
+  words: ["Bad", "two-two", "valid", "valid"],
 });
 assert.equal(invalid.valid, false);
 assert.match(invalid.errors.join("\n"), /duplicate/);
-assert.match(invalid.errors.join("\n"), /2-10 letters/);
+assert.match(invalid.errors.join("\n"), /1-10 letters/);
 
 console.log("Typing Test vocabulary and deterministic extendable word-stream tests passed.");

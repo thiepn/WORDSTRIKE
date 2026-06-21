@@ -255,6 +255,14 @@ button {
   margin-top: 24px;
 }
 
+.typing-word-set-heading {
+  margin: 12px 0 18px;
+  color: var(--secondary);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+}
+
 .profile-record-table {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -842,11 +850,24 @@ button {
 }
 
 .speed-test-config,
+.speed-test-controls-wrap,
 .speed-test-categories,
 .speed-test-values,
 .speed-test-hud {
   display: flex;
   align-items: center;
+}
+
+.speed-test-controls-wrap {
+  gap: 18px;
+}
+
+.speed-test-word-set {
+  color: var(--secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  white-space: nowrap;
 }
 
 .speed-test-config {
@@ -2045,6 +2066,7 @@ button {
   }
 
   .speed-test-config,
+  .speed-test-controls-wrap,
   .speed-test-hud {
     width: 100%;
     justify-content: center;

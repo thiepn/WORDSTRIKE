@@ -6,6 +6,10 @@ import {
   recordCompletedSession,
   resetModeData,
 } from "../js/modeStorage.js";
+import {
+  LEGACY_SPEED_TEST_WORD_SET_ID,
+  SPEED_TEST_WORD_SET,
+} from "../js/speedTestWords.js";
 
 const values = new Map([["wordstrike_save", '{"currentFurthestLevel":90}']]);
 globalThis.localStorage = {
@@ -52,7 +56,8 @@ assert.deepEqual(getSpeedTestRecordFlags(first), {
   newAccuracyRecord: true,
 });
 assert.equal(recordCompletedSession(first), true);
-assert.equal(getSpeedTestRecord("time-15").bestWpm, 60);
+assert.equal(getSpeedTestRecord("time-15", LEGACY_SPEED_TEST_WORD_SET_ID).bestWpm, 60);
+assert.equal(getSpeedTestRecord("time-15").bestWpm, null);
 assert.equal(getSpeedTestRecord("time-30").bestWpm, null);
 
 assert.equal(recordCompletedSession(result("speed-2", "time-15", {
@@ -61,7 +66,7 @@ assert.equal(recordCompletedSession(result("speed-2", "time-15", {
   modeData: { ...first.modeData, rawWpm: 63 },
   endedAt: 2000,
 })), true);
-assert.equal(getSpeedTestRecord("time-15").sessionId, "speed-2");
+assert.equal(getSpeedTestRecord("time-15", LEGACY_SPEED_TEST_WORD_SET_ID).sessionId, "speed-2");
 
 assert.equal(recordCompletedSession(result("speed-3", "time-15", {
   wpm: 60,
@@ -69,7 +74,7 @@ assert.equal(recordCompletedSession(result("speed-3", "time-15", {
   modeData: { ...first.modeData, rawWpm: 65 },
   endedAt: 3000,
 })), true);
-let record = getSpeedTestRecord("time-15");
+let record = getSpeedTestRecord("time-15", LEGACY_SPEED_TEST_WORD_SET_ID);
 assert.equal(record.sessionId, "speed-3");
 assert.equal(record.bestRawWpm, 65);
 assert.equal(record.bestAccuracy, 96);
@@ -79,7 +84,7 @@ assert.equal(recordCompletedSession(result("speed-later-tie", "time-15", {
   modeData: { ...first.modeData, rawWpm: 65 },
   endedAt: 5000,
 })), true);
-assert.equal(getSpeedTestRecord("time-15").sessionId, "speed-3");
+assert.equal(getSpeedTestRecord("time-15", LEGACY_SPEED_TEST_WORD_SET_ID).sessionId, "speed-3");
 
 assert.equal(recordCompletedSession(result("speed-4", "words-25", {
   wpm: 55,
@@ -91,8 +96,31 @@ assert.equal(recordCompletedSession(result("speed-4", "words-25", {
     exactWords: 25,
   },
 })), true);
-assert.equal(getSpeedTestRecord("words-25").bestWpm, 55);
-assert.equal(getSpeedTestRecord("time-15").bestWpm, 60);
+assert.equal(getSpeedTestRecord("words-25", LEGACY_SPEED_TEST_WORD_SET_ID).bestWpm, 55);
+assert.equal(getSpeedTestRecord("time-15", LEGACY_SPEED_TEST_WORD_SET_ID).bestWpm, 60);
+const englishResult = result("english-1", "time-15", {
+  wpm: 52,
+  modeData: {
+    ...first.modeData,
+    wordSetId: SPEED_TEST_WORD_SET.id,
+    wordSetName: SPEED_TEST_WORD_SET.name,
+    wordSetVersion: SPEED_TEST_WORD_SET.version,
+    wordSetWordCount: SPEED_TEST_WORD_SET.wordCount,
+  },
+});
+assert.equal(recordCompletedSession(englishResult), true);
+assert.equal(getSpeedTestRecord("time-15").bestWpm, 52);
+assert.equal(getSpeedTestRecord("time-15", LEGACY_SPEED_TEST_WORD_SET_ID).bestWpm, 60);
+assert.equal(recordCompletedSession(result("english-better", "time-15", {
+  wpm: 70,
+  modeData: { ...englishResult.modeData },
+})), true);
+assert.equal(recordCompletedSession(result("english-inferior", "time-15", {
+  wpm: 65,
+  modeData: { ...englishResult.modeData },
+})), true);
+assert.equal(getSpeedTestRecord("time-15").bestWpm, 70);
+assert.equal(getSpeedTestRecord("time-30").bestWpm, null);
 assert.equal(values.get("wordstrike_save"), '{"currentFurthestLevel":90}');
 
 const beforeDeveloper = JSON.stringify(loadModeData());
@@ -100,9 +128,17 @@ assert.equal(recordCompletedSession(result("dev", "time-15", { developerMode: tr
 assert.equal(JSON.stringify(loadModeData()), beforeDeveloper);
 assert.equal(loadModeData().modes.campaign.completedSessions, 0);
 assert.equal(loadModeData().totals.failedSessions, 0);
-assert.equal(loadModeData().recentSessions[0].modeData.configId, "words-25");
+assert.equal(loadModeData().recentSessions[0].modeData.configId, "time-15");
 assert.equal(loadModeData().recentSessions[0].modeData.metricVersion, 2);
 assert.equal(loadModeData().recentSessions[0].modeData.wordDeletes, 1);
+assert.equal(loadModeData().recentSessions[0].modeData.wordSetId, "english-200");
+assert.equal(loadModeData().recentSessions[0].modeData.wordSetName, "English 200");
+assert.equal(loadModeData().recentSessions[0].modeData.wordSetWordCount, 199);
+assert.equal(
+  loadModeData().recentSessions.find(({ sessionId }) => sessionId === "speed-4")
+    .modeData.wordSetId,
+  null,
+);
 
 const stored = loadModeData();
 values.set("wordstrike_mode_data_v1", JSON.stringify({
@@ -115,7 +151,7 @@ values.set("wordstrike_mode_data_v1", JSON.stringify({
     },
   },
 }));
-record = getSpeedTestRecord("time-15");
+record = getSpeedTestRecord("time-15", LEGACY_SPEED_TEST_WORD_SET_ID);
 assert.equal(record.bestWpm, null);
 assert.ok(getSpeedTestRecord("words-100"));
 

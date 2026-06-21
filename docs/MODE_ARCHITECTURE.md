@@ -14,6 +14,8 @@
 
 `recordCompletedSession()` is the sole authoritative path for mode records, lifetime aggregation, recent summaries, and duplicate protection.
 
+Typing Test records are additionally namespaced by word set and configuration. Current `english-200` records remain separate from preserved records without a word-set ID, which are interpreted as `legacy-common-740`.
+
 ## Controllers
 
 - Campaign adapts existing normal and boss loops through `campaignSession.js`.

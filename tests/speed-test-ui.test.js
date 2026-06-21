@@ -74,10 +74,12 @@ renderSpeedTestRun({
 assert.match(app.html, /data-speed-category="time"/);
 assert.match(app.html, /data-speed-category="words"/);
 assert.match(app.html, /data-speed-config="time-60"/);
+assert.match(app.html, /ENGLISH 200/);
 assert.match(app.html, /tabindex="-1"/);
 assert.match(app.html, /START TYPING/);
 assert.match(app.html, /speed-test-caret/);
 assert.doesNotMatch(app.html, /CHOOSE A TEST|START 60 SECONDS|CURRENT/);
+assert.doesNotMatch(app.html, /ENGLISH 199|ENGLISH 1K|word-set-select/i);
 assert.doesNotMatch(app.html, /LIVES|COMBO|MODIFIER/);
 app.buttons.find((button) => button.dataset.speedCategory === "words").onclick();
 assert.equal(configCalls.at(-1), "words-50");
@@ -157,6 +159,7 @@ renderSpeedTestResults({
   select() {},
 });
 assert.match(app.html, /TEST COMPLETE/);
+assert.match(app.html, /ENGLISH 200/);
 assert.match(app.html, /60\.5/);
 assert.match(app.html, /65\.4/);
 assert.match(app.html, /NEW WPM RECORD/);

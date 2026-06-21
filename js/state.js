@@ -24,6 +24,7 @@ export const appState = {
   wordBank: null,
   bossWordBank: null,
   speedTestWordBank: null,
+  commonWordBank: null,
   currentLevel: 1,
   game: null,
   results: null,

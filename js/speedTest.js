@@ -28,6 +28,7 @@ import {
 } from "./speedTestMetrics.js";
 import {
   createSpeedTestWordStream,
+  SPEED_TEST_WORD_SET,
   SPEED_TEST_BATCH_SIZE,
 } from "./speedTestWords.js";
 
@@ -75,9 +76,17 @@ export function createSpeedTestRuntime({
     attemptSeed,
     safeConfig.configId,
   );
+  const runtimeConfig = Object.freeze({
+    ...safeConfig,
+    wordSetId: SPEED_TEST_WORD_SET.id,
+    wordSetName: SPEED_TEST_WORD_SET.name,
+    wordSetVersion: SPEED_TEST_WORD_SET.version,
+    wordSetWordCount: SPEED_TEST_WORD_SET.wordCount,
+  });
   const state = {
     mode: MODE_IDS.SPEED_TEST,
-    config: safeConfig,
+    config: runtimeConfig,
+    wordSet: SPEED_TEST_WORD_SET,
     attemptSeed,
     developerMode,
     phase: "PREPARING",
@@ -222,6 +231,10 @@ function buildSpeedTestResult(state, completedAtMs) {
     combo: { maximum: 0, final: 0 },
     modeData: {
       metricVersion: 2,
+      wordSetId: state.wordSet.id,
+      wordSetName: state.wordSet.name,
+      wordSetVersion: state.wordSet.version,
+      wordSetWordCount: state.wordSet.wordCount,
       configId: state.config.configId,
       testType: state.config.testType,
       durationSeconds: state.config.durationSeconds,
@@ -264,7 +277,10 @@ export function completeSpeedTest(state, completedAtMs = monotonicNow()) {
     monotonicMs: state.completedAtMs,
     epochMs: Date.now(),
   });
-  const previousRecord = getSpeedTestRecord(state.config.configId);
+  const previousRecord = getSpeedTestRecord(
+    state.config.configId,
+    state.wordSet.id,
+  );
   state.recordFlags = getSpeedTestRecordFlags(result, previousRecord);
   if (!completeSession(result, {
     monotonicMs: state.completedAtMs,
@@ -402,7 +418,10 @@ export function startSpeedTest({
     developerMode,
     seed: attemptSeed,
     config: state.config,
-    runtimeData: { configId: state.config.configId },
+    runtimeData: {
+      configId: state.config.configId,
+      wordSetId: state.wordSet.id,
+    },
   });
   if (!session) return null;
   currentSpeedTest = state;
@@ -496,6 +515,12 @@ export function getSpeedTestDiagnosticText(state = currentSpeedTest, nowMs = mon
     `SESSION ID=${session?.id ?? "none"}`,
     `SESSION STATE=${session?.state ?? "idle"}`,
     `CONFIG=${state.config.configId}`,
+    `WORD SET=${state.wordSet.name.toUpperCase()}`,
+    `WORD SET ID=${state.wordSet.id}`,
+    `WORD SET VERSION=${state.wordSet.version}`,
+    `ACTUAL WORD COUNT=${state.wordSet.wordCount}`,
+    `I PRESENT=${state.words.includes("I") || state.words.includes("i") ? "YES" : "NO"}`,
+    `RECORD ELIGIBLE=${state.developerMode !== true}`,
     `ATTEMPT SEED=${state.attemptSeed}`,
     `STREAM SEED=${state.stream.baseSeed}`,
     `BATCH=${state.stream.lastBatchIndex}`,

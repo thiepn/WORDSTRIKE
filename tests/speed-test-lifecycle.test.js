@@ -3,6 +3,7 @@ import { getSpeedTestConfig } from "../js/speedTestConfig.js";
 import {
   clearSpeedTestRuntime,
   getCurrentSpeedTest,
+  getSpeedTestDiagnosticText,
   getSpeedTestLoopActive,
   handleCurrentSpeedTestKey,
   pauseSpeedTest,
@@ -43,6 +44,12 @@ let state = startSpeedTest({
   onComplete: () => { completed += 1; },
 });
 assert.equal(state.phase, "PREPARING");
+assert.equal(state.config.wordSetId, "english-200");
+assert.equal(state.config.wordSetWordCount, 199);
+assert.equal(getCurrentSession().config.wordSetName, "English 200");
+assert.match(getSpeedTestDiagnosticText(state, 0), /WORD SET=ENGLISH 200/);
+assert.match(getSpeedTestDiagnosticText(state, 0), /ACTUAL WORD COUNT=199/);
+assert.match(getSpeedTestDiagnosticText(state, 0), /I PRESENT=NO/);
 state.words[0] = "apple";
 assert.equal(getCurrentSession().state, SESSION_STATES.PREPARING);
 assert.equal(getSpeedTestLoopActive(), true);
@@ -84,6 +91,10 @@ assert.equal(state.ended, true);
 assert.equal(state.metrics.wordsCompleted, 1);
 assert.equal(state.result.activeDurationMs, 3);
 assert.equal(state.result.modeData.metricVersion, 2);
+assert.equal(state.result.modeData.wordSetId, "english-200");
+assert.equal(state.result.modeData.wordSetName, "English 200");
+assert.equal(state.result.modeData.wordSetVersion, 1);
+assert.equal(state.result.modeData.wordSetWordCount, 199);
 assert.equal(state.result.modeData.correctSpaces, 0);
 assert.equal(state.result.modeData.validSpaces, 0);
 assert.equal(state.result.modeData.wordDeletes, 0);

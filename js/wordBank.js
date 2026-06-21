@@ -25,6 +25,19 @@ export async function loadWordBank() {
   }
 }
 
+export async function loadCommonWordBank() {
+  const response = await fetch(new URL("../data/typingTestWords.json", import.meta.url));
+  if (!response.ok) throw new Error(`Common vocabulary request failed: ${response.status}`);
+  const source = await response.json();
+  if (!Array.isArray(source?.words) || !source.words.length) {
+    throw new Error("Invalid common vocabulary");
+  }
+  return {
+    schemaVersion: source.schemaVersion ?? 1,
+    words: [...source.words],
+  };
+}
+
 export async function loadBossWordBank() {
   try {
     const [typingResponse, longResponse] = await Promise.all([

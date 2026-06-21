@@ -20,6 +20,8 @@ Existing trusted root totals are backfilled once when lifetime data is absent. H
 
 `js/statistics.js` contains pure selectors for Overview, Campaign saves and grades, Typing Test configuration records, Endless personal bests, Daily streak/day records, and the 30-entry recent-session list. Existing mode-specific comparators remain authoritative.
 
+Typing Test statistics display only the current **English 200** (`english-200`) record namespace. Older records without a word-set identity remain preserved as `legacy-common-740` data but do not compete with English 200 personal bests. New recent summaries identify English 200; legacy summaries continue to render safely.
+
 Daily detailed dates remain capped at 90. A separate distinct-completed-day counter survives pruning. Recent filters never mutate storage.
 
 All data stays in this browser. The feature has no accounts, cloud synchronization, leaderboard, graphs, destructive reset controls, or additional storage key.

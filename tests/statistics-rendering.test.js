@@ -69,6 +69,8 @@ assert.match(app.html, /data-active-tab="CAMPAIGN"/);
 
 renderProfileStatistics({ snapshot, storage, activeTab: 2 }, {});
 assert.match(app.html, /NO TYPING TEST RECORDS/);
+assert.match(app.html, /ENGLISH 200/);
+assert.doesNotMatch(app.html, /ENGLISH 199/);
 
 renderProfileStatistics({ snapshot, storage, activeTab: 3 }, {});
 assert.match(app.html, /NO ENDLESS RUNS YET/);

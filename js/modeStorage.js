@@ -1,6 +1,10 @@
 import { getAllModes, getModeDefinition } from "./modes.js";
 import { SPEED_TEST_CONFIG_IDS } from "./speedTestConfig.js";
 import {
+  LEGACY_SPEED_TEST_WORD_SET_ID,
+  SPEED_TEST_WORD_SET,
+} from "./speedTestWords.js";
+import {
   createDefaultDailyRecords,
   MAX_DAILY_RECORD_DAYS,
   updateDailyRecords,
@@ -50,6 +54,35 @@ function createSpeedTestRecord() {
   };
 }
 
+function createSpeedTestRecordMap() {
+  return Object.fromEntries(
+    SPEED_TEST_CONFIG_IDS.map((configId) => [configId, createSpeedTestRecord()]),
+  );
+}
+
+function createSpeedTestUsageMap() {
+  return Object.fromEntries(SPEED_TEST_CONFIG_IDS.map((configId) => [configId, 0]));
+}
+
+function createModeActivity() {
+  return {
+    activityVersion: 1,
+    trackedSessions: 0,
+    activePlaytimeMs: 0,
+    wordsCompleted: 0,
+    wordsMissed: 0,
+    charactersCorrect: 0,
+    charactersIncorrect: 0,
+    charactersMissed: 0,
+    totalKeystrokes: 0,
+    accuracyNumerator: 0,
+    accuracyDenominator: 0,
+    wpmWeightedTotal: 0,
+    wpmWeightedDurationMs: 0,
+    coreBreaches: 0,
+  };
+}
+
 function createEndlessRecords() {
   return {
     bestStage: null,
@@ -71,29 +104,20 @@ function createModeSummary(modeId) {
     bestWpm: null,
     bestAccuracy: null,
     highestScore: null,
-    activity: {
-      activityVersion: 1,
-      trackedSessions: 0,
-      wordsCompleted: 0,
-      wordsMissed: 0,
-      charactersCorrect: 0,
-      charactersIncorrect: 0,
-      charactersMissed: 0,
-      totalKeystrokes: 0,
-      accuracyNumerator: 0,
-      accuracyDenominator: 0,
-      wpmWeightedTotal: 0,
-      wpmWeightedDurationMs: 0,
-      coreBreaches: 0,
-    },
+    activity: createModeActivity(),
   };
   if (modeId === "speed-test") {
-    summary.records = Object.fromEntries(
-      SPEED_TEST_CONFIG_IDS.map((configId) => [configId, createSpeedTestRecord()]),
-    );
-    summary.configUsage = Object.fromEntries(
-      SPEED_TEST_CONFIG_IDS.map((configId) => [configId, 0]),
-    );
+    summary.records = createSpeedTestRecordMap();
+    summary.configUsage = createSpeedTestUsageMap();
+    summary.wordSetRecords = {
+      [SPEED_TEST_WORD_SET.id]: createSpeedTestRecordMap(),
+    };
+    summary.wordSetConfigUsage = {
+      [SPEED_TEST_WORD_SET.id]: createSpeedTestUsageMap(),
+    };
+    summary.wordSetActivity = {
+      [SPEED_TEST_WORD_SET.id]: createModeActivity(),
+    };
   }
   if (modeId === "endless") {
     summary.highestStage = null;
@@ -219,7 +243,7 @@ function sanitizeDailyRecords(value) {
 }
 
 function sanitizeModeActivity(value) {
-  const defaults = createModeSummary("campaign").activity;
+  const defaults = createModeActivity();
   if (!value || typeof value !== "object" || value.activityVersion !== 1) return defaults;
   return Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => [
     key,
@@ -248,6 +272,27 @@ function sanitizeModeSummary(value, modeId) {
       configId,
       finiteNonNegative(value?.configUsage?.[configId]),
     ]));
+    summary.wordSetRecords = {
+      [SPEED_TEST_WORD_SET.id]: Object.fromEntries(SPEED_TEST_CONFIG_IDS.map((configId) => [
+        configId,
+        sanitizeSpeedTestRecord(
+          value?.wordSetRecords?.[SPEED_TEST_WORD_SET.id]?.[configId],
+        ),
+      ])),
+    };
+    summary.wordSetConfigUsage = {
+      [SPEED_TEST_WORD_SET.id]: Object.fromEntries(SPEED_TEST_CONFIG_IDS.map((configId) => [
+        configId,
+        finiteNonNegative(
+          value?.wordSetConfigUsage?.[SPEED_TEST_WORD_SET.id]?.[configId],
+        ),
+      ])),
+    };
+    summary.wordSetActivity = {
+      [SPEED_TEST_WORD_SET.id]: sanitizeModeActivity(
+        value?.wordSetActivity?.[SPEED_TEST_WORD_SET.id],
+      ),
+    };
   }
   if (modeId === "endless") {
     summary.highestStage = nullableFinite(value?.highestStage);
@@ -279,6 +324,14 @@ function sanitizeRecentSummary(value) {
       configId: typeof value.modeData?.configId === "string"
         ? value.modeData.configId
         : null,
+      wordSetId: typeof value.modeData?.wordSetId === "string"
+        ? value.modeData.wordSetId
+        : null,
+      wordSetName: typeof value.modeData?.wordSetName === "string"
+        ? value.modeData.wordSetName
+        : null,
+      wordSetVersion: finiteNonNegative(value.modeData?.wordSetVersion),
+      wordSetWordCount: finiteNonNegative(value.modeData?.wordSetWordCount),
       metricVersion: finiteNonNegative(value.modeData?.metricVersion),
       rawWpm: nullableFinite(value.modeData?.rawWpm),
       correctTestCharacters: finiteNonNegative(value.modeData?.correctTestCharacters),
@@ -340,6 +393,7 @@ function applyResultToModeActivity(mode, result) {
   const duration = finiteNonNegative(result.activeDurationMs);
   const wpm = nullableFinite(result.wpm);
   activity.trackedSessions += 1;
+  activity.activePlaytimeMs += duration;
   activity.wordsCompleted += finiteNonNegative(result.words?.completed);
   activity.wordsMissed += finiteNonNegative(result.words?.missed);
   activity.charactersCorrect += correct;
@@ -469,15 +523,46 @@ function isEligibleDailyResult(result) {
   );
 }
 
-export function getSpeedTestRecord(configId) {
+function isSupportedSpeedTestResult(result) {
+  if (!SPEED_TEST_CONFIG_IDS.includes(result?.modeData?.configId)) return false;
+  const wordSetId = getSpeedTestWordSetId(result);
+  if (wordSetId === LEGACY_SPEED_TEST_WORD_SET_ID) {
+    return result?.modeData?.wordSetId == null;
+  }
+  return (
+    wordSetId === SPEED_TEST_WORD_SET.id &&
+    result.modeData?.wordSetName === SPEED_TEST_WORD_SET.name &&
+    result.modeData?.wordSetVersion === SPEED_TEST_WORD_SET.version &&
+    result.modeData?.wordSetWordCount === SPEED_TEST_WORD_SET.wordCount
+  );
+}
+
+export function getSpeedTestRecord(
+  configId,
+  wordSetId = SPEED_TEST_WORD_SET.id,
+) {
   if (!SPEED_TEST_CONFIG_IDS.includes(configId)) return null;
+  const mode = loadModeData().modes["speed-test"];
+  const records = wordSetId === LEGACY_SPEED_TEST_WORD_SET_ID
+    ? mode.records
+    : mode.wordSetRecords?.[wordSetId];
+  if (!records) return null;
   return {
-    ...loadModeData().modes["speed-test"].records[configId],
+    ...records[configId],
   };
 }
 
+export function getSpeedTestWordSetId(result) {
+  return typeof result?.modeData?.wordSetId === "string"
+    ? result.modeData.wordSetId
+    : LEGACY_SPEED_TEST_WORD_SET_ID;
+}
+
 export function getSpeedTestRecordFlags(result, previous = null) {
-  const record = previous || getSpeedTestRecord(result?.modeData?.configId);
+  const record = previous || getSpeedTestRecord(
+    result?.modeData?.configId,
+    getSpeedTestWordSetId(result),
+  );
   if (!record) {
     return { newWpmRecord: false, newRawWpmRecord: false, newAccuracyRecord: false };
   }
@@ -495,7 +580,7 @@ export function recordCompletedSession(result) {
     result.developerMode === true ||
     (
       result.modeId === "speed-test" &&
-      !SPEED_TEST_CONFIG_IDS.includes(result.modeData?.configId)
+      !isSupportedSpeedTestResult(result)
     ) ||
     (
       result.modeId === "endless" &&
@@ -538,8 +623,22 @@ export function recordCompletedSession(result) {
     result.modeId === "speed-test" &&
     SPEED_TEST_CONFIG_IDS.includes(result.modeData?.configId)
   ) {
-    mode.configUsage[result.modeData.configId] += 1;
-    const record = mode.records[result.modeData.configId];
+    const wordSetId = getSpeedTestWordSetId(result);
+    const currentWordSet = wordSetId === SPEED_TEST_WORD_SET.id;
+    const recordMap = currentWordSet
+      ? mode.wordSetRecords[SPEED_TEST_WORD_SET.id]
+      : mode.records;
+    const usageMap = currentWordSet
+      ? mode.wordSetConfigUsage[SPEED_TEST_WORD_SET.id]
+      : mode.configUsage;
+    usageMap[result.modeData.configId] += 1;
+    if (currentWordSet) {
+      applyResultToModeActivity(
+        { activity: mode.wordSetActivity[SPEED_TEST_WORD_SET.id] },
+        result,
+      );
+    }
+    const record = recordMap[result.modeData.configId];
     const flags = getSpeedTestRecordFlags(result, record);
     if (flags.newWpmRecord) {
       record.bestWpm = result.wpm;

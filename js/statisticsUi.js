@@ -127,6 +127,7 @@ function typingTable(title, records) {
 function renderTypingTest(data) {
   return `
     <h2>TYPING TEST</h2>
+    <div class="typing-word-set-heading">ENGLISH 200</div>
     ${data.testsCompleted === 0 ? emptyState("NO TYPING TEST RECORDS") : ""}
     <div class="profile-metric-grid">
       ${metric("TESTS COMPLETED", data.testsCompleted)}
@@ -225,7 +226,7 @@ function renderProfile(profile, state) {
 }
 
 function diagnostics(snapshot, storage) {
-  const records = storage.modes?.["speed-test"]?.records || {};
+  const records = storage.modes?.["speed-test"]?.wordSetRecords?.["english-200"] || {};
   return [
     `PROFILE ID=${snapshot.profile.playerId}`,
     `PROFILE VERSION=${snapshot.profile.profileVersion}`,

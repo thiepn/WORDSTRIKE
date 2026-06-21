@@ -41,16 +41,20 @@ storage.modes.campaign.activity = {
   wpmWeightedTotal: 50000,
   wpmWeightedDurationMs: 1000,
 };
-storage.modes["speed-test"].records["time-15"] = {
-  ...storage.modes["speed-test"].records["time-15"],
+storage.modes["speed-test"].wordSetRecords["english-200"]["time-15"] = {
+  ...storage.modes["speed-test"].wordSetRecords["english-200"]["time-15"],
   bestWpm: 103,
   bestRawWpm: 110,
   tieAccuracy: 97,
   bestResultAt: 1000,
 };
-storage.modes["speed-test"].completedSessions = 1;
-storage.modes["speed-test"].bestAccuracy = 97;
-storage.modes["speed-test"].configUsage["time-15"] = 1;
+storage.modes["speed-test"].wordSetActivity["english-200"].trackedSessions = 1;
+storage.modes["speed-test"].wordSetActivity["english-200"].activePlaytimeMs = 15000;
+storage.modes["speed-test"].wordSetConfigUsage["english-200"]["time-15"] = 1;
+storage.modes["speed-test"].records["time-15"] = {
+  ...storage.modes["speed-test"].records["time-15"],
+  bestWpm: 200,
+};
 storage.modes.endless.completedSessions = 1;
 storage.modes.endless.highestStage = 18;
 storage.modes.endless.records.bestStage = { stage: 18, score: 1000 };
@@ -78,6 +82,16 @@ storage.recentSessions = [
     grade: "A", accuracy: 90, wpm: 50, activeDurationMs: 5000,
     modeData: { level: 2 },
   },
+  {
+    sessionId: "legacy-speed", modeId: "speed-test", endedAt: 500, success: true,
+    accuracy: 90, wpm: 200, activeDurationMs: 15000,
+    modeData: { configId: "time-15" },
+  },
+  {
+    sessionId: "current-speed", modeId: "speed-test", endedAt: 750, success: true,
+    accuracy: 97, wpm: 103, activeDurationMs: 15000,
+    modeData: { configId: "time-15", wordSetId: "english-200", wordSetName: "English 200" },
+  },
 ];
 const save = {
   currentFurthestLevel: 5,
@@ -96,7 +110,7 @@ assert.equal(overview.highestEndlessStage, 18);
 assert.equal(overview.dailyStreak, 4);
 assert.equal(overview.lifetime.accuracy, 90);
 assert.equal(overview.lifetime.weightedWpm, 60);
-assert.equal(overview.recent.length, 2);
+assert.equal(overview.recent.length, 4);
 
 const campaign = getCampaignStatistics(storage, save);
 assert.equal(campaign.highestUnlockedLevel, 5);
@@ -112,6 +126,7 @@ const typing = getTypingTestStatistics(storage);
 assert.equal(typing.timeRecords[0].bestWpm, 103);
 assert.equal(typing.timeRecords[0].rawWpm, 110);
 assert.equal(typing.bestWpm, 103);
+assert.equal(typing.wordSet.name, "English 200");
 assert.equal(typing.mostUsedConfiguration, "15 Seconds");
 assert.equal(typing.wordRecords[0].bestWpm, null);
 
@@ -132,6 +147,9 @@ const original = JSON.stringify(storage.recentSessions);
 assert.equal(getRecentSessionStatistics(storage, "campaign").length, 1);
 assert.match(getRecentSessionStatistics(storage, "campaign")[0].primaryMetric, /LEVEL 2.*A/);
 assert.match(getRecentSessionStatistics(storage, "endless")[0].primaryMetric, /STAGE 18/);
+const speedRecent = getRecentSessionStatistics(storage, "speed-test");
+assert.match(speedRecent[0].primaryMetric, /English 200/);
+assert.match(speedRecent[1].primaryMetric, /LEGACY TEST/);
 assert.equal(JSON.stringify(storage.recentSessions), original);
 
 console.log("Overview, Campaign, Typing Test, Endless, Daily, and Recent pure selector tests passed.");

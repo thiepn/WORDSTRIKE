@@ -6,8 +6,9 @@ accuracy rather than rare terminology.
 
 ## Sources and tiers
 
-- `data/typingTestWords.json` supplies common short and medium words and some
-  long words. Its source array and ordering are never mutated.
+- `data/typingTestWords.json` remains the general 740-word common pool and
+  supplies boss short, medium, and some long words. Typing Test now uses its
+  separate `data/english200.json` benchmark. Neither source array is mutated.
 - `data/bossCommonLongWords.json` contains 241 manually reviewed, unique,
   lowercase words between 9 and 15 characters.
 - The deleted difficult boss bank is not imported or used.

@@ -1,6 +1,7 @@
 import { getAllSpeedTestConfigs, SPEED_TEST_TYPES } from "./speedTestConfig.js";
 import { getWeightedLifetimeAccuracy, getWeightedLifetimeWpm } from "./lifetimeStatistics.js";
 import { getUtcDateKey } from "./dailyDate.js";
+import { SPEED_TEST_WORD_SET } from "./speedTestWords.js";
 
 function number(value, fallback = null) {
   if (value == null || value === "") return fallback;
@@ -49,7 +50,7 @@ export function getLifetimeStatistics(storage = {}) {
 }
 
 function bestTypingWpm(storage) {
-  const records = storage.modes?.["speed-test"]?.records || {};
+  const records = storage.modes?.["speed-test"]?.wordSetRecords?.[SPEED_TEST_WORD_SET.id] || {};
   const values = Object.values(records).map((record) => number(record?.bestWpm)).filter((value) => value != null);
   return values.length ? Math.max(...values) : null;
 }
@@ -87,7 +88,7 @@ export function getCampaignStatistics(storage = {}, save = {}) {
 
 export function getTypingTestStatistics(storage = {}) {
   const mode = storage.modes?.["speed-test"] || {};
-  const records = mode.records || {};
+  const records = mode.wordSetRecords?.[SPEED_TEST_WORD_SET.id] || {};
   const mapRecord = (config) => {
     const record = records[config.configId] || {};
     return {
@@ -101,7 +102,8 @@ export function getTypingTestStatistics(storage = {}) {
     };
   };
   const all = getAllSpeedTestConfigs().map(mapRecord);
-  const usage = mode.configUsage || {};
+  const usage = mode.wordSetConfigUsage?.[SPEED_TEST_WORD_SET.id] || {};
+  const activity = mode.wordSetActivity?.[SPEED_TEST_WORD_SET.id] || {};
   const reliableUsage = Object.values(usage).some((value) => number(value, 0) > 0);
   const mostUsed = reliableUsage
     ? getAllSpeedTestConfigs().reduce((best, config) => (
@@ -109,14 +111,18 @@ export function getTypingTestStatistics(storage = {}) {
     ), null)
     : null;
   return {
+    wordSet: SPEED_TEST_WORD_SET,
     timeRecords: all.filter((record) => record.type === SPEED_TEST_TYPES.TIME),
     wordRecords: all.filter((record) => record.type === SPEED_TEST_TYPES.WORDS),
-    testsCompleted: number(mode.completedSessions, 0),
-    activePlaytimeMs: number(mode.activePlaytimeMs, 0),
+    testsCompleted: number(activity.trackedSessions, 0),
+    activePlaytimeMs: activity.trackedSessions > 0 ? number(activity.activePlaytimeMs, 0) : null,
     bestWpm: bestTypingWpm(storage),
-    bestAccuracy: number(mode.bestAccuracy),
-    charactersTyped: activityMetric(mode, "totalKeystrokes"),
-    wordsCompleted: activityMetric(mode, "wordsCompleted"),
+    bestAccuracy: Object.values(records)
+      .map((record) => number(record?.bestAccuracy))
+      .filter((value) => value != null)
+      .reduce((best, value) => best == null ? value : Math.max(best, value), null),
+    charactersTyped: activity.trackedSessions > 0 ? number(activity.totalKeystrokes, 0) : null,
+    wordsCompleted: activity.trackedSessions > 0 ? number(activity.wordsCompleted, 0) : null,
     mostUsedConfiguration: mostUsed?.label || null,
   };
 }
@@ -189,7 +195,10 @@ export function getRecentSessionStatistics(storage = {}, modeFilter = "all") {
           ? null
           : `LEVEL ${session.modeData.level}${session.grade ? ` · ${session.grade}` : ""}`;
       } else if (session.modeId === "speed-test") {
-        primaryMetric = `${session.modeData?.configId || "TEST"} · ${Math.round(number(session.wpm, 0))} WPM`;
+        const wordSetName = session.modeData?.wordSetId === SPEED_TEST_WORD_SET.id
+          ? SPEED_TEST_WORD_SET.name
+          : session.modeData?.wordSetName || "LEGACY TEST";
+        primaryMetric = `${wordSetName} · ${session.modeData?.configId || "TEST"} · ${Math.round(number(session.wpm, 0))} WPM`;
       } else if (session.modeId === "endless") {
         primaryMetric = `STAGE ${number(session.modeData?.highestStage, 0)} · ${number(session.score, 0).toLocaleString("en-US")}`;
       } else if (session.modeId === "daily") {

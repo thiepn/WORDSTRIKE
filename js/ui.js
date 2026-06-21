@@ -292,7 +292,10 @@ export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
   app().innerHTML = `
     <section class="screen speed-test-screen">
       <header class="speed-test-topbar">
-        ${speedTestConfigMarkup(state.config, state.phase === "ACTIVE")}
+        <div class="speed-test-controls-wrap">
+          <span class="speed-test-word-set">ENGLISH 200</span>
+          ${speedTestConfigMarkup(state.config, state.phase === "ACTIVE")}
+        </div>
         <div class="speed-test-hud">
           <strong id="speed-test-primary">${isTime
     ? state.config.durationSeconds.toFixed(1)
@@ -479,7 +482,7 @@ export function renderSpeedTestResults(result, recordFlags, selectedIndex, handl
   app().innerHTML = `
     <section class="screen speed-results-screen">
       <div class="speed-results-panel">
-        <div class="eyebrow">${configLabel}</div>
+        <div class="eyebrow">ENGLISH 200 // ${configLabel}</div>
         <h1>TEST COMPLETE</h1>
         <div class="speed-result-headline">
           <div><span>WPM</span><strong>${result.wpm.toFixed(1)}</strong></div>

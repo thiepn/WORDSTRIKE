@@ -20,6 +20,7 @@ import { generateBossEncounter } from "./bossGenerator.js";
 import { loadSave, resetProgress, updateLevelResult, updateSetting } from "./storage.js";
 import {
   loadBossWordBank,
+  loadCommonWordBank,
   loadWordBank,
   createNormalWordAttempt,
 } from "./wordBank.js";
@@ -337,7 +338,7 @@ function startDaily(source = "daily-ready", dateKey = appState.dailyDateKey) {
   cleanupCampaignAttempt(source === "retry" ? "retry" : "new-session");
   const challengeDateKey = isValidDailyDateKey(dateKey) ? dateKey : getUtcDateKey();
   const vocabulary = createDailyVocabulary({
-    commonWords: appState.speedTestWordBank.words,
+    commonWords: appState.commonWordBank.words,
     campaignBank: appState.wordBank,
   });
   const plan = generateDailyPlan({ dateKey: challengeDateKey, vocabulary });
@@ -364,7 +365,7 @@ function startEndless(source = "mode-select") {
   const game = startEndlessRun({
     seed: getAttemptSeed(),
     vocabulary: createEndlessVocabulary({
-      commonWords: appState.speedTestWordBank.words,
+      commonWords: appState.commonWordBank.words,
       campaignBank: appState.wordBank,
       bossBank: appState.bossWordBank,
     }),
@@ -1078,10 +1079,16 @@ async function bootstrap() {
     ? parseDailyDateOverride(window.location.search)
     : getUtcDateKey();
   appState.save = loadSave();
-  [appState.wordBank, appState.bossWordBank, appState.speedTestWordBank] = await Promise.all([
+  [
+    appState.wordBank,
+    appState.bossWordBank,
+    appState.speedTestWordBank,
+    appState.commonWordBank,
+  ] = await Promise.all([
     loadWordBank(),
     loadBossWordBank(),
     loadSpeedTestWordBank(),
+    loadCommonWordBank(),
   ]);
   document.addEventListener("keydown", handleGlobalKeydown);
   if (
