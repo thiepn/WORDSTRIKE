@@ -58,6 +58,7 @@ export function createDefaultDailyRecords() {
     currentStreak: 0,
     bestStreak: 0,
     lastSuccessfulDateKey: null,
+    distinctCompletedDays: 0,
     days: {},
   };
 }
@@ -76,6 +77,7 @@ export function updateDailyRecords(records, result) {
     firstCompletedAt: null,
     lastAttemptAt: null,
   };
+  const wasCompleted = previousDay.firstCompletedAt != null || previousDay.best?.success === true;
   const compact = compactDailyResult(result);
   const day = {
     attempts: Math.max(0, number(previousDay.attempts)) + 1,
@@ -84,6 +86,9 @@ export function updateDailyRecords(records, result) {
     lastAttemptAt: number(result.endedAt),
   };
   if (result.success && day.firstCompletedAt == null) day.firstCompletedAt = number(result.endedAt);
+  if (result.success && !wasCompleted) {
+    next.distinctCompletedDays = Math.max(0, number(next.distinctCompletedDays)) + 1;
+  }
   next.days[dateKey] = day;
 
   if (result.success && (!next.lastSuccessfulDateKey || dateKey >= next.lastSuccessfulDateKey)) {

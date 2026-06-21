@@ -109,7 +109,15 @@ import {
 } from "./endlessMode.js";
 import { createDailyVocabulary, generateDailyPlan } from "./dailyGenerator.js";
 import { getUtcDateKey, isValidDailyDateKey, parseDailyDateOverride } from "./dailyDate.js";
-import { getDailyRecord } from "./modeStorage.js";
+import {
+  ensureStoredPlayerProfile,
+  getDailyRecord,
+  loadModeData,
+  updateStoredDisplayName,
+} from "./modeStorage.js";
+import { copyPlayerIdToClipboard, validateDisplayName } from "./playerProfile.js";
+import { getStatisticsSnapshot } from "./statistics.js";
+import { renderProfileStatistics, STATISTICS_TABS } from "./statisticsUi.js";
 import {
   clearDailyRuntime,
   handleDailyKey,
@@ -118,7 +126,7 @@ import {
   stopDailyLoop,
 } from "./dailyMode.js";
 
-const titleActions = ["modes", "settings"];
+const titleActions = ["modes", "profile", "settings"];
 const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
 
 function stopActiveLoops() {
@@ -159,6 +167,20 @@ function openTitle() {
   cleanupCampaignAttempt("main-menu");
   changeScreen(Screens.TITLE);
   appState.menuIndex = 0;
+  appState.profileEditing = false;
+  renderCurrentScreen();
+}
+
+function openProfileStatistics() {
+  cleanupCampaignAttempt("profile-stats");
+  ensureStoredPlayerProfile();
+  appState.statisticsTabIndex = 0;
+  appState.statisticsRecentFilter = "all";
+  appState.profileEditing = false;
+  appState.profileDraft = "";
+  appState.profileNameError = "";
+  appState.profileCopyMessage = "";
+  changeScreen(Screens.PROFILE_STATS);
   renderCurrentScreen();
 }
 
@@ -539,7 +561,62 @@ function resumeGame() {
 function activateTitleAction() {
   const action = titleActions[appState.menuIndex];
   if (action === "modes") openModeSelect();
+  if (action === "profile") openProfileStatistics();
   if (action === "settings") openSettings();
+}
+
+function selectStatisticsTab(index) {
+  appState.statisticsTabIndex = Math.max(
+    0,
+    Math.min(STATISTICS_TABS.length - 1, Number(index) || 0),
+  );
+  appState.profileEditing = false;
+  appState.profileNameError = "";
+  appState.profileCopyMessage = "";
+  renderCurrentScreen();
+}
+
+function beginProfileNameEdit() {
+  const profile = ensureStoredPlayerProfile();
+  appState.profileEditing = true;
+  appState.profileDraft = profile.displayName;
+  appState.profileNameError = "";
+  renderCurrentScreen();
+}
+
+function cancelProfileNameEdit() {
+  appState.profileEditing = false;
+  appState.profileDraft = "";
+  appState.profileNameError = "";
+  renderCurrentScreen();
+}
+
+function saveProfileName(value = document.querySelector("#profile-name-input")?.value) {
+  const validation = validateDisplayName(value);
+  if (!validation.valid) {
+    appState.profileNameError = "USE 2–20 CHARACTERS WITHOUT CONTROL CHARACTERS";
+    appState.profileDraft = typeof value === "string" ? value : "";
+    renderCurrentScreen();
+    return false;
+  }
+  updateStoredDisplayName(validation.value);
+  appState.profileEditing = false;
+  appState.profileDraft = "";
+  appState.profileNameError = "";
+  renderCurrentScreen();
+  return true;
+}
+
+async function copyPlayerId() {
+  const profile = ensureStoredPlayerProfile();
+  const copied = await copyPlayerIdToClipboard(profile.playerId);
+  appState.profileCopyMessage = copied ? "ID COPIED" : "COPY UNAVAILABLE";
+  if (appState.screen === Screens.PROFILE_STATS) renderCurrentScreen();
+  window.setTimeout(() => {
+    if (appState.screen !== Screens.PROFILE_STATS) return;
+    appState.profileCopyMessage = "";
+    renderCurrentScreen();
+  }, 1800);
 }
 
 function activateSelectedMode(modeId = getAllModes()[appState.modeSelection]?.id) {
@@ -573,6 +650,7 @@ function renderCurrentScreen() {
   if (appState.screen === Screens.TITLE) {
     renderTitle(appState.menuIndex, {
       modes: openModeSelect,
+      profile: openProfileStatistics,
       settings: openSettings,
     });
   } else if (appState.screen === Screens.MODE_SELECT) {
@@ -675,6 +753,33 @@ function renderCurrentScreen() {
       reset: confirmReset,
       back: backFromSettings,
     });
+  } else if (appState.screen === Screens.PROFILE_STATS) {
+    const storage = loadModeData();
+    const profile = storage.profile || ensureStoredPlayerProfile();
+    if (!storage.profile) storage.profile = profile;
+    renderProfileStatistics({
+      snapshot: getStatisticsSnapshot(storage, appState.save, getUtcDateKey()),
+      storage,
+      activeTab: appState.statisticsTabIndex,
+      recentFilter: appState.statisticsRecentFilter,
+      editing: appState.profileEditing,
+      draft: appState.profileDraft,
+      nameError: appState.profileNameError,
+      copyMessage: appState.profileCopyMessage,
+      developerMode: appState.devMode,
+    }, {
+      selectTab: selectStatisticsTab,
+      viewRecent: () => selectStatisticsTab(5),
+      setRecentFilter: (filter) => {
+        appState.statisticsRecentFilter = filter;
+        renderCurrentScreen();
+      },
+      editName: beginProfileNameEdit,
+      saveName: () => saveProfileName(),
+      cancelName: cancelProfileNameEdit,
+      copyId: copyPlayerId,
+      back: openTitle,
+    });
   }
   document.querySelector(".dev-mode-indicator")?.remove();
   document.querySelector(".dev-session-diagnostics")?.remove();
@@ -741,6 +846,31 @@ function handleGlobalKeydown(event) {
         updateHud,
       );
       updateHud(appState.game);
+    }
+    return;
+  }
+
+  if (appState.screen === Screens.PROFILE_STATS) {
+    if (appState.profileEditing) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancelProfileNameEdit();
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        saveProfileName(event.target?.value);
+      }
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      openTitle();
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      event.preventDefault();
+      const direction = event.key === "ArrowLeft" ? -1 : 1;
+      selectStatisticsTab(
+        (appState.statisticsTabIndex + direction + STATISTICS_TABS.length)
+          % STATISTICS_TABS.length,
+      );
     }
     return;
   }

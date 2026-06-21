@@ -8,6 +8,18 @@ import {
 import { getUtcDateKey, isValidDailyDateKey } from "./dailyDate.js";
 import { DAILY_CHALLENGE_VERSION, DAILY_TOTAL_WORDS } from "./dailyConfig.js";
 import { getDailyChallengeSeed } from "./dailyGenerator.js";
+import {
+  createDefaultPlayerProfile,
+  getPublicPlayerProfile as selectPublicPlayerProfile,
+  sanitizePlayerProfile,
+  updateDisplayName,
+  validateDisplayName,
+} from "./playerProfile.js";
+import {
+  applyResultToLifetimeStatistics,
+  createDefaultLifetimeStatistics,
+  sanitizeLifetimeStatistics,
+} from "./lifetimeStatistics.js";
 
 export const MODE_DATA_STORAGE_KEY = "wordstrike_mode_data_v1";
 export const MODE_DATA_SCHEMA_VERSION = 1;
@@ -59,10 +71,28 @@ function createModeSummary(modeId) {
     bestWpm: null,
     bestAccuracy: null,
     highestScore: null,
+    activity: {
+      activityVersion: 1,
+      trackedSessions: 0,
+      wordsCompleted: 0,
+      wordsMissed: 0,
+      charactersCorrect: 0,
+      charactersIncorrect: 0,
+      charactersMissed: 0,
+      totalKeystrokes: 0,
+      accuracyNumerator: 0,
+      accuracyDenominator: 0,
+      wpmWeightedTotal: 0,
+      wpmWeightedDurationMs: 0,
+      coreBreaches: 0,
+    },
   };
   if (modeId === "speed-test") {
     summary.records = Object.fromEntries(
       SPEED_TEST_CONFIG_IDS.map((configId) => [configId, createSpeedTestRecord()]),
+    );
+    summary.configUsage = Object.fromEntries(
+      SPEED_TEST_CONFIG_IDS.map((configId) => [configId, 0]),
     );
   }
   if (modeId === "endless") {
@@ -76,6 +106,8 @@ function createModeSummary(modeId) {
 export function createDefaultModeData() {
   return {
     schemaVersion: MODE_DATA_SCHEMA_VERSION,
+    profile: null,
+    lifetime: createDefaultLifetimeStatistics(),
     totals: {
       completedSessions: 0,
       failedSessions: 0,
@@ -176,11 +208,23 @@ function sanitizeDailyRecords(value) {
   return {
     currentStreak: finiteNonNegative(value?.currentStreak),
     bestStreak: finiteNonNegative(value?.bestStreak),
+    distinctCompletedDays: value?.distinctCompletedDays == null
+      ? entries.filter(([, day]) => day.firstCompletedAt != null || day.best?.success).length
+      : finiteNonNegative(value.distinctCompletedDays),
     lastSuccessfulDateKey: isValidDailyDateKey(value?.lastSuccessfulDateKey)
       ? value.lastSuccessfulDateKey
       : null,
     days: Object.fromEntries(entries),
   };
+}
+
+function sanitizeModeActivity(value) {
+  const defaults = createModeSummary("campaign").activity;
+  if (!value || typeof value !== "object" || value.activityVersion !== 1) return defaults;
+  return Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => [
+    key,
+    key === "activityVersion" ? 1 : finiteNonNegative(value[key], fallback),
+  ]));
 }
 
 function sanitizeModeSummary(value, modeId) {
@@ -193,11 +237,16 @@ function sanitizeModeSummary(value, modeId) {
     bestWpm: nullableFinite(value?.bestWpm),
     bestAccuracy: nullableFinite(value?.bestAccuracy),
     highestScore: nullableFinite(value?.highestScore),
+    activity: sanitizeModeActivity(value?.activity),
   };
   if (modeId === "speed-test") {
     summary.records = Object.fromEntries(SPEED_TEST_CONFIG_IDS.map((configId) => [
       configId,
       sanitizeSpeedTestRecord(value?.records?.[configId]),
+    ]));
+    summary.configUsage = Object.fromEntries(SPEED_TEST_CONFIG_IDS.map((configId) => [
+      configId,
+      finiteNonNegative(value?.configUsage?.[configId]),
     ]));
   }
   if (modeId === "endless") {
@@ -259,18 +308,21 @@ function sanitizeModeData(value) {
   const recordedIds = Array.isArray(value.recordedSessionIds)
     ? value.recordedSessionIds.filter((id) => typeof id === "string")
     : recentSessions.map(({ sessionId }) => sessionId);
+  const totals = {
+    completedSessions: finiteNonNegative(value.totals?.completedSessions),
+    failedSessions: finiteNonNegative(value.totals?.failedSessions),
+    activePlaytimeMs: finiteNonNegative(value.totals?.activePlaytimeMs),
+    charactersTyped: finiteNonNegative(value.totals?.charactersTyped),
+    correctCharacters: finiteNonNegative(value.totals?.correctCharacters),
+    incorrectCharacters: finiteNonNegative(value.totals?.incorrectCharacters),
+    missedCharacters: finiteNonNegative(value.totals?.missedCharacters),
+    wordsCompleted: finiteNonNegative(value.totals?.wordsCompleted),
+  };
   return {
     schemaVersion: MODE_DATA_SCHEMA_VERSION,
-    totals: {
-      completedSessions: finiteNonNegative(value.totals?.completedSessions),
-      failedSessions: finiteNonNegative(value.totals?.failedSessions),
-      activePlaytimeMs: finiteNonNegative(value.totals?.activePlaytimeMs),
-      charactersTyped: finiteNonNegative(value.totals?.charactersTyped),
-      correctCharacters: finiteNonNegative(value.totals?.correctCharacters),
-      incorrectCharacters: finiteNonNegative(value.totals?.incorrectCharacters),
-      missedCharacters: finiteNonNegative(value.totals?.missedCharacters),
-      wordsCompleted: finiteNonNegative(value.totals?.wordsCompleted),
-    },
+    profile: sanitizePlayerProfile(value.profile),
+    lifetime: sanitizeLifetimeStatistics(value.lifetime, totals, recentSessions),
+    totals,
     modes: Object.fromEntries(getAllModes().map((mode) => [
       mode.id,
       sanitizeModeSummary(value.modes?.[mode.id], mode.id),
@@ -278,6 +330,31 @@ function sanitizeModeData(value) {
     recentSessions: recentSessions.slice(0, MAX_RECENT_SESSIONS),
     recordedSessionIds: [...new Set(recordedIds)].slice(0, MAX_RECORDED_SESSION_IDS),
   };
+}
+
+function applyResultToModeActivity(mode, result) {
+  const activity = mode.activity;
+  const correct = finiteNonNegative(result.characters?.correct);
+  const incorrect = finiteNonNegative(result.characters?.incorrect);
+  const missed = finiteNonNegative(result.characters?.missed);
+  const duration = finiteNonNegative(result.activeDurationMs);
+  const wpm = nullableFinite(result.wpm);
+  activity.trackedSessions += 1;
+  activity.wordsCompleted += finiteNonNegative(result.words?.completed);
+  activity.wordsMissed += finiteNonNegative(result.words?.missed);
+  activity.charactersCorrect += correct;
+  activity.charactersIncorrect += incorrect;
+  activity.charactersMissed += missed;
+  activity.totalKeystrokes += finiteNonNegative(result.characters?.totalKeystrokes);
+  activity.accuracyNumerator += correct;
+  activity.accuracyDenominator += correct + incorrect + missed;
+  if (wpm != null && wpm >= 0 && duration > 0) {
+    activity.wpmWeightedTotal += wpm * duration;
+    activity.wpmWeightedDurationMs += duration;
+  }
+  if (result.modeId === "endless") {
+    activity.coreBreaches += finiteNonNegative(result.modeData?.coreBreaches);
+  }
 }
 
 export function loadModeData() {
@@ -417,6 +494,10 @@ export function recordCompletedSession(result) {
     result.schemaVersion !== 1 ||
     result.developerMode === true ||
     (
+      result.modeId === "speed-test" &&
+      !SPEED_TEST_CONFIG_IDS.includes(result.modeData?.configId)
+    ) ||
+    (
       result.modeId === "endless" &&
       result.modeData?.recordEligible !== true
     ) ||
@@ -450,11 +531,14 @@ export function recordCompletedSession(result) {
   mode.bestWpm = better(mode.bestWpm, result.wpm);
   mode.bestAccuracy = better(mode.bestAccuracy, result.accuracy);
   mode.highestScore = better(mode.highestScore, result.score);
+  applyResultToModeActivity(mode, result);
+  data.lifetime = applyResultToLifetimeStatistics(data.lifetime, result);
 
   if (
     result.modeId === "speed-test" &&
     SPEED_TEST_CONFIG_IDS.includes(result.modeData?.configId)
   ) {
+    mode.configUsage[result.modeData.configId] += 1;
     const record = mode.records[result.modeData.configId];
     const flags = getSpeedTestRecordFlags(result, record);
     if (flags.newWpmRecord) {
@@ -538,6 +622,29 @@ export function recordCompletedSession(result) {
 export function getModeSummary(modeId) {
   if (!getModeDefinition(modeId)) return null;
   return { ...loadModeData().modes[modeId] };
+}
+
+export function ensureStoredPlayerProfile(options = {}) {
+  const data = loadModeData();
+  if (data.profile) return { ...data.profile };
+  data.profile = createDefaultPlayerProfile(options);
+  saveModeData(data);
+  return { ...data.profile };
+}
+
+export function updateStoredDisplayName(displayName, now = Date.now()) {
+  const data = loadModeData();
+  const profile = data.profile || createDefaultPlayerProfile({ now });
+  if (!validateDisplayName(displayName).valid) return { ...profile };
+  const updated = updateDisplayName(profile, displayName, now);
+  if (!updated) return { ...profile };
+  data.profile = updated;
+  saveModeData(data);
+  return { ...updated };
+}
+
+export function getPublicPlayerProfile() {
+  return selectPublicPlayerProfile(ensureStoredPlayerProfile());
 }
 
 export function getDailyRecord(dateKey) {

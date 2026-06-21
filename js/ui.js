@@ -45,6 +45,7 @@ function menuButton(label, action, selected = false, extraClass = "") {
 export function renderTitle(menuIndex, handlers) {
   const items = [
     ["START", "modes"],
+    ["PROFILE & STATS", "profile"],
     ["SETTINGS", "settings"],
   ];
   app().innerHTML = `
@@ -64,6 +65,7 @@ export function renderTitle(menuIndex, handlers) {
       </div>
     </section>`;
   app().querySelector('[data-action="modes"]').onclick = handlers.modes;
+  app().querySelector('[data-action="profile"]').onclick = handlers.profile;
   app().querySelector('[data-action="settings"]').onclick = handlers.settings;
 }
 

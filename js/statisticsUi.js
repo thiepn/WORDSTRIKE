@@ -1,0 +1,303 @@
+import {
+  EMPTY_STAT,
+  formatCompactNumber,
+  formatDateTime,
+  formatDuration,
+  formatPercentage,
+  formatRecordValue,
+  formatUtcDate,
+} from "./statisticsFormat.js";
+import { getRecentSessionStatistics } from "./statistics.js";
+
+export const STATISTICS_TABS = Object.freeze([
+  "OVERVIEW",
+  "CAMPAIGN",
+  "TYPING TEST",
+  "ENDLESS",
+  "DAILY",
+  "RECENT",
+  "PROFILE",
+]);
+
+const app = () => document.querySelector("#app");
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function metric(label, value, secondary = false) {
+  return `<div class="profile-metric ${secondary ? "secondary" : ""}">
+    <span>${label}</span><strong>${value ?? EMPTY_STAT}</strong>
+  </div>`;
+}
+
+function emptyState(text) {
+  return `<div class="profile-empty">${text}</div>`;
+}
+
+function modeLabel(modeId) {
+  return {
+    campaign: "CAMPAIGN",
+    "speed-test": "TYPING TEST",
+    endless: "ENDLESS",
+    daily: "DAILY",
+  }[modeId] || String(modeId || "UNKNOWN").toUpperCase();
+}
+
+function recentRows(rows) {
+  if (!rows.length) return emptyState("NO RECENT SESSIONS");
+  return `<div class="recent-session-list">${rows.map((row) => `
+    <article class="recent-session-row">
+      <div><time>${formatDateTime(row.endedAt)}</time><strong>${modeLabel(row.modeId)}</strong></div>
+      <div><b>${escapeHtml(row.primaryMetric || (row.success ? "COMPLETE" : "FAILED"))}</b>
+        <span>${formatPercentage(row.accuracy)} · ${formatRecordValue(row.wpm, (value) => `${Math.round(value)} WPM`)} · ${formatDuration(row.activeDurationMs)}</span></div>
+    </article>`).join("")}</div>`;
+}
+
+function renderOverview(snapshot) {
+  const data = snapshot.overview;
+  const lifetime = data.lifetime;
+  return `
+    <header class="profile-player-header">
+      <span>PLAYER</span><h2>${escapeHtml(snapshot.profile.displayName)}</h2><small>LOCAL PROFILE</small>
+    </header>
+    <div class="profile-metric-grid primary">
+      ${metric("TOTAL PLAYTIME", formatDuration(lifetime.activePlaytimeMs))}
+      ${metric("SESSIONS", formatCompactNumber(lifetime.finalizedSessions))}
+      ${metric("WORDS TYPED", formatCompactNumber(lifetime.wordsCompleted))}
+      ${metric("ACCURACY", formatPercentage(lifetime.accuracy))}
+    </div>
+    <div class="profile-metric-grid secondary-grid">
+      ${metric("CAMPAIGN PROGRESS", `${data.campaignProgress} / 100`, true)}
+      ${metric("BEST TYPING SPEED", formatRecordValue(data.bestTypingWpm, (value) => `${Math.round(value)} WPM`), true)}
+      ${metric("HIGHEST ENDLESS STAGE", formatRecordValue(data.highestEndlessStage), true)}
+      ${metric("DAILY STREAK", `${data.dailyStreak} ${data.dailyStreak === 1 ? "day" : "days"}`, true)}
+      ${metric("WEIGHTED WPM", formatRecordValue(lifetime.weightedWpm, (value) => value.toFixed(1)), true)}
+    </div>
+    ${lifetime.finalizedSessions === 0 ? emptyState("PLAY A MODE TO BUILD YOUR STATISTICS") : ""}
+    <div class="profile-section-heading"><h3>RECENT ACTIVITY</h3>
+      <button class="text-action" data-stats-action="view-recent">VIEW ALL RECENT</button></div>
+    ${recentRows(data.recent)}
+  `;
+}
+
+function renderCampaign(data) {
+  const gradeMarkup = Object.entries(data.grades)
+    .map(([grade, count]) => metric(grade, formatCompactNumber(count)))
+    .join("");
+  return `
+    <h2>CAMPAIGN</h2>
+    ${data.levelsCompleted === 0 ? emptyState("NO CAMPAIGN LEVELS COMPLETED") : ""}
+    <div class="campaign-progress-track"><span style="width:${data.completionPercentage}%"></span></div>
+    <div class="profile-metric-grid">
+      ${metric("HIGHEST UNLOCKED", data.highestUnlockedLevel)}
+      ${metric("HIGHEST COMPLETED", formatRecordValue(data.highestCompletedLevel))}
+      ${metric("LEVELS COMPLETED", `${data.levelsCompleted} / 100`)}
+      ${metric("BOSSES COMPLETED", data.bossesCompleted)}
+    </div>
+    <h3>BEST-GRADE DISTRIBUTION</h3>
+    <div class="profile-grade-grid">${gradeMarkup}</div>
+    <h3>CAMPAIGN ACTIVITY</h3>
+    <div class="profile-metric-grid">
+      ${metric("CAMPAIGN SESSIONS", data.sessions)}
+      ${metric("SUCCESSFUL RUNS", data.successfulRuns)}
+      ${metric("FAILED RUNS", data.failedRuns)}
+      ${metric("PLAYTIME", formatDuration(data.activePlaytimeMs))}
+      ${metric("WORDS COMPLETED", formatRecordValue(data.wordsCompleted))}
+      ${metric("WEIGHTED ACCURACY", formatPercentage(data.weightedAccuracy))}
+      ${metric("WEIGHTED WPM", formatRecordValue(data.weightedWpm, (value) => value.toFixed(1)))}
+    </div>`;
+}
+
+function typingTable(title, records) {
+  return `<section class="profile-record-group"><h3>${title}</h3>
+    <div class="profile-record-table">${records.map((record) => `
+      <article>
+        <strong>${record.label}</strong>
+        <span>BEST WPM <b>${formatRecordValue(record.bestWpm, (value) => value.toFixed(1))}</b></span>
+        <span>ACCURACY <b>${formatPercentage(record.accuracy)}</b></span>
+        <span>ACHIEVED <b>${formatDateTime(record.achievedAt)}</b></span>
+      </article>`).join("")}</div></section>`;
+}
+
+function renderTypingTest(data) {
+  return `
+    <h2>TYPING TEST</h2>
+    ${data.testsCompleted === 0 ? emptyState("NO TYPING TEST RECORDS") : ""}
+    <div class="profile-metric-grid">
+      ${metric("TESTS COMPLETED", data.testsCompleted)}
+      ${metric("PLAYTIME", formatDuration(data.activePlaytimeMs))}
+      ${metric("BEST WPM", formatRecordValue(data.bestWpm, (value) => value.toFixed(1)))}
+      ${metric("BEST ACCURACY", formatPercentage(data.bestAccuracy))}
+      ${metric("CHARACTERS TYPED", formatRecordValue(data.charactersTyped))}
+      ${metric("WORDS COMPLETED", formatRecordValue(data.wordsCompleted))}
+      ${metric("MOST USED TEST", data.mostUsedConfiguration || EMPTY_STAT)}
+    </div>
+    ${typingTable("TIME MODES", data.timeRecords)}
+    ${typingTable("WORD MODES", data.wordRecords)}`;
+}
+
+function renderEndless(data) {
+  return `
+    <h2>ENDLESS</h2>
+    ${data.totalRuns === 0 ? emptyState("NO ENDLESS RUNS YET") : ""}
+    <h3>PERSONAL BEST</h3>
+    <div class="profile-metric-grid">
+      ${metric("HIGHEST STAGE", formatRecordValue(data.highestStage))}
+      ${metric("BEST SCORE", formatRecordValue(data.bestScore))}
+      ${metric("LONGEST SURVIVAL", formatDuration(data.longestSurvivalMs))}
+      ${metric("BEST ACCURACY", formatPercentage(data.bestAccuracy))}
+      ${metric("BEST AVERAGE WPM", formatRecordValue(data.bestAverageWpm, (value) => value.toFixed(1)))}
+      ${metric("MAXIMUM COMBO", formatRecordValue(data.maximumCombo))}
+      ${data.maximumPerfectStreak == null ? "" : metric("MAX PERFECT STREAK", data.maximumPerfectStreak)}
+    </div>
+    <h3>LIFETIME</h3>
+    <div class="profile-metric-grid">
+      ${metric("TOTAL RUNS", data.totalRuns)}
+      ${metric("FINALIZED RUNS", data.finalizedRuns)}
+      ${metric("PLAYTIME", formatDuration(data.activePlaytimeMs))}
+      ${metric("WORDS COMPLETED", formatRecordValue(data.wordsCompleted))}
+      ${metric("CORE BREACHES", formatRecordValue(data.coreBreaches))}
+    </div>`;
+}
+
+function renderDaily(data) {
+  return `
+    <h2>DAILY STRIKE</h2>
+    ${data.totalAttempts === 0 ? emptyState("NO DAILY STRIKE ATTEMPTS YET") : ""}
+    <div class="profile-metric-grid">
+      ${metric("CURRENT STREAK", `${data.currentStreak} days`)}
+      ${metric("BEST STREAK", `${data.bestStreak} days`)}
+      ${metric("TODAY'S ATTEMPTS", data.todayAttempts)}
+      ${metric("TODAY'S BEST SCORE", formatRecordValue(data.todayBestScore))}
+      ${metric("TODAY'S BEST TIME", formatDuration(data.todayBestTimeMs))}
+      ${metric("TODAY'S STATUS", data.todayCompleted ? "COMPLETE" : "NOT COMPLETE")}
+      ${metric("TOTAL ATTEMPTS", data.totalAttempts)}
+      ${metric("SUCCESSFUL COMPLETIONS", data.successfulCompletions)}
+      ${metric("DISTINCT DAYS COMPLETED", data.distinctDaysCompleted)}
+      ${metric("DAILY PLAYTIME", formatDuration(data.activePlaytimeMs))}
+      ${metric("BEST DAILY SCORE", formatRecordValue(data.bestScore))}
+    </div>
+    <h3>LATEST DAILY DATES</h3>
+    ${data.latestDates.length ? `<div class="daily-history-list">${data.latestDates.map((day) => `
+      <div><time>${formatUtcDate(day.dateKey)}</time><strong>${day.completed ? "COMPLETE" : "FAILED"}</strong>
+        <span>${formatRecordValue(day.score)}</span></div>`).join("")}</div>` : emptyState("NO DAILY STRIKE ATTEMPTS YET")}`;
+}
+
+function renderRecent(storage, filter) {
+  const rows = getRecentSessionStatistics(storage, filter);
+  const filters = [
+    ["all", "ALL"], ["campaign", "CAMPAIGN"], ["speed-test", "TYPING TEST"],
+    ["endless", "ENDLESS"], ["daily", "DAILY"],
+  ];
+  return `<h2>RECENT SESSIONS</h2>
+    <nav class="recent-filters">${filters.map(([id, label]) => `
+      <button class="${filter === id ? "active" : ""}" data-recent-filter="${id}">${label}</button>`).join("")}</nav>
+    ${recentRows(rows)}`;
+}
+
+function renderProfile(profile, state) {
+  const edit = state.editing
+    ? `<div class="profile-name-edit">
+        <input id="profile-name-input" maxlength="40" value="${escapeHtml(state.draft)}" aria-label="Display name">
+        <button data-stats-action="save-name">SAVE</button>
+        <button data-stats-action="cancel-name">CANCEL</button>
+        ${state.nameError ? `<small>${escapeHtml(state.nameError)}</small>` : ""}
+      </div>`
+    : `<strong class="profile-display-name">${escapeHtml(profile.displayName)}</strong>
+       <button class="text-action" data-stats-action="edit-name">EDIT NAME</button>`;
+  return `
+    <h2>PROFILE</h2>
+    <div class="profile-details">
+      <div><span>DISPLAY NAME</span>${edit}</div>
+      <div><span>LOCAL PLAYER ID</span><code>${escapeHtml(profile.playerId)}</code>
+        <button class="text-action" data-stats-action="copy-id">COPY PLAYER ID</button>
+        ${state.copyMessage ? `<small class="copy-message">${escapeHtml(state.copyMessage)}</small>` : ""}</div>
+      <div><span>PROFILE CREATED</span><strong>${formatDateTime(profile.createdAt)}</strong></div>
+      <div><span>LAST UPDATED</span><strong>${formatDateTime(profile.updatedAt)}</strong></div>
+      <div><span>STORAGE</span><strong>STORED LOCALLY ON THIS DEVICE</strong></div>
+    </div>
+    <p class="profile-privacy">Your profile and statistics are stored in this browser.<br>They are not uploaded anywhere.</p>`;
+}
+
+function diagnostics(snapshot, storage) {
+  const records = storage.modes?.["speed-test"]?.records || {};
+  return [
+    `PROFILE ID=${snapshot.profile.playerId}`,
+    `PROFILE VERSION=${snapshot.profile.profileVersion}`,
+    `LIFETIME VERSION=${storage.lifetime?.lifetimeVersion}`,
+    `FINALIZED SESSIONS=${snapshot.lifetime.finalizedSessions}`,
+    `SUCCESSFUL SESSIONS=${snapshot.lifetime.successfulSessions}`,
+    `FAILED SESSIONS=${snapshot.lifetime.failedSessions}`,
+    `ACTIVE PLAYTIME=${snapshot.lifetime.activePlaytimeMs}`,
+    `RECENT SESSION COUNT=${storage.recentSessions?.length || 0}`,
+    `CAMPAIGN RECORD COUNT=${snapshot.campaign.levelsCompleted}`,
+    `TYPING TEST RECORD COUNT=${Object.values(records).filter((record) => record.bestWpm != null).length}`,
+    `ENDLESS RECORD PRESENT=${snapshot.endless.highestStage != null}`,
+    `DAILY DAY COUNT=${Object.keys(storage.modes?.daily?.records?.days || {}).length}`,
+    `CURRENT DAILY STREAK=${snapshot.daily.currentStreak}`,
+  ].join(" // ");
+}
+
+export function renderProfileStatistics({
+  snapshot,
+  storage,
+  activeTab = 0,
+  recentFilter = "all",
+  editing = false,
+  draft = "",
+  nameError = "",
+  copyMessage = "",
+  developerMode = false,
+} = {}, handlers = {}) {
+  const tab = STATISTICS_TABS[Math.max(0, Math.min(STATISTICS_TABS.length - 1, activeTab))];
+  const panel = tab === "OVERVIEW" ? renderOverview(snapshot)
+    : tab === "CAMPAIGN" ? renderCampaign(snapshot.campaign)
+      : tab === "TYPING TEST" ? renderTypingTest(snapshot.typingTest)
+        : tab === "ENDLESS" ? renderEndless(snapshot.endless)
+          : tab === "DAILY" ? renderDaily(snapshot.daily)
+            : tab === "RECENT" ? renderRecent(storage, recentFilter)
+              : renderProfile(snapshot.profile, { editing, draft, nameError, copyMessage });
+  app().innerHTML = `
+    <section class="screen profile-stats-screen">
+      <main class="profile-stats-shell">
+        <header class="profile-stats-topbar">
+          <div><span class="eyebrow">Local player data</span><h1>PROFILE &amp; STATS</h1></div>
+          <button class="text-action" data-stats-action="back">MAIN MENU</button>
+        </header>
+        <nav class="profile-tabs" aria-label="Profile statistics tabs">
+          ${STATISTICS_TABS.map((label, index) => `
+            <button class="${index === activeTab ? "active" : ""}" data-stats-tab="${index}" aria-selected="${index === activeTab}">${label}</button>`).join("")}
+        </nav>
+        <section class="profile-tab-panel" data-active-tab="${tab}">${panel}</section>
+      </main>
+      ${developerMode ? `<aside class="profile-stats-diagnostics">${diagnostics(snapshot, storage)}</aside>` : ""}
+    </section>`;
+  app().querySelectorAll?.("[data-stats-tab]").forEach((button) => {
+    button.onclick = () => handlers.selectTab?.(Number(button.dataset.statsTab));
+  });
+  app().querySelectorAll?.("[data-recent-filter]").forEach((button) => {
+    button.onclick = () => handlers.setRecentFilter?.(button.dataset.recentFilter);
+  });
+  const actions = {
+    back: handlers.back,
+    "view-recent": handlers.viewRecent,
+    "edit-name": handlers.editName,
+    "save-name": handlers.saveName,
+    "cancel-name": handlers.cancelName,
+    "copy-id": handlers.copyId,
+  };
+  for (const [action, handler] of Object.entries(actions)) {
+    const button = app().querySelector?.(`[data-stats-action="${action}"]`);
+    if (button) button.onclick = handler;
+  }
+  if (editing) {
+    const input = app().querySelector?.("#profile-name-input");
+    input?.focus?.();
+    input?.select?.();
+  }
+}

@@ -12,6 +12,7 @@ export const Screens = Object.freeze({
   PAUSED: "PAUSED",
   RESULTS: "RESULTS",
   SETTINGS: "SETTINGS",
+  PROFILE_STATS: "PROFILE_STATS",
 });
 
 export const appState = {
@@ -48,6 +49,12 @@ export const appState = {
   resultsIndex: 0,
   resultsReadyAt: 0,
   settingsIndex: 0,
+  statisticsTabIndex: 0,
+  statisticsRecentFilter: "all",
+  profileEditing: false,
+  profileDraft: "",
+  profileNameError: "",
+  profileCopyMessage: "",
 };
 
 export function getResultsActions(result) {
