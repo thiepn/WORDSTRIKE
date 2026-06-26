@@ -150,14 +150,33 @@ export function getSpeedTestLiveMetrics(state, nowMs = monotonicNow(), includePa
   );
 }
 
+function beginSpeedTestSession(state) {
+  const current = getCurrentSession();
+  if (current?.modeId === MODE_IDS.SPEED_TEST && !current.resultFinalized) return current;
+  return beginSession({
+    modeId: MODE_IDS.SPEED_TEST,
+    variantId: state.config.testType,
+    source: state.developerMode ? "developer" : state.sessionSource,
+    developerMode: state.developerMode,
+    seed: state.attemptSeed,
+    config: state.config,
+    runtimeData: {
+      configId: state.config.configId,
+      wordSetId: state.wordSet.id,
+    },
+  });
+}
+
 function beginActiveTyping(state, nowMs) {
   if (state.activeStartedAtMs != null) return;
+  if (!beginSpeedTestSession(state)) return false;
   state.phase = "ACTIVE";
   state.activeStartedAtMs = nowMs;
   state.deadlineMs = state.config.testType === SPEED_TEST_TYPES.TIME
     ? nowMs + state.remainingDurationMs
     : null;
   markSessionActive({ monotonicMs: nowMs, epochMs: Date.now() });
+  return true;
 }
 
 function commitCurrentWord(state, { separator = false } = {}) {
@@ -302,7 +321,7 @@ export function completeSpeedTest(state, completedAtMs = monotonicNow()) {
 }
 
 function processCharacter(state, character, nowMs) {
-  beginActiveTyping(state, nowMs);
+  if (beginActiveTyping(state, nowMs) === false) return false;
   const expected = getSpeedTestCurrentWord(state);
   const typedIndex = state.typedBuffer.length;
   const classification = classifySpeedTestCharacter(expected, typedIndex, character);
@@ -400,6 +419,7 @@ export function startSpeedTest({
   attemptSeed,
   developerMode = false,
   source = "mode-select",
+  deferSession = false,
   onUpdate,
   onComplete,
 }) {
@@ -411,19 +431,9 @@ export function startSpeedTest({
     developerMode,
   });
   if (!state) return null;
-  const session = beginSession({
-    modeId: MODE_IDS.SPEED_TEST,
-    variantId: state.config.testType,
-    source: developerMode ? "developer" : source,
-    developerMode,
-    seed: attemptSeed,
-    config: state.config,
-    runtimeData: {
-      configId: state.config.configId,
-      wordSetId: state.wordSet.id,
-    },
-  });
-  if (!session) return null;
+  state.sessionSource = source;
+  state.deferSession = deferSession === true;
+  if (!state.deferSession && !beginSpeedTestSession(state)) return null;
   currentSpeedTest = state;
   callbacks = { onUpdate, onComplete };
   animationFrameId = requestFrame(tick);
@@ -456,7 +466,10 @@ export function pauseSpeedTest(nowMs = monotonicNow()) {
   }
   state.phase = "PAUSED";
   stopSpeedTestLoop();
-  return pauseSession({ monotonicMs: nowMs, epochMs: Date.now() });
+  const session = getCurrentSession();
+  return session?.modeId === MODE_IDS.SPEED_TEST
+    ? pauseSession({ monotonicMs: nowMs, epochMs: Date.now() })
+    : true;
 }
 
 export function resumeSpeedTest(nowMs = monotonicNow()) {
@@ -469,7 +482,11 @@ export function resumeSpeedTest(nowMs = monotonicNow()) {
       state.deadlineMs = nowMs + state.remainingDurationMs;
     }
   }
-  if (!resumeSession({ monotonicMs: nowMs, epochMs: Date.now() })) return false;
+  const session = getCurrentSession();
+  if (
+    session?.modeId === MODE_IDS.SPEED_TEST &&
+    !resumeSession({ monotonicMs: nowMs, epochMs: Date.now() })
+  ) return false;
   resumeSpeedTestLoop();
   return true;
 }

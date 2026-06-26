@@ -61,9 +61,10 @@ export const appState = {
 export function getResultsActions(result) {
   const cleared = result?.grade !== "Fail";
   return [
-    "retry",
     ...(cleared && result.levelNumber < 100 ? ["next"] : []),
+    "retry",
     "levels",
+    "title",
   ];
 }
 

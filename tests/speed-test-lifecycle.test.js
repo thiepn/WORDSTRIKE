@@ -125,6 +125,23 @@ clearSpeedTestRuntime();
 clearSession();
 
 state = startSpeedTest({
+  config: getSpeedTestConfig("time-30"),
+  wordPool: pool,
+  attemptSeed: 880,
+  source: "change-test",
+  deferSession: true,
+});
+assert.equal(state.phase, "PREPARING");
+assert.equal(state.config.configId, "time-30");
+assert.equal(getCurrentSession(), null);
+handleCurrentSpeedTestKey(event(state.words[0][0], 500));
+assert.equal(getCurrentSession().modeId, "speed-test");
+assert.equal(getCurrentSession().state, SESSION_STATES.ACTIVE);
+abortSession("test-reset");
+clearSpeedTestRuntime();
+clearSession();
+
+state = startSpeedTest({
   config: getSpeedTestConfig("time-60"),
   wordPool: pool,
   attemptSeed: 778,

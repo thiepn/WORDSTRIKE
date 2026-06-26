@@ -14,10 +14,14 @@ class Card {
 const app = {
   html: "",
   cards: [],
+  titleButton: null,
   set innerHTML(value) {
     this.html = value;
     this.cards = [...value.matchAll(/<(button|article)[^>]*data-mode-id="([^"]+)"[^>]*data-mode-index="(\d+)"/g)]
       .map((match) => new Card(match[2], Number(match[3]), match[1] === "button"));
+    this.titleButton = value.includes('data-action="mode-title"')
+      ? { dataset: { action: "mode-title" } }
+      : null;
   },
   querySelectorAll(selector) {
     return selector === "[data-mode-index]" ? this.cards : [];
@@ -26,6 +30,7 @@ const app = {
     if (selector === ".mode-card.available.selected") {
       return this.cards.find((card) => card.button) || null;
     }
+    if (selector === '[data-action="mode-title"]') return this.titleButton;
     return null;
   },
 };
@@ -39,13 +44,16 @@ globalThis.document = {
 const { renderModeSelect } = await import("../js/ui.js");
 const selected = [];
 const activated = [];
+let backed = 0;
 renderModeSelect(getAllModes(), 0, {
   select: (index) => selected.push(index),
   activate: (id) => activated.push(id),
+  back: () => { backed += 1; },
 });
 assert.match(app.html, /MODE SELECT/);
 assert.match(app.html, /CAMPAIGN/i);
 assert.equal((app.html.match(/COMING SOON/g) || []).length, 1);
+assert.match(app.html, /data-action="mode-title"[^>]*>MAIN MENU<\/button>/);
 assert.equal(app.cards.filter((card) => card.button).length, 4);
 app.cards[4].onmouseenter();
 assert.equal(selected.at(-1), 4);
@@ -58,10 +66,13 @@ app.cards[2].onclick();
 assert.equal(activated.at(-1), "endless");
 app.cards[3].onclick();
 assert.equal(activated.at(-1), "daily");
+app.titleButton.onclick();
+assert.equal(backed, 1);
 
 const mainSource = await readFile(new URL("../js/main.js", import.meta.url), "utf8");
 assert.match(mainSource, /Screens\.MODE_SELECT/);
 assert.match(mainSource, /if \(event\.key === "Escape"\) \{\s*openTitle\(\)/s);
+assert.match(mainSource, /modeSelection === getAllModes\(\)\.length\) openTitle\(\)/);
 assert.match(mainSource, /back: openModeSelect/);
 assert.match(mainSource, /renderDevSessionDiagnostics/);
 assert.equal(mainSource.split('addEventListener("keydown"').length - 1, 1);

@@ -22,7 +22,7 @@ assert.match(app.html, /20 WORDS PER STAGE/);
 assert.match(app.html, /PRESS ENTER TO BEGIN/);
 
 renderEndlessResults({
-  score: 12345,
+  score: 49000,
   accuracy: 94.5,
   wpm: 52.2,
   modeData: {
@@ -44,8 +44,14 @@ renderEndlessResults({
 }, 0, { retry() {}, modes() {}, title() {} });
 assert.match(app.html, /RUN OVER/);
 assert.match(app.html, /Highest stage.*8/s);
-assert.match(app.html, /Score.*12[.,]345/s);
+assert.match(app.html, /Score.*49[.,]000/s);
 assert.match(app.html, /Survival time.*300\.0s/s);
+assert.match(app.html, /SCORE BREAKDOWN/);
+assert.match(app.html, /SURVIVAL.*30[.,]000/s);
+assert.match(app.html, /WORDS.*12[.,]000/s);
+assert.match(app.html, /STAGE BONUSES.*7[.,]000/s);
+assert.match(app.html, /TOTAL.*49[.,]000/s);
+assert.doesNotMatch(app.html, /30000\s*\+\s*12000/);
 assert.doesNotMatch(app.html, /GRADE|BOSS|RAW WPM/);
 
 const main = await readFile(new URL("../js/main.js", import.meta.url), "utf8");

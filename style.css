@@ -6,7 +6,12 @@
   --primary: #00fff2;
   --secondary: #ff3cac;
   --text: #e8f0f5;
-  --muted: #81909e;
+  --text-primary: #e8f0f5;
+  --text-secondary: #bdc9d3;
+  --text-muted: #a5b3bf;
+  --text-disabled: #66727e;
+  --border-subtle: #46515e;
+  --muted: var(--text-muted);
   --danger: #ff4757;
   --success: #4cff8e;
   --locked: #3a4250;
@@ -156,7 +161,7 @@ button {
   gap: 1px;
   margin: 12px 0;
   border: 1px solid var(--locked);
-  background: var(--locked);
+  background: transparent;
 }
 
 .profile-metric {
@@ -504,6 +509,16 @@ button {
 
 .mode-card.coming-soon {
   opacity: 0.58;
+  color: var(--text-disabled);
+}
+
+.mode-menu-action {
+  width: min(330px, 100%);
+  margin: 18px auto 0;
+}
+
+.mode-menu-action .arcade-button {
+  width: 100%;
 }
 
 .mode-description {
@@ -804,6 +819,42 @@ button {
 
 .endless-result-details strong {
   text-align: right;
+}
+
+.endless-score-breakdown {
+  margin: 18px 0 24px;
+  padding: 12px 16px;
+  border-block: 1px solid var(--border-subtle);
+}
+
+.endless-score-breakdown h3 {
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
+.endless-score-breakdown > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 4px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.endless-score-breakdown strong {
+  color: var(--text-primary);
+}
+
+.endless-score-breakdown .total {
+  margin-top: 5px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.endless-score-breakdown .total strong {
+  color: var(--primary);
 }
 
 .speed-results-screen {

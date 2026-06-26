@@ -58,7 +58,7 @@ renderDailyResults({
 }, { newBest: true }, 0, { retry() {}, modes() {}, title() {} });
 assert.match(app.html, /CHALLENGE CLEARED/);
 assert.match(app.html, /NEW DAILY BEST/);
-assert.match(app.html, /RETRY SAME CHALLENGE/);
+assert.match(app.html, />RETRY<\/button>/);
 assert.match(app.html, /Integrity.*2 \/ 3/s);
 
 const main = await readFile(new URL("../js/main.js", import.meta.url), "utf8");

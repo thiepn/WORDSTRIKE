@@ -42,6 +42,18 @@ function menuButton(label, action, selected = false, extraClass = "") {
   return `<button class="arcade-button ${selected ? "selected" : ""} ${extraClass}" data-action="${action}">${label}</button>`;
 }
 
+function wireMenuActions(root, selector, handlers = {}) {
+  root?.querySelectorAll?.(selector).forEach((button, index) => {
+    const action = button.dataset?.action;
+    button.onclick = (event) => {
+      event?.preventDefault?.();
+      handlers[action]?.();
+    };
+    button.onmouseenter = () => handlers.select?.(index);
+    button.onfocus = () => handlers.select?.(index);
+  });
+}
+
 export function renderTitle(menuIndex, handlers) {
   const items = [
     ["START", "modes"],
@@ -91,6 +103,9 @@ export function renderModeSelect(modes, selectedIndex, handlers) {
             </article>`).join("")}
         </div>
         <p class="mode-description">${modes[selectedIndex]?.description || ""}</p>
+        <div class="mode-menu-action">
+          ${menuButton("MAIN MENU", "mode-title", selectedIndex === modes.length)}
+        </div>
         <p class="footer-hint">↑ ↓ SELECT &nbsp;•&nbsp; ENTER CONFIRM &nbsp;•&nbsp; ESC BACK</p>
       </div>
     </section>`;
@@ -102,6 +117,11 @@ export function renderModeSelect(modes, selectedIndex, handlers) {
     }
   });
   app().querySelector(".mode-card.available.selected")?.focus({ preventScroll: true });
+  const titleButton = app().querySelector('[data-action="mode-title"]');
+  if (titleButton) {
+    titleButton.onclick = handlers.back;
+    titleButton.onmouseenter = () => handlers.select?.(modes.length);
+  }
 }
 
 export function renderEndlessReady(handlers = {}) {
@@ -121,7 +141,9 @@ export function renderEndlessReady(handlers = {}) {
         <p class="footer-hint">ENTER BEGIN &nbsp;•&nbsp; ESC MODE SELECT</p>
       </div>
     </section>`;
-  app().querySelector('[data-action="endless-start"]').onclick = handlers.start;
+  wireMenuActions(app(), ".endless-ready-panel .arcade-button", {
+    "endless-start": handlers.start,
+  });
 }
 
 export function renderDailyReady({ dateKey, record, developer = false } = {}, handlers = {}) {
@@ -145,7 +167,9 @@ export function renderDailyReady({ dateKey, record, developer = false } = {}, ha
         <p class="footer-hint">ENTER BEGIN &nbsp;•&nbsp; ESC MODE SELECT</p>
       </div>
     </section>`;
-  app().querySelector('[data-action="daily-start"]').onclick = handlers.start;
+  wireMenuActions(app(), ".daily-ready-panel .arcade-button", {
+    "daily-start": handlers.start,
+  });
 }
 
 export function renderDailyShell(game, devMode = false) {
@@ -470,8 +494,8 @@ export function updateSpeedTestRun(state, nowMs) {
 
 export function renderSpeedTestResults(result, recordFlags, selectedIndex, handlers) {
   const actions = [
-    ["RETRY SAME TEST", "retry"],
-    ["CHANGE TEST", "change"],
+    ["RETRY TEST", "retry"],
+    ["NEXT TEST", "change"],
     ["MODE SELECT", "modes"],
     ["MAIN MENU", "title"],
   ];
@@ -512,12 +536,7 @@ export function renderSpeedTestResults(result, recordFlags, selectedIndex, handl
         </div>
       </div>
     </section>`;
-  for (const [, action] of actions) {
-    app().querySelector(`[data-action="${action}"]`).onclick = handlers[action];
-  }
-  app().querySelectorAll(".speed-results-panel .arcade-button").forEach((button, index) => {
-    button.onmouseenter = () => handlers.select?.(index);
-  });
+  wireMenuActions(app(), ".speed-results-panel .arcade-button", handlers);
 }
 
 function renderDevPanel(selectedLevel, bossWordBank, developerSeed) {
@@ -991,18 +1010,7 @@ export function showEndlessPauseOverlay(selectedIndex, handlers) {
       <p class="footer-hint">ESC RESUME</p>
     </div>`;
   document.querySelector(".endless-screen")?.append(overlay);
-  for (const [, action] of actions) {
-    overlay.querySelector(`[data-action="${action}"]`).onclick = handlers[action];
-  }
-  overlay.querySelectorAll(".arcade-button").forEach((button, index) => {
-    button.onmouseenter = () => {
-      overlay.querySelectorAll(".arcade-button").forEach(
-        (item) => item.classList.remove("selected"),
-      );
-      button.classList.add("selected");
-      handlers.select?.(index);
-    };
-  });
+  wireMenuActions(overlay, ".arcade-button", handlers);
 }
 
 export function showDailyPauseOverlay(selectedIndex, handlers) {
@@ -1025,12 +1033,7 @@ export function showDailyPauseOverlay(selectedIndex, handlers) {
       <p class="footer-hint">ESC RESUME</p>
     </div>`;
   document.querySelector(".daily-screen")?.append(overlay);
-  for (const [, action] of actions) {
-    overlay.querySelector(`[data-action="${action}"]`).onclick = handlers[action];
-  }
-  overlay.querySelectorAll(".arcade-button").forEach((button, index) => {
-    button.onmouseenter = () => handlers.select?.(index);
-  });
+  wireMenuActions(overlay, ".arcade-button", handlers);
 }
 
 export function showSpeedTestPauseOverlay(selectedIndex, handlers) {
@@ -1089,26 +1092,27 @@ export function renderEndlessResults(result, selectedIndex, handlers) {
           <div><span>Maximum combo</span><strong>${data.maximumCombo}</strong></div>
           <div><span>Maximum perfect streak</span><strong>${data.maximumPerfectStreak}</strong></div>
           <div><span>Core hits / breaches</span><strong>${data.coreHits} / ${data.coreBreaches}</strong></div>
-          <div><span>Score breakdown</span><strong>${data.survivalPoints} + ${data.wordPoints} + ${data.stageBonusPoints}</strong></div>
           <div><span>Attempt seed</span><strong>${data.attemptSeed}</strong></div>
         </div>
+        <section class="endless-score-breakdown">
+          <h3>SCORE BREAKDOWN</h3>
+          <div><span>SURVIVAL</span><strong>${data.survivalPoints.toLocaleString()}</strong></div>
+          <div><span>WORDS</span><strong>${data.wordPoints.toLocaleString()}</strong></div>
+          <div><span>STAGE BONUSES</span><strong>${data.stageBonusPoints.toLocaleString()}</strong></div>
+          <div class="total"><span>TOTAL</span><strong>${result.score.toLocaleString()}</strong></div>
+        </section>
         <div class="menu-list">${actions.map(([label, action], index) => (
     menuButton(label, action, index === selectedIndex)
   )).join("")}</div>
       </div>
     </section>`;
-  for (const [, action] of actions) {
-    app().querySelector(`[data-action="${action}"]`).onclick = handlers[action];
-  }
-  app().querySelectorAll(".endless-results-panel .arcade-button").forEach((button, index) => {
-    button.onmouseenter = () => handlers.select?.(index);
-  });
+  wireMenuActions(app(), ".endless-results-panel .arcade-button", handlers);
 }
 
 export function renderDailyResults(result, recordFlags, selectedIndex, handlers) {
   const data = result.modeData;
   const actions = [
-    ["RETRY SAME CHALLENGE", "retry"],
+    ["RETRY", "retry"],
     ["MODE SELECT", "modes"],
     ["MAIN MENU", "title"],
   ];
@@ -1140,12 +1144,7 @@ export function renderDailyResults(result, recordFlags, selectedIndex, handlers)
   )).join("")}</div>
       </div>
     </section>`;
-  for (const [, action] of actions) {
-    app().querySelector(`[data-action="${action}"]`).onclick = handlers[action];
-  }
-  app().querySelectorAll(".daily-results-panel .arcade-button").forEach((button, index) => {
-    button.onmouseenter = () => handlers.select?.(index);
-  });
+  wireMenuActions(app(), ".daily-results-panel .arcade-button", handlers);
 }
 
 export function hidePauseOverlay() {
@@ -1156,12 +1155,12 @@ export function hidePauseOverlay() {
 export function renderResults(result, selectedIndex, handlers) {
   const cleared = result.grade !== "Fail";
   const canAdvance = cleared && result.levelNumber < 100;
-  let actionIndex = 0;
-  const retryButton = menuButton("RETRY", "retry", selectedIndex === actionIndex++);
-  const nextButton = canAdvance
-    ? menuButton("NEXT LEVEL", "next", selectedIndex === actionIndex++)
-    : "";
-  const levelsButton = menuButton("LEVEL SELECT", "levels", selectedIndex === actionIndex);
+  const actions = [
+    ...(canAdvance ? [["NEXT LEVEL", "next"]] : []),
+    ["RETRY", "retry"],
+    ["LEVEL SELECT", "levels"],
+    ["MAIN MENU", "title"],
+  ];
   app().innerHTML = `
     <section class="screen results-screen">
       <div class="results-panel">
@@ -1181,25 +1180,16 @@ export function renderResults(result, selectedIndex, handlers) {
           <div class="stat"><span class="micro-label">Level</span><strong>${result.levelNumber}</strong></div>`}
         </div>
         <div class="menu-list">
-          ${retryButton}
-          ${nextButton}
-          ${levelsButton}
+          ${actions.map(([label, action], index) => menuButton(
+    label,
+    action,
+    selectedIndex === index,
+  )).join("")}
         </div>
         <p class="footer-hint">ESC LEVEL SELECT</p>
       </div>
     </section>`;
-  app().querySelector('[data-action="retry"]').onclick = handlers.retry;
-  app().querySelector('[data-action="next"]')?.addEventListener("click", handlers.next);
-  app().querySelector('[data-action="levels"]').onclick = handlers.levels;
-  app().querySelectorAll(".results-panel .arcade-button").forEach((button, index) => {
-    button.onmouseenter = () => {
-      app().querySelectorAll(".results-panel .arcade-button").forEach(
-        (item) => item.classList.remove("selected"),
-      );
-      button.classList.add("selected");
-      handlers.select?.(index);
-    };
-  });
+  wireMenuActions(app(), ".results-panel .arcade-button", handlers);
 }
 
 export function renderSettings(save, selectedIndex, handlers) {

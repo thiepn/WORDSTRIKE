@@ -6,10 +6,10 @@ import {
   isResultsInputBlocked,
 } from "../js/state.js";
 
-assert.deepEqual(getResultsActions({ grade: "A", levelNumber: 20 }), ["retry", "next", "levels"]);
-assert.equal(getDefaultResultsIndex({ grade: "A", levelNumber: 20 }), 1);
+assert.deepEqual(getResultsActions({ grade: "A", levelNumber: 20 }), ["next", "retry", "levels", "title"]);
+assert.equal(getDefaultResultsIndex({ grade: "A", levelNumber: 20 }), 0);
 assert.equal(getDefaultResultsIndex({ grade: "Fail", levelNumber: 20 }), 0);
-assert.deepEqual(getResultsActions({ grade: "S", levelNumber: 100 }), ["retry", "levels"]);
+assert.deepEqual(getResultsActions({ grade: "S", levelNumber: 100 }), ["retry", "levels", "title"]);
 assert.equal(isResultsInputBlocked({ repeat: false }, 100, 300), true);
 assert.equal(isResultsInputBlocked({ repeat: false }, 300, 300), false);
 
@@ -107,6 +107,7 @@ renderResults({
 }, 0, { retry() {}, next() {}, levels() {} });
 assert.match(app.html, /Core breached/);
 assert.match(app.html, /Lives/);
+assert.match(app.html, /MAIN MENU/);
 assert.doesNotMatch(app.html, /MODIFIER|CHAIN BROKEN|BLACKOUT/);
 
 renderGameplayShell(82, 3, {}, false, {});

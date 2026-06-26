@@ -279,7 +279,7 @@ function finishSpeedTest(state, result) {
   if (!result || appState.screen === Screens.SPEED_TEST_RESULTS) return;
   appState.speedTestResult = result;
   appState.speedTestRecordFlags = { ...state.recordFlags };
-  appState.speedTestResultsIndex = 0;
+  appState.speedTestResultsIndex = 1;
   appState.speedTestResultsReadyAt = currentTimeMs() + 200;
   changeScreen(Screens.SPEED_TEST_RESULTS);
   renderCurrentScreen();
@@ -301,6 +301,7 @@ function resetSpeedTestAttempt(source = "mode-select") {
     attemptSeed,
     developerMode: appState.devMode,
     source,
+    deferSession: source === "change-test",
     onUpdate: updateSpeedTestRun,
     onComplete: finishSpeedTest,
   });
@@ -662,6 +663,7 @@ function renderCurrentScreen() {
         renderCurrentScreen();
       },
       activate: activateSelectedMode,
+      back: openTitle,
     });
   } else if (appState.screen === Screens.ENDLESS_READY) {
     renderEndlessReady({ start: () => startEndless("mode-select") });
@@ -746,6 +748,7 @@ function renderCurrentScreen() {
       retry: () => startLevel(appState.results.levelNumber, "retry"),
       next: () => startLevel(appState.results.levelNumber + 1, "next-level"),
       levels: openLevelSelect,
+      title: openTitle,
       select: (index) => { appState.resultsIndex = index; },
     });
   } else if (appState.screen === Screens.SETTINGS) {
@@ -918,16 +921,18 @@ function handleGlobalKeydown(event) {
   }
 
   if (appState.screen === Screens.MODE_SELECT) {
+    const itemCount = getAllModes().length + 1;
     if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
       appState.modeSelection = (
-        appState.modeSelection - 1 + getAllModes().length
-      ) % getAllModes().length;
+        appState.modeSelection - 1 + itemCount
+      ) % itemCount;
       renderCurrentScreen();
     } else if (event.key === "ArrowDown" || event.key === "ArrowRight") {
-      appState.modeSelection = (appState.modeSelection + 1) % getAllModes().length;
+      appState.modeSelection = (appState.modeSelection + 1) % itemCount;
       renderCurrentScreen();
     } else if (event.key === "Enter") {
-      activateSelectedMode();
+      if (appState.modeSelection === getAllModes().length) openTitle();
+      else activateSelectedMode();
     } else if (event.key === "Escape") {
       openTitle();
     }
@@ -1043,7 +1048,8 @@ function handleGlobalKeydown(event) {
       const action = actions[appState.resultsIndex];
       if (action === "retry") startLevel(appState.results.levelNumber, "retry");
       else if (action === "next") startLevel(appState.results.levelNumber + 1, "next-level");
-      else openLevelSelect();
+      else if (action === "levels") openLevelSelect();
+      else openTitle();
     }
     return;
   }

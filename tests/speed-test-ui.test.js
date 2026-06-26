@@ -151,7 +151,7 @@ renderSpeedTestResults({
 }, {
   newWpmRecord: true,
   newAccuracyRecord: true,
-}, 0, {
+}, 1, {
   retry: () => calls.push("retry"),
   change: () => calls.push("change"),
   modes: () => calls.push("modes"),
@@ -165,7 +165,10 @@ assert.match(app.html, /65\.4/);
 assert.match(app.html, /NEW WPM RECORD/);
 assert.match(app.html, /Characters.*70 correct \/ 3 incorrect/s);
 assert.match(app.html, /Word deletes.*1/s);
-assert.match(app.html, /RETRY SAME TEST/);
+assert.match(app.html, /RETRY TEST/);
+assert.match(app.html, /NEXT TEST/);
+assert.doesNotMatch(app.html, /RETRY SAME TEST|CHANGE TEST/);
+assert.match(app.html, /data-action="change"[^>]*>NEXT TEST<\/button>/);
 assert.doesNotMatch(app.html, /GRADE|LIVES|BOSS|CAMPAIGN SCORE|speed-test-caret/);
 app.querySelector('[data-action="retry"]').onclick();
 assert.equal(calls.at(-1), "retry");
