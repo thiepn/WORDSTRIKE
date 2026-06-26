@@ -80,7 +80,7 @@ for (const stage of [5, 15, 20, 25]) {
   assert.equal(endless.bannerText, "");
 }
 const transition = createEndlessRuntime({ seed: 2, vocabulary, startStage: 5 });
-for (let index = 0; index < 20; index += 1) {
+for (let index = 0; index < 10; index += 1) {
   registerEndlessWordCompletion(transition, { text: "cat" });
 }
 assert.equal(transition.stage, 6);

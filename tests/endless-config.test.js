@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { ENDLESS_CONFIG, isStandardEndlessConfiguration } from "../js/endlessConfig.js";
+import {
+  ENDLESS_CONFIG,
+  getEndlessWordsPerStage,
+  isStandardEndlessConfiguration,
+} from "../js/endlessConfig.js";
 import {
   getEndlessActiveWordCap,
   getEndlessDifficulty,
@@ -7,7 +11,12 @@ import {
 } from "../js/endlessDifficulty.js";
 
 assert.equal(ENDLESS_CONFIG.startingIntegrity, 3);
-assert.equal(ENDLESS_CONFIG.wordsPerStage, 20);
+assert.deepEqual(
+  [1, 5, 6, 10, 11, 50].map(getEndlessWordsPerStage),
+  [10, 10, 15, 15, 20, 20],
+);
+assert.equal(getEndlessWordsPerStage(0), 10);
+assert.equal(getEndlessWordsPerStage(Number.NaN), 10);
 assert.equal(getEndlessDifficulty(1).movementMultiplier, 0.7);
 assert.equal(getEndlessDifficulty(10).movementMultiplier, 1);
 assert.equal(getEndlessDifficulty(11).movementMultiplier, 1);

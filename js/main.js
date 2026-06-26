@@ -126,6 +126,10 @@ import {
   startDailyRun,
   stopDailyLoop,
 } from "./dailyMode.js";
+import {
+  attachAppClickListener,
+  resolveResultClickAction,
+} from "./appClickRouting.js";
 
 const titleActions = ["modes", "profile", "settings"];
 const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
@@ -676,6 +680,7 @@ function renderCurrentScreen() {
         modes: openModeSelect,
         title: openTitle,
         select: (index) => {
+          if (appState.endlessResultsIndex === index) return;
           appState.endlessResultsIndex = index;
           renderCurrentScreen();
         },
@@ -699,6 +704,7 @@ function renderCurrentScreen() {
         modes: openModeSelect,
         title: openTitle,
         select: (index) => {
+          if (appState.dailyResultsIndex === index) return;
           appState.dailyResultsIndex = index;
           renderCurrentScreen();
         },
@@ -790,6 +796,30 @@ function renderCurrentScreen() {
   if (appState.devMode) {
     renderDevModeIndicator();
     renderDevSessionDiagnostics();
+  }
+}
+
+function handleAppClick(event) {
+  const root = document.querySelector("#app");
+  const readyAt = appState.screen === Screens.ENDLESS_RESULTS
+    ? appState.endlessResultsReadyAt
+    : appState.dailyResultsReadyAt;
+  const action = resolveResultClickAction(event, {
+    root,
+    screen: appState.screen,
+    readyAt,
+    now: currentTimeMs(),
+  });
+  if (!action) return;
+  event.preventDefault();
+  if (appState.screen === Screens.ENDLESS_RESULTS) {
+    if (action === "retry") startEndless("retry");
+    else if (action === "modes") openModeSelect();
+    else if (action === "title") openTitle();
+  } else if (appState.screen === Screens.DAILY_RESULTS) {
+    if (action === "retry") startDaily("retry", appState.dailyResult.modeData.dateKey);
+    else if (action === "modes") openModeSelect();
+    else if (action === "title") openTitle();
   }
 }
 
@@ -1097,6 +1127,7 @@ async function bootstrap() {
     loadCommonWordBank(),
   ]);
   document.addEventListener("keydown", handleGlobalKeydown);
+  attachAppClickListener(document.querySelector("#app"), handleAppClick);
   if (
     appState.devMode &&
     search.get("mode") === MODE_IDS.SPEED_TEST

@@ -71,7 +71,7 @@ clickAudit(["retry", "levels", "title"], (handlers) => campaign("Fail", false, 9
 clickAudit(["next", "retry", "levels", "title"], (handlers) => campaign("S", true, 10, handlers));
 clickAudit(["retry", "levels", "title"], (handlers) => campaign("Fail", true, 10, handlers));
 
-clickAudit(["retry", "modes", "title"], (handlers) => renderEndlessResults({
+renderEndlessResults({
   score: 75411,
   accuracy: 96,
   wpm: 91,
@@ -82,10 +82,11 @@ clickAudit(["retry", "modes", "title"], (handlers) => renderEndlessResults({
     coreBreaches: 3, survivalPoints: 29993, wordPoints: 31668,
     stageBonusPoints: 13750, attemptSeed: 1,
   },
-}, 0, handlers));
+}, 0, { select() {} });
+assert.deepEqual(app.buttons.map(({ dataset }) => dataset.action), ["retry", "modes", "title"]);
 assert.doesNotMatch(app.html, /29993\s*\+\s*31668/);
 
-clickAudit(["retry", "modes", "title"], (handlers) => renderDailyResults({
+renderDailyResults({
   success: true,
   score: 25000,
   activeDurationMs: 90000,
@@ -97,7 +98,8 @@ clickAudit(["retry", "modes", "title"], (handlers) => renderDailyResults({
     integrityRemaining: 2, wordPoints: 6600, completionBonus: 10000,
     integrityBonus: 4000, accuracyBonus: 1900, timeBonus: 2500,
   },
-}, {}, 0, handlers));
+}, {}, 0, { select() {} });
+assert.deepEqual(app.buttons.map(({ dataset }) => dataset.action), ["retry", "modes", "title"]);
 
 clickAudit(["retry", "change", "modes", "title"], (handlers) => renderSpeedTestResults({
   variantId: "time",

@@ -104,5 +104,7 @@ assert.match(css, /\.profile-details code[^}]*overflow-wrap:\s*anywhere/s);
 assert.match(css, /@media \(max-width:\s*760px\)[\s\S]*\.profile-metric-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2/s);
 assert.match(css, /--text-muted:\s*#[0-9a-f]+/i);
 assert.match(css, /\.profile-metric-grid\s*\{[^}]*background:\s*transparent/s);
+assert.match(css, /\.profile-stats-screen\s*\{[^}]*--profile-text-secondary:\s*#d2dbe2/s);
+assert.match(css, /\.profile-stats-screen\s*\{[^}]*--profile-text-muted:\s*#bac6cf/s);
 
 console.log("Statistics tabs, active-only panels, empty states, profile controls, safe values, and responsive CSS tests passed.");

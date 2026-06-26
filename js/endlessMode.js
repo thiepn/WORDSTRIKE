@@ -1,5 +1,9 @@
 import { appState, Screens } from "./state.js";
-import { ENDLESS_CONFIG, isStandardEndlessConfiguration } from "./endlessConfig.js";
+import {
+  ENDLESS_CONFIG,
+  getEndlessWordsPerStage,
+  isStandardEndlessConfiguration,
+} from "./endlessConfig.js";
 import {
   estimateRequiredWpm,
   getEndlessDifficulty,
@@ -196,7 +200,7 @@ function updateRollingWpm(game) {
 
 function advanceEndlessStage(game) {
   if (
-    game.stageWordsCompleted < ENDLESS_CONFIG.wordsPerStage ||
+    game.stageWordsCompleted < getEndlessWordsPerStage(game.stage) ||
     game.elapsedMs < game.transitionSpawnUntilMs
   ) {
     return false;
@@ -394,7 +398,7 @@ function tick(timestamp) {
   game.lastTimestamp = timestamp;
   game.elapsedMs += deltaMs;
   if (
-    game.stageWordsCompleted >= ENDLESS_CONFIG.wordsPerStage &&
+    game.stageWordsCompleted >= getEndlessWordsPerStage(game.stage) &&
     game.elapsedMs >= game.transitionSpawnUntilMs
   ) {
     advanceEndlessStage(game);
@@ -513,7 +517,7 @@ export function getEndlessDiagnosticText(game = currentEndless) {
     `ELIGIBLE=${game.recordEligible}`,
     `STAGE=${game.stage}`,
     `COMPLETED STAGES=${game.completedStages}`,
-    `PROGRESS=${game.stageWordsCompleted}/${ENDLESS_CONFIG.wordsPerStage}`,
+    `PROGRESS=${game.stageWordsCompleted}/${getEndlessWordsPerStage(game.stage)}`,
     `WORDS=${game.totalWordsCompleted}`,
     `ACTIVE=${Math.round(game.elapsedMs)}ms`,
     `SCORE=${game.score}`,

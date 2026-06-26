@@ -70,7 +70,7 @@ const vocabulary = createEndlessVocabulary({
 let game = createEndlessRuntime({ seed: 1, vocabulary });
 assert.equal(game.integrity, 3);
 assert.equal(game.stage, 1);
-for (let index = 0; index < 20; index += 1) {
+for (let index = 0; index < 10; index += 1) {
   game.combo += 1;
   registerEndlessWordCompletion(game, { text: "word" });
 }
@@ -79,6 +79,19 @@ assert.equal(game.stageWordsCompleted, 0);
 assert.equal(game.completedStages, 1);
 assert.equal(game.accumulatedStageBonusPoints, 250);
 assert.equal(game.transitionSpawnUntilMs, 1000);
+
+for (const [stage, target] of [[5, 10], [6, 15], [11, 20]]) {
+  const transition = createEndlessRuntime({ seed: stage, vocabulary, startStage: stage });
+  for (let index = 0; index < target - 1; index += 1) {
+    registerEndlessWordCompletion(transition, { text: "word" });
+  }
+  assert.equal(transition.stage, stage);
+  assert.equal(transition.stageWordsCompleted, target - 1);
+  registerEndlessWordCompletion(transition, { text: "word" });
+  assert.equal(transition.stage, stage + 1);
+  assert.equal(transition.stageWordsCompleted, 0);
+  assert.equal(transition.transitionSpawnUntilMs, 1000);
+}
 
 const breach = (id) => ({
   id,
@@ -90,6 +103,7 @@ const breach = (id) => ({
 game.words = [breach(1), breach(2), breach(3), breach(4)];
 game.elapsedMs = 100;
 processEndlessCoreBreach(game, game.words[0]);
+assert.equal(game.stageWordsCompleted, 0);
 assert.equal(game.integrity, 2);
 assert.equal(game.coreHits, 1);
 processEndlessCoreBreach(game, game.words[0]);

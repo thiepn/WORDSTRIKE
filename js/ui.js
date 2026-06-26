@@ -17,7 +17,7 @@ import {
   getSpeedTestDiagnosticText,
   getSpeedTestLiveMetrics,
 } from "./speedTest.js";
-import { ENDLESS_CONFIG } from "./endlessConfig.js";
+import { ENDLESS_CONFIG, getEndlessWordsPerStage } from "./endlessConfig.js";
 import { getEndlessDiagnosticText } from "./endlessMode.js";
 import {
   DAILY_STARTING_INTEGRITY,
@@ -51,6 +51,13 @@ function wireMenuActions(root, selector, handlers = {}) {
     };
     button.onmouseenter = () => handlers.select?.(index);
     button.onfocus = () => handlers.select?.(index);
+  });
+}
+
+function wireMenuSelection(root, selector, select) {
+  root?.querySelectorAll?.(selector).forEach((button, index) => {
+    button.onmouseenter = () => select?.(index);
+    button.onfocus = () => select?.(index);
   });
 }
 
@@ -133,7 +140,7 @@ export function renderEndlessReady(handlers = {}) {
         <p class="endless-ready-lead">SURVIVE ESCALATING STAGES</p>
         <div class="endless-ready-rules">
           <span>${ENDLESS_CONFIG.startingIntegrity} CORE INTEGRITY</span>
-          <span>${ENDLESS_CONFIG.wordsPerStage} WORDS PER STAGE</span>
+          <span>${getEndlessWordsPerStage(1)} WORDS IN STAGE 1</span>
         </div>
         <button class="arcade-button selected" data-action="endless-start">
           PRESS ENTER TO BEGIN
@@ -226,7 +233,7 @@ export function renderEndlessShell(game, devMode = false) {
     <section class="screen game-screen endless-screen">
       <header class="endless-hud">
         <div><strong>STAGE <span id="endless-stage">${game.stage}</span></strong>
-          <span id="endless-progress">${game.stageWordsCompleted} / ${ENDLESS_CONFIG.wordsPerStage}</span></div>
+          <span id="endless-progress">${game.stageWordsCompleted} / ${getEndlessWordsPerStage(game.stage)}</span></div>
         <div>SCORE <strong id="endless-score">0</strong></div>
         <div>CORE <strong class="endless-integrity" id="endless-integrity">${"◇".repeat(game.integrity)}</strong></div>
       </header>
@@ -241,7 +248,7 @@ export function renderEndlessShell(game, devMode = false) {
 export function updateEndlessHud(game) {
   const values = {
     "#endless-stage": game.stage,
-    "#endless-progress": `${game.stageWordsCompleted} / ${ENDLESS_CONFIG.wordsPerStage}`,
+    "#endless-progress": `${game.stageWordsCompleted} / ${getEndlessWordsPerStage(game.stage)}`,
     "#endless-score": game.score.toLocaleString(),
     "#endless-integrity": "◇".repeat(Math.max(0, game.integrity)),
   };
@@ -1084,7 +1091,7 @@ export function renderEndlessResults(result, selectedIndex, handlers) {
         </div>
         <div class="endless-result-details">
           <div><span>Words completed</span><strong>${data.wordsCompleted}</strong></div>
-          <div><span>Stage progress</span><strong>${data.stageProgress} / ${ENDLESS_CONFIG.wordsPerStage}</strong></div>
+          <div><span>Stage progress</span><strong>${data.stageProgress} / ${getEndlessWordsPerStage(data.finalStage ?? data.highestStage)}</strong></div>
           <div><span>Accuracy</span><strong>${result.accuracy.toFixed(1)}%</strong></div>
           <div><span>Average WPM</span><strong>${result.wpm.toFixed(1)}</strong></div>
           <div><span>Peak WPM</span><strong>${data.peakWpm.toFixed(1)}</strong></div>
@@ -1106,7 +1113,7 @@ export function renderEndlessResults(result, selectedIndex, handlers) {
   )).join("")}</div>
       </div>
     </section>`;
-  wireMenuActions(app(), ".endless-results-panel .arcade-button", handlers);
+  wireMenuSelection(app(), ".endless-results-panel .arcade-button", handlers.select);
 }
 
 export function renderDailyResults(result, recordFlags, selectedIndex, handlers) {
@@ -1144,7 +1151,7 @@ export function renderDailyResults(result, recordFlags, selectedIndex, handlers)
   )).join("")}</div>
       </div>
     </section>`;
-  wireMenuActions(app(), ".daily-results-panel .arcade-button", handlers);
+  wireMenuSelection(app(), ".daily-results-panel .arcade-button", handlers.select);
 }
 
 export function hidePauseOverlay() {

@@ -14,11 +14,16 @@ globalThis.document = {
   },
 };
 
-const { renderEndlessReady, renderEndlessResults } = await import("../js/ui.js");
+const {
+  renderEndlessReady,
+  renderEndlessResults,
+  renderEndlessShell,
+  updateEndlessHud,
+} = await import("../js/ui.js");
 renderEndlessReady({ start() {} });
 assert.match(app.html, /ENDLESS MODE/);
 assert.match(app.html, /3 CORE INTEGRITY/);
-assert.match(app.html, /20 WORDS PER STAGE/);
+assert.match(app.html, /10 WORDS IN STAGE 1/);
 assert.match(app.html, /PRESS ENTER TO BEGIN/);
 
 renderEndlessResults({
@@ -27,6 +32,7 @@ renderEndlessResults({
   wpm: 52.2,
   modeData: {
     highestStage: 8,
+    finalStage: 8,
     survivalTimeMs: 300000,
     wordsCompleted: 140,
     stageProgress: 4,
@@ -53,6 +59,19 @@ assert.match(app.html, /STAGE BONUSES.*7[.,]000/s);
 assert.match(app.html, /TOTAL.*49[.,]000/s);
 assert.doesNotMatch(app.html, /30000\s*\+\s*12000/);
 assert.doesNotMatch(app.html, /GRADE|BOSS|RAW WPM/);
+assert.match(app.html, /Stage progress.*4 \/ 15/s);
+
+for (const [stage, progress, expected] of [[4, 7, "7 / 10"], [8, 11, "11 / 15"], [14, 16, "16 / 20"]]) {
+  const nodes = new Map();
+  for (const id of ["#endless-stage", "#endless-progress", "#endless-score", "#endless-integrity"]) {
+    nodes.set(id, { textContent: "" });
+  }
+  document.querySelector = (selector) => selector === "#app" ? app : nodes.get(selector) || null;
+  const game = { stage, stageWordsCompleted: progress, score: 0, integrity: 3, elapsedMs: 0 };
+  renderEndlessShell(game);
+  updateEndlessHud(game);
+  assert.equal(nodes.get("#endless-progress").textContent, expected);
+}
 
 const main = await readFile(new URL("../js/main.js", import.meta.url), "utf8");
 assert.match(main, /route === "endless-ready"/);

@@ -1,6 +1,5 @@
 export const ENDLESS_CONFIG = Object.freeze({
   startingIntegrity: 3,
-  wordsPerStage: 20,
   spawnPauseMs: 1000,
   stageBannerMs: 1250,
   collisionImmunityMs: 650,
@@ -14,6 +13,13 @@ export const ENDLESS_CONFIG = Object.freeze({
   rollingWpmMinimumSampleMs: 5000,
   survivalPointsPerSecond: 100,
 });
+
+export function getEndlessWordsPerStage(stage) {
+  const safeStage = Number.isInteger(stage) && stage > 0 ? stage : 1;
+  if (safeStage <= 5) return 10;
+  if (safeStage <= 10) return 15;
+  return 20;
+}
 
 export const STANDARD_ENDLESS_RUNTIME = Object.freeze({
   startStage: 1,

@@ -59,6 +59,8 @@ button {
 }
 
 .profile-stats-screen {
+  --profile-text-secondary: #d2dbe2;
+  --profile-text-muted: #bac6cf;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 24px;
@@ -93,7 +95,7 @@ button {
 
 .profile-tab-panel h3 {
   margin: 28px 0 12px;
-  color: var(--muted);
+  color: var(--profile-text-muted);
   font-size: 12px;
   letter-spacing: 0.13em;
 }
@@ -114,7 +116,7 @@ button {
   border: 0;
   border-bottom: 1px solid var(--locked);
   background: transparent;
-  color: var(--muted);
+  color: var(--profile-text-muted);
   cursor: pointer;
   font-size: 11px;
   letter-spacing: 0.1em;
@@ -144,7 +146,7 @@ button {
 .profile-metric span,
 .profile-details > div > span {
   display: block;
-  color: var(--muted);
+  color: var(--profile-text-muted);
   font-size: 10px;
   letter-spacing: 0.13em;
 }
@@ -187,7 +189,7 @@ button {
   margin: 18px 0;
   padding: 16px;
   border-block: 1px solid rgb(129 144 158 / 25%);
-  color: var(--muted);
+  color: var(--profile-text-muted);
   text-align: center;
   letter-spacing: 0.1em;
 }
@@ -226,7 +228,7 @@ button {
 
 .recent-session-row time,
 .recent-session-row span {
-  color: var(--muted);
+  color: var(--profile-text-secondary);
   font-size: 11px;
 }
 
@@ -291,7 +293,7 @@ button {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  color: var(--muted);
+  color: var(--profile-text-muted);
   font-size: 10px;
 }
 
@@ -378,7 +380,7 @@ button {
 
 .profile-privacy {
   margin-top: 20px;
-  color: var(--muted);
+  color: var(--profile-text-muted);
   line-height: 1.6;
 }
 
@@ -391,7 +393,7 @@ button {
   padding: 7px 9px;
   border: 1px solid rgb(255 60 172 / 45%);
   background: rgb(10 14 20 / 94%);
-  color: var(--muted);
+  color: var(--profile-text-muted);
   font-size: 9px;
   overflow-wrap: anywhere;
 }
@@ -534,6 +536,20 @@ button {
   display: grid;
   place-items: center;
   padding: 28px;
+}
+
+.endless-results-screen,
+.daily-results-screen {
+  z-index: 60;
+  isolation: isolate;
+  pointer-events: auto;
+}
+
+.endless-results-panel,
+.daily-results-panel,
+.endless-results-panel .arcade-button,
+.daily-results-panel .arcade-button {
+  pointer-events: auto;
 }
 
 .daily-ready-panel,
