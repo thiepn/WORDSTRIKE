@@ -150,7 +150,7 @@ assert.equal(calls.length, 2);
 
 const main = await readFile(new URL("../js/main.js", import.meta.url), "utf8");
 assert.match(main, /void initializeAuth\(\)/);
-assert.match(main, /updateProfileAuthSection\(authState\)/);
+assert.match(main, /updateProfileAuthSection\(authState, getLeaderboardProfileState\(\)\)/);
 assert.equal(main.split('addEventListener("keydown"').length - 1, 1);
 assert.equal(main.split("attachAppClickListener(").length - 1, 1);
 

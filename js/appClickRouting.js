@@ -11,7 +11,15 @@ const RESULT_ACTIONS = Object.freeze({
   }),
   [Screens.PROFILE_STATS]: Object.freeze({
     selector: ".global-account",
-    actions: Object.freeze(["auth-google-sign-in", "auth-sign-out"]),
+    actions: Object.freeze([
+      "auth-google-sign-in",
+      "auth-sign-out",
+      "leaderboard-username-check",
+      "leaderboard-username-claim",
+      "leaderboard-username-start-change",
+      "leaderboard-username-save-change",
+      "leaderboard-username-cancel-change",
+    ]),
     guardReadyAt: false,
   }),
 });
