@@ -1,6 +1,6 @@
 export const SUPABASE_CONFIG = Object.freeze({
-  url: "https://YOUR_PROJECT_REF.supabase.co",
-  publishableKey: "sb_publishable_REPLACE_ME",
+  url: "https://hycegznamzjhwinegaai.supabase.co",
+  publishableKey: "sb_publishable_1rZzRPzfLMaAH5pIgCwIjA_19UPMIsR",
 });
 
 function isSafeProjectUrl(value) {
