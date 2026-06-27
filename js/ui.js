@@ -76,7 +76,17 @@ export function renderTitle(menuIndex, handlers) {
       <span class="ambient-word" style="right:16%;bottom:16%;animation-delay:-2s">precision</span>
       <div class="title-panel">
         <div class="eyebrow">System online // defend the core</div>
-        <h1 class="game-title">WORD<span>STRIKE</span></h1>
+        <h1 class="sr-only">WORDSTRIKE</h1>
+        <img
+          class="brand-logo"
+          src="./assets/branding/wordstrike-logo.webp"
+          alt="WORDSTRIKE"
+          width="360"
+          height="360"
+          decoding="async"
+          fetchpriority="high"
+          draggable="false"
+        >
         <p class="subtitle">Arcade Typing Defense</p>
         <div class="menu-list">
           ${items.map(([label, action], index) => menuButton(label, action, index === menuIndex)).join("")}
