@@ -121,6 +121,7 @@ import { getStatisticsSnapshot } from "./statistics.js";
 import {
   renderProfileStatistics,
   STATISTICS_TABS,
+  updateLeaderboardUsernameFeedback,
   updateProfileAuthSection,
 } from "./statisticsUi.js";
 import {
@@ -141,9 +142,23 @@ import {
   signOut,
   subscribeToAuth,
 } from "./authService.js";
+import {
+  cancelUsernameChange,
+  changeUsername,
+  checkUsernameAvailability,
+  claimUsername,
+  getLeaderboardProfileState,
+  initializeLeaderboardProfile,
+  resetLeaderboardProfile,
+  setUsernameDraft,
+  startUsernameChange,
+  subscribeToLeaderboardProfile,
+} from "./leaderboardProfileService.js";
+import { isTextEntryTarget } from "./inputSafety.js";
 
 const titleActions = ["modes", "profile", "settings"];
 const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
+let lastAuthUiKey = "";
 
 function stopActiveLoops() {
   stopGameLoop();
@@ -789,6 +804,7 @@ function renderCurrentScreen() {
       copyMessage: appState.profileCopyMessage,
       developerMode: appState.devMode,
       authState: getAuthState(),
+      leaderboardProfileState: getLeaderboardProfileState(),
     }, {
       selectTab: selectStatisticsTab,
       viewRecent: () => selectStatisticsTab(5),
@@ -835,7 +851,21 @@ function handleAppClick(event) {
   } else if (appState.screen === Screens.PROFILE_STATS) {
     if (action === "auth-google-sign-in") void signInWithGoogle();
     else if (action === "auth-sign-out") void signOut();
+    else if (action === "leaderboard-username-start-change") startUsernameChange();
+    else if (action === "leaderboard-username-cancel-change") cancelUsernameChange();
+    else {
+      const username = document.querySelector("#leaderboard-username-input")?.value ?? "";
+      if (action === "leaderboard-username-check") void checkUsernameAvailability(username);
+      else if (action === "leaderboard-username-claim") void claimUsername(username);
+      else if (action === "leaderboard-username-save-change") void changeUsername(username);
+    }
   }
+}
+
+function handleAppInput(event) {
+  if (event.target?.id !== "leaderboard-username-input") return;
+  setUsernameDraft(event.target.value);
+  updateLeaderboardUsernameFeedback(event.target.value);
 }
 
 function moveLevelSelection(key) {
@@ -857,6 +887,7 @@ function inspectDevLevel(levelNumber) {
 }
 
 function handleGlobalKeydown(event) {
+  if (isTextEntryTarget(event.target)) return;
   if (appState.screen === Screens.SPEED_TEST_RUN) {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -1118,8 +1149,22 @@ function handleGlobalKeydown(event) {
 async function bootstrap() {
   clearSession();
   subscribeToAuth((authState) => {
+    const authUiKey = `${authState.status}:${authState.user?.id ?? ""}`;
+    const authUiChanged = authUiKey !== lastAuthUiKey;
+    lastAuthUiKey = authUiKey;
+    if (authState.status === "signed-in") void initializeLeaderboardProfile(authState.user);
+    else resetLeaderboardProfile();
+    if (
+      authUiChanged &&
+      appState.screen === Screens.PROFILE_STATS &&
+      appState.statisticsTabIndex === 6
+    ) {
+      updateProfileAuthSection(authState, getLeaderboardProfileState());
+    }
+  });
+  subscribeToLeaderboardProfile((profileState) => {
     if (appState.screen === Screens.PROFILE_STATS && appState.statisticsTabIndex === 6) {
-      updateProfileAuthSection(authState);
+      updateProfileAuthSection(getAuthState(), profileState);
     }
   });
   void initializeAuth();
@@ -1148,7 +1193,9 @@ async function bootstrap() {
     loadCommonWordBank(),
   ]);
   document.addEventListener("keydown", handleGlobalKeydown);
-  attachAppClickListener(document.querySelector("#app"), handleAppClick);
+  const appRoot = document.querySelector("#app");
+  attachAppClickListener(appRoot, handleAppClick);
+  appRoot?.addEventListener("input", handleAppInput);
   if (
     appState.devMode &&
     search.get("mode") === MODE_IDS.SPEED_TEST

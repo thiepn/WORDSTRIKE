@@ -8,6 +8,11 @@ import {
   formatUtcDate,
 } from "./statisticsFormat.js";
 import { getRecentSessionStatistics } from "./statistics.js";
+import {
+  canChangeLeaderboardUsername,
+  formatUsernameChangeDate,
+  validateLeaderboardUsername,
+} from "./leaderboardUsername.js";
 
 export const STATISTICS_TABS = Object.freeze([
   "OVERVIEW",
@@ -222,11 +227,80 @@ function renderProfile(profile, state) {
       <div><span>LAST UPDATED</span><strong>${formatDateTime(profile.updatedAt)}</strong></div>
       <div><span>STORAGE</span><strong>STORED LOCALLY ON THIS DEVICE</strong></div>
     </div>
-    ${renderGlobalAccount(state.authState)}
+    ${renderGlobalAccount(state.authState, state.leaderboardProfileState)}
     <p class="profile-privacy">Your profile and statistics are stored in this browser.<br>They are not uploaded anywhere.</p>`;
 }
 
-function globalAccountContent(authState = { status: "loading" }) {
+function usernameFeedback(profileState) {
+  if (profileState.status === "checking") return "Checking availability…";
+  if (profileState.availability?.available === true) return "Username is available";
+  if (profileState.availability?.available === false) return "Username is already taken";
+  if (profileState.error?.message) return escapeHtml(profileState.error.message);
+  return "";
+}
+
+function usernameForm(profileState, changeMode = false) {
+  const running = ["checking", "claiming", "changing"].includes(profileState.status);
+  const value = escapeHtml(profileState.draft || "");
+  const feedback = usernameFeedback(profileState);
+  return `<div class="leaderboard-username-form">
+    <input id="leaderboard-username-input" type="text" value="${value}"
+      minlength="3" maxlength="20" autocomplete="username" spellcheck="false"
+      aria-label="Public leaderboard username" ${running ? "disabled" : ""}>
+    <div class="leaderboard-username-feedback" id="leaderboard-username-feedback" aria-live="polite">${feedback}</div>
+    <div class="global-account-actions">
+      <button class="arcade-button" data-action="leaderboard-username-check" ${running ? "disabled aria-disabled=\"true\"" : ""}>CHECK AVAILABILITY</button>
+      <button class="arcade-button" data-action="${changeMode ? "leaderboard-username-save-change" : "leaderboard-username-claim"}" ${running ? "disabled aria-disabled=\"true\"" : ""}>${changeMode ? "SAVE USERNAME" : "CLAIM USERNAME"}</button>
+      ${changeMode ? `<button class="arcade-button" data-action="leaderboard-username-cancel-change" ${running ? 'disabled aria-disabled="true"' : ""}>CANCEL</button>` : ""}
+    </div>
+  </div>`;
+}
+
+function signedInProfileContent(profileState = { status: "idle" }) {
+  if (["idle", "loading"].includes(profileState.status)) {
+    return `<strong>Google account connected</strong><p>Loading public profile&hellip;</p>
+      <button class="arcade-button" data-action="auth-sign-out">SIGN OUT</button>`;
+  }
+  if (profileState.status === "unavailable") {
+    return `<strong>Google account connected</strong>
+      <p>Public profile services are unavailable. Local gameplay and records are unaffected.</p>
+      <button class="arcade-button" data-action="auth-sign-out">SIGN OUT</button>`;
+  }
+  if (profileState.status === "error" && !profileState.profile) {
+    return `<strong>Google account connected</strong>
+      <p>${escapeHtml(profileState.error?.message || "Public profile services are temporarily unavailable.")}</p>
+      <button class="arcade-button" data-action="auth-sign-out">SIGN OUT</button>`;
+  }
+  if (!profileState.profile) {
+    return `<strong>Google account connected</strong>
+      <p>Choose a public leaderboard username.</p>
+      ${usernameForm(profileState)}
+      <button class="arcade-button account-sign-out" data-action="auth-sign-out">SIGN OUT</button>`;
+  }
+
+  const profile = profileState.profile;
+  const canChange = canChangeLeaderboardUsername(profile);
+  const cooldown = !canChange && profile.canChangeAt
+    ? `<p class="leaderboard-cooldown">You can change your username again on<br>${escapeHtml(formatUsernameChangeDate(profile.canChangeAt))}.</p>`
+    : "";
+  const notice = profileState.notice
+    ? `<p class="leaderboard-profile-notice">${escapeHtml(profileState.notice)}</p>`
+    : "";
+  const error = profileState.error?.message
+    ? `<p class="leaderboard-profile-error">${escapeHtml(profileState.error.message)}</p>`
+    : "";
+  return `<strong>Google account connected</strong>
+    <div class="leaderboard-public-username"><span>PUBLIC USERNAME</span><strong>${escapeHtml(profile.username)}</strong></div>
+    ${notice}${error}${cooldown}
+    ${profileState.editing ? usernameForm(profileState, true) : `
+      <div class="global-account-actions">
+        <button class="arcade-button" data-action="leaderboard-username-start-change" ${canChange ? "" : 'disabled aria-disabled="true"'}>CHANGE USERNAME</button>
+        <button class="arcade-button" data-action="auth-sign-out">SIGN OUT</button>
+      </div>`}
+  `;
+}
+
+function globalAccountContent(authState = { status: "loading" }, profileState) {
   if (["idle", "loading"].includes(authState.status)) {
     return `<p>Checking account&hellip;</p>`;
   }
@@ -240,9 +314,7 @@ function globalAccountContent(authState = { status: "loading" }) {
       <button class="arcade-button" data-action="auth-google-sign-in" disabled aria-disabled="true">CONTINUE WITH GOOGLE</button>`;
   }
   if (authState.status === "signed-in") {
-    return `<strong>Google account connected</strong>
-      <p>Your public WORDSTRIKE username has not been<br>configured yet.</p>
-      <button class="arcade-button" data-action="auth-sign-out">SIGN OUT</button>`;
+    return signedInProfileContent(profileState);
   }
   if (authState.status === "signing-out") {
     return `<p>Signing out&hellip;</p>
@@ -257,16 +329,27 @@ function globalAccountContent(authState = { status: "loading" }) {
     <p>Local gameplay and records are unaffected.</p>`;
 }
 
-function renderGlobalAccount(authState) {
+function renderGlobalAccount(authState, profileState) {
   return `<section class="global-account" aria-labelledby="global-account-heading">
     <h3 id="global-account-heading">GLOBAL ACCOUNT</h3>
-    <div id="global-account-content">${globalAccountContent(authState)}</div>
+    <div id="global-account-content">${globalAccountContent(authState, profileState)}</div>
   </section>`;
 }
 
-export function updateProfileAuthSection(authState) {
+export function updateProfileAuthSection(authState, profileState) {
   const content = document.querySelector("#global-account-content");
-  if (content) content.innerHTML = globalAccountContent(authState);
+  if (content) content.innerHTML = globalAccountContent(authState, profileState);
+}
+
+export function updateLeaderboardUsernameFeedback(value) {
+  const feedback = document.querySelector("#leaderboard-username-feedback");
+  if (!feedback) return;
+  if (!String(value || "").trim()) {
+    feedback.textContent = "";
+    return;
+  }
+  const validation = validateLeaderboardUsername(value);
+  feedback.textContent = validation.valid ? "" : validation.message;
 }
 
 function diagnostics(snapshot, storage) {
@@ -299,6 +382,7 @@ export function renderProfileStatistics({
   copyMessage = "",
   developerMode = false,
   authState = { status: "loading" },
+  leaderboardProfileState = { status: "idle" },
 } = {}, handlers = {}) {
   const tab = STATISTICS_TABS[Math.max(0, Math.min(STATISTICS_TABS.length - 1, activeTab))];
   const panel = tab === "OVERVIEW" ? renderOverview(snapshot)
@@ -308,7 +392,7 @@ export function renderProfileStatistics({
           : tab === "DAILY" ? renderDaily(snapshot.daily)
             : tab === "RECENT" ? renderRecent(storage, recentFilter)
               : renderProfile(snapshot.profile, {
-                editing, draft, nameError, copyMessage, authState,
+                editing, draft, nameError, copyMessage, authState, leaderboardProfileState,
               });
   app().innerHTML = `
     <section class="screen profile-stats-screen">

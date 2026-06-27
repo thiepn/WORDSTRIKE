@@ -10,7 +10,11 @@ Display names default to `Player`. Edits trim surrounding whitespace, collapse r
 
 ## Optional global account
 
-The Profile tab offers optional Google authentication through Supabase. Local gameplay, progress, and records do not require an account. Google is the only provider; email OTP, passwords, and anonymous authentication are not implemented. Public usernames and score submission are not implemented yet, and Google identity information is not automatically exposed as a public WORDSTRIKE identity.
+The Profile tab offers optional Google authentication through Supabase. Local gameplay, progress, and records do not require an account. Google is the only provider; email OTP, passwords, and anonymous authentication are not implemented. Google names, email addresses, and avatars are never adopted automatically as public WORDSTRIKE identities.
+
+Signed-in players may claim a separate public leaderboard username containing 3–20 ASCII letters, numbers, or underscores. Uniqueness is case-insensitive. The initial claim does not start a cooldown; after the first later change, additional changes require 30 days. Validation, ownership, uniqueness, and cooldown enforcement occur in the protected `leaderboard-profile` Edge Function and database functions rather than through direct browser table writes.
+
+Score submission and public leaderboard screens are not implemented yet.
 
 ## Lifetime aggregation
 
@@ -28,4 +32,4 @@ Typing Test statistics display only the current **English 200** (`english-200`) 
 
 Daily detailed dates remain capped at 90. A separate distinct-completed-day counter survives pruning. Recent filters never mutate storage.
 
-Gameplay and statistics data stay in this browser. Authentication stores only its Supabase session under a separate browser key; no local records are synchronized or submitted to leaderboards in this phase.
+Gameplay and statistics data stay in this browser. Authentication stores only its Supabase session under a separate browser key; public username management does not synchronize local records or submit scores.

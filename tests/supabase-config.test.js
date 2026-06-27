@@ -10,7 +10,8 @@ const valid = {
   publishableKey: "sb_publishable_public-browser-key",
 };
 assert.equal(hasValidSupabaseConfig(valid), true);
-assert.equal(hasValidSupabaseConfig(SUPABASE_CONFIG), false);
+assert.equal(hasValidSupabaseConfig(SUPABASE_CONFIG), true);
+assert.doesNotMatch(SUPABASE_CONFIG.publishableKey, /sb_secret_|service[_-]?role/i);
 assert.equal(hasValidSupabaseConfig({ ...valid, url: "https://YOUR_PROJECT_REF.supabase.co" }), false);
 assert.equal(hasValidSupabaseConfig({ ...valid, publishableKey: "sb_publishable_REPLACE_ME" }), false);
 assert.equal(hasValidSupabaseConfig({ ...valid, publishableKey: "sb_secret_private" }), false);
