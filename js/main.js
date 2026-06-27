@@ -118,7 +118,11 @@ import {
 } from "./modeStorage.js";
 import { copyPlayerIdToClipboard, validateDisplayName } from "./playerProfile.js";
 import { getStatisticsSnapshot } from "./statistics.js";
-import { renderProfileStatistics, STATISTICS_TABS } from "./statisticsUi.js";
+import {
+  renderProfileStatistics,
+  STATISTICS_TABS,
+  updateProfileAuthSection,
+} from "./statisticsUi.js";
 import {
   clearDailyRuntime,
   handleDailyKey,
@@ -128,8 +132,15 @@ import {
 } from "./dailyMode.js";
 import {
   attachAppClickListener,
-  resolveResultClickAction,
+  resolveAppClickAction,
 } from "./appClickRouting.js";
+import {
+  getAuthState,
+  initializeAuth,
+  signInWithGoogle,
+  signOut,
+  subscribeToAuth,
+} from "./authService.js";
 
 const titleActions = ["modes", "profile", "settings"];
 const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
@@ -777,6 +788,7 @@ function renderCurrentScreen() {
       nameError: appState.profileNameError,
       copyMessage: appState.profileCopyMessage,
       developerMode: appState.devMode,
+      authState: getAuthState(),
     }, {
       selectTab: selectStatisticsTab,
       viewRecent: () => selectStatisticsTab(5),
@@ -804,7 +816,7 @@ function handleAppClick(event) {
   const readyAt = appState.screen === Screens.ENDLESS_RESULTS
     ? appState.endlessResultsReadyAt
     : appState.dailyResultsReadyAt;
-  const action = resolveResultClickAction(event, {
+  const action = resolveAppClickAction(event, {
     root,
     screen: appState.screen,
     readyAt,
@@ -820,6 +832,9 @@ function handleAppClick(event) {
     if (action === "retry") startDaily("retry", appState.dailyResult.modeData.dateKey);
     else if (action === "modes") openModeSelect();
     else if (action === "title") openTitle();
+  } else if (appState.screen === Screens.PROFILE_STATS) {
+    if (action === "auth-google-sign-in") void signInWithGoogle();
+    else if (action === "auth-sign-out") void signOut();
   }
 }
 
@@ -1102,6 +1117,12 @@ function handleGlobalKeydown(event) {
 
 async function bootstrap() {
   clearSession();
+  subscribeToAuth((authState) => {
+    if (appState.screen === Screens.PROFILE_STATS && appState.statisticsTabIndex === 6) {
+      updateProfileAuthSection(authState);
+    }
+  });
+  void initializeAuth();
   const search = new URLSearchParams(window.location.search);
   appState.devMode = isDevelopmentMode(window.location.search);
   appState.developerSeed = appState.devMode
