@@ -155,8 +155,18 @@ import {
   subscribeToLeaderboardProfile,
 } from "./leaderboardProfileService.js";
 import { isTextEntryTarget } from "./inputSafety.js";
+import {
+  getLeaderboardState,
+  initializeLeaderboards,
+  LEADERBOARD_BOARDS,
+  refreshLeaderboard,
+  resetLeaderboardState,
+  selectLeaderboardBoard,
+  subscribeToLeaderboards,
+} from "./leaderboardService.js";
+import { renderLeaderboards } from "./leaderboardUi.js";
 
-const titleActions = ["modes", "profile", "settings"];
+const titleActions = ["modes", "leaderboards", "profile", "settings"];
 const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
 let lastAuthUiKey = "";
 
@@ -213,6 +223,13 @@ function openProfileStatistics() {
   appState.profileCopyMessage = "";
   changeScreen(Screens.PROFILE_STATS);
   renderCurrentScreen();
+}
+
+function openLeaderboards() {
+  cleanupCampaignAttempt("leaderboards");
+  changeScreen(Screens.LEADERBOARDS);
+  renderCurrentScreen();
+  void initializeLeaderboards(LEADERBOARD_BOARDS.DAILY);
 }
 
 function openModeSelect() {
@@ -593,6 +610,7 @@ function resumeGame() {
 function activateTitleAction() {
   const action = titleActions[appState.menuIndex];
   if (action === "modes") openModeSelect();
+  if (action === "leaderboards") openLeaderboards();
   if (action === "profile") openProfileStatistics();
   if (action === "settings") openSettings();
 }
@@ -685,6 +703,12 @@ function renderCurrentScreen() {
       profile: openProfileStatistics,
       settings: openSettings,
     });
+  } else if (appState.screen === Screens.LEADERBOARDS) {
+    renderLeaderboards(
+      getLeaderboardState(),
+      getAuthState(),
+      getLeaderboardProfileState(),
+    );
   } else if (appState.screen === Screens.MODE_SELECT) {
     renderModeSelect(getAllModes(), appState.modeSelection, {
       select: (index) => {
@@ -859,6 +883,18 @@ function handleAppClick(event) {
       else if (action === "leaderboard-username-claim") void claimUsername(username);
       else if (action === "leaderboard-username-save-change") void changeUsername(username);
     }
+  } else if (appState.screen === Screens.TITLE && action === "open-leaderboards") {
+    openLeaderboards();
+  } else if (appState.screen === Screens.LEADERBOARDS) {
+    if (action === "leaderboard-select-daily") {
+      void selectLeaderboardBoard(LEADERBOARD_BOARDS.DAILY);
+    } else if (action === "leaderboard-select-endless") {
+      void selectLeaderboardBoard(LEADERBOARD_BOARDS.ENDLESS);
+    } else if (action === "leaderboard-refresh") {
+      void refreshLeaderboard();
+    } else if (action === "leaderboard-main-menu") {
+      openTitle();
+    }
   }
 }
 
@@ -993,6 +1029,14 @@ function handleGlobalKeydown(event) {
     } else if (event.key === "Enter") {
       activateTitleAction();
     }
+    return;
+  }
+
+  if (appState.screen === Screens.LEADERBOARDS) {
+    if (event.key === "Escape") openTitle();
+    else if (event.key === "ArrowLeft") void selectLeaderboardBoard(LEADERBOARD_BOARDS.DAILY);
+    else if (event.key === "ArrowRight") void selectLeaderboardBoard(LEADERBOARD_BOARDS.ENDLESS);
+    else if (event.key.toLowerCase() === "r") void refreshLeaderboard();
     return;
   }
 
@@ -1152,6 +1196,11 @@ async function bootstrap() {
     const authUiKey = `${authState.status}:${authState.user?.id ?? ""}`;
     const authUiChanged = authUiKey !== lastAuthUiKey;
     lastAuthUiKey = authUiKey;
+    if (authUiChanged) {
+      const selectedBoard = getLeaderboardState().selectedBoard;
+      resetLeaderboardState();
+      if (appState.screen === Screens.LEADERBOARDS) void initializeLeaderboards(selectedBoard);
+    }
     if (authState.status === "signed-in") void initializeLeaderboardProfile(authState.user);
     else resetLeaderboardProfile();
     if (
@@ -1166,6 +1215,10 @@ async function bootstrap() {
     if (appState.screen === Screens.PROFILE_STATS && appState.statisticsTabIndex === 6) {
       updateProfileAuthSection(getAuthState(), profileState);
     }
+    if (appState.screen === Screens.LEADERBOARDS) renderCurrentScreen();
+  });
+  subscribeToLeaderboards(() => {
+    if (appState.screen === Screens.LEADERBOARDS) renderCurrentScreen();
   });
   void initializeAuth();
   const search = new URLSearchParams(window.location.search);

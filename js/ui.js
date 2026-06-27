@@ -64,6 +64,7 @@ function wireMenuSelection(root, selector, select) {
 export function renderTitle(menuIndex, handlers) {
   const items = [
     ["START", "modes"],
+    ["LEADERBOARDS", "open-leaderboards"],
     ["PROFILE & STATS", "profile"],
     ["SETTINGS", "settings"],
   ];

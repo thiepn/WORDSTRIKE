@@ -13,6 +13,7 @@ export const Screens = Object.freeze({
   RESULTS: "RESULTS",
   SETTINGS: "SETTINGS",
   PROFILE_STATS: "PROFILE_STATS",
+  LEADERBOARDS: "LEADERBOARDS",
 });
 
 export const appState = {

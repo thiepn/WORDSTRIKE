@@ -1,6 +1,21 @@
 import { Screens } from "./state.js";
 
 const RESULT_ACTIONS = Object.freeze({
+  [Screens.TITLE]: Object.freeze({
+    selector: ".menu-screen",
+    actions: Object.freeze(["open-leaderboards"]),
+    guardReadyAt: false,
+  }),
+  [Screens.LEADERBOARDS]: Object.freeze({
+    selector: ".leaderboards-screen",
+    actions: Object.freeze([
+      "leaderboard-select-daily",
+      "leaderboard-select-endless",
+      "leaderboard-refresh",
+      "leaderboard-main-menu",
+    ]),
+    guardReadyAt: false,
+  }),
   [Screens.ENDLESS_RESULTS]: Object.freeze({
     selector: ".endless-results-screen",
     actions: Object.freeze(["retry", "modes", "title"]),

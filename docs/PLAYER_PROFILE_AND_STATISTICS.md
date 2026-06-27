@@ -14,7 +14,13 @@ The Profile tab offers optional Google authentication through Supabase. Local ga
 
 Signed-in players may claim a separate public leaderboard username containing 3–20 ASCII letters, numbers, or underscores. Uniqueness is case-insensitive. The initial claim does not start a cooldown; after the first later change, additional changes require 30 days. Validation, ownership, uniqueness, and cooldown enforcement occur in the protected `leaderboard-profile` Edge Function and database functions rather than through direct browser table writes.
 
-Score submission and public leaderboard screens are not implemented yet.
+Score submission is not implemented yet.
+
+## Public leaderboards
+
+Daily Strike and Endless global leaderboards are publicly viewable without signing in. Each board displays up to 100 ranked players, while a signed-in player with a public username can also see their own rank when it falls outside the top 100. Daily rankings use the canonical UTC challenge date and current challenge version; Endless rankings use the standard rules version.
+
+Global score submission is not implemented yet, so boards may remain empty. Campaign and Typing Test leaderboards remain reserved for a later phase. If Supabase is unavailable, local gameplay, progress, and records continue to work normally.
 
 ## Lifetime aggregation
 
