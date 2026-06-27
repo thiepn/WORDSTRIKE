@@ -222,7 +222,51 @@ function renderProfile(profile, state) {
       <div><span>LAST UPDATED</span><strong>${formatDateTime(profile.updatedAt)}</strong></div>
       <div><span>STORAGE</span><strong>STORED LOCALLY ON THIS DEVICE</strong></div>
     </div>
+    ${renderGlobalAccount(state.authState)}
     <p class="profile-privacy">Your profile and statistics are stored in this browser.<br>They are not uploaded anywhere.</p>`;
+}
+
+function globalAccountContent(authState = { status: "loading" }) {
+  if (["idle", "loading"].includes(authState.status)) {
+    return `<p>Checking account&hellip;</p>`;
+  }
+  if (authState.status === "signed-out") {
+    return `<strong>Not signed in</strong>
+      <p>Sign in with Google to create a persistent<br>leaderboard account later.</p>
+      <button class="arcade-button" data-action="auth-google-sign-in">CONTINUE WITH GOOGLE</button>`;
+  }
+  if (authState.status === "signing-in") {
+    return `<p>Redirecting to Google&hellip;</p>
+      <button class="arcade-button" data-action="auth-google-sign-in" disabled aria-disabled="true">CONTINUE WITH GOOGLE</button>`;
+  }
+  if (authState.status === "signed-in") {
+    return `<strong>Google account connected</strong>
+      <p>Your public WORDSTRIKE username has not been<br>configured yet.</p>
+      <button class="arcade-button" data-action="auth-sign-out">SIGN OUT</button>`;
+  }
+  if (authState.status === "signing-out") {
+    return `<p>Signing out&hellip;</p>
+      <button class="arcade-button" data-action="auth-sign-out" disabled aria-disabled="true">SIGN OUT</button>`;
+  }
+  if (authState.status === "error") {
+    return `<strong>Account connection failed</strong>
+      <p>Please try again. Local gameplay and records are unaffected.</p>
+      <button class="arcade-button" data-action="auth-google-sign-in">TRY GOOGLE SIGN-IN AGAIN</button>`;
+  }
+  return `<strong>Online account services are unavailable.</strong>
+    <p>Local gameplay and records are unaffected.</p>`;
+}
+
+function renderGlobalAccount(authState) {
+  return `<section class="global-account" aria-labelledby="global-account-heading">
+    <h3 id="global-account-heading">GLOBAL ACCOUNT</h3>
+    <div id="global-account-content">${globalAccountContent(authState)}</div>
+  </section>`;
+}
+
+export function updateProfileAuthSection(authState) {
+  const content = document.querySelector("#global-account-content");
+  if (content) content.innerHTML = globalAccountContent(authState);
 }
 
 function diagnostics(snapshot, storage) {
@@ -254,6 +298,7 @@ export function renderProfileStatistics({
   nameError = "",
   copyMessage = "",
   developerMode = false,
+  authState = { status: "loading" },
 } = {}, handlers = {}) {
   const tab = STATISTICS_TABS[Math.max(0, Math.min(STATISTICS_TABS.length - 1, activeTab))];
   const panel = tab === "OVERVIEW" ? renderOverview(snapshot)
@@ -262,7 +307,9 @@ export function renderProfileStatistics({
         : tab === "ENDLESS" ? renderEndless(snapshot.endless)
           : tab === "DAILY" ? renderDaily(snapshot.daily)
             : tab === "RECENT" ? renderRecent(storage, recentFilter)
-              : renderProfile(snapshot.profile, { editing, draft, nameError, copyMessage });
+              : renderProfile(snapshot.profile, {
+                editing, draft, nameError, copyMessage, authState,
+              });
   app().innerHTML = `
     <section class="screen profile-stats-screen">
       <main class="profile-stats-shell">

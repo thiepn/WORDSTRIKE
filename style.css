@@ -384,6 +384,39 @@ button {
   line-height: 1.6;
 }
 
+.global-account {
+  margin-top: 28px;
+  padding: 18px;
+  border-block: 1px solid var(--border-subtle);
+  background: rgb(16 23 32 / 72%);
+}
+
+.global-account h3 {
+  margin: 0 0 14px;
+  color: var(--profile-text-muted);
+}
+
+.global-account strong {
+  display: block;
+  color: var(--text-primary);
+}
+
+.global-account p {
+  color: var(--profile-text-secondary);
+  line-height: 1.55;
+}
+
+.global-account .arcade-button {
+  width: min(360px, 100%);
+  margin-top: 4px;
+}
+
+.global-account .arcade-button:disabled {
+  cursor: default;
+  color: var(--text-disabled);
+  border-color: var(--border-subtle);
+}
+
 .profile-stats-diagnostics {
   position: fixed;
   z-index: 10;

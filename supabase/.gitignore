@@ -1,0 +1,20 @@
+# Supabase
+.branches
+.temp
+
+# dotenvx
+.env.keys
+.env.local
+.env.*.local
+
+# Supabase local state
+supabase/.temp/
+supabase/.env
+supabase/.env.*
+
+# General local secrets
+.env
+.env.*
+
+# Allow intentionally documented templates
+!.env.example
