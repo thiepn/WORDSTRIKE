@@ -5,19 +5,19 @@ import { buildSubmissionPayload } from "../js/leaderboardSubmissionService.js";
 import { campaignSubmission, typingSubmission } from "./extendedLeaderboardFixtures.js";
 
 assert.equal(validateScoreSubmission(campaignSubmission()).valid, true);
-assert.equal(validateScoreSubmission(campaignSubmission({ completed: false })).code, "INVALID_RESULT");
+assert.equal(validateScoreSubmission(campaignSubmission({ completed: false })).code, "TEST_NOT_COMPLETED");
 assert.equal(validateScoreSubmission(campaignSubmission({ grade: "S" })).code, "INVALID_RESULT");
 assert.equal(validateScoreSubmission(campaignSubmission({ level: 101 })).code, "INVALID_RESULT");
-assert.equal(validateScoreSubmission(campaignSubmission({ sessionSource: "test" })).code, "INELIGIBLE_RESULT");
+assert.equal(validateScoreSubmission(campaignSubmission({ sessionSource: "test" })).code, "INVALID_SESSION_SOURCE");
 for (const duration of [15, 60]) assert.equal(validateScoreSubmission(typingSubmission(duration)).valid, true);
 assert.equal(validateScoreSubmission({ ...typingSubmission(60), boardKey: "typing-15s-english200-v1" }).code, "UNSUPPORTED_TEST_DURATION");
 assert.equal(validateScoreSubmission(typingSubmission(60, { wordSetId: "legacy-common-740" })).code, "UNSUPPORTED_WORD_SET");
-assert.equal(validateScoreSubmission(typingSubmission(60, { wordSetVersion: 2 })).code, "UNSUPPORTED_WORD_SET");
-assert.equal(validateScoreSubmission(typingSubmission(60, { completed: false })).code, "INVALID_RESULT");
-assert.equal(validateScoreSubmission(typingSubmission(60, { wpm: 999 })).code, "SCORE_MISMATCH");
-assert.equal(validateScoreSubmission(typingSubmission(15, { rawWpm: 999 })).code, "SCORE_MISMATCH");
-assert.equal(validateScoreSubmission(typingSubmission(15, { accuracy: 50 })).code, "SCORE_MISMATCH");
-assert.equal(validateScoreSubmission(typingSubmission(15, { sessionSource: "developer", developerMode: true })).code, "INELIGIBLE_RESULT");
+assert.equal(validateScoreSubmission(typingSubmission(60, { wordSetVersion: 2 })).code, "WORD_SET_VERSION_MISMATCH");
+assert.equal(validateScoreSubmission(typingSubmission(60, { completed: false })).code, "TEST_NOT_COMPLETED");
+assert.equal(validateScoreSubmission(typingSubmission(60, { wpm: 999 })).code, "METRIC_MISMATCH");
+assert.equal(validateScoreSubmission(typingSubmission(15, { rawWpm: 999 })).code, "METRIC_MISMATCH");
+assert.equal(validateScoreSubmission(typingSubmission(15, { accuracy: 50 })).code, "METRIC_MISMATCH");
+assert.equal(validateScoreSubmission(typingSubmission(15, { sessionSource: "developer", developerMode: true })).code, "DEVELOPER_RESULT");
 
 const campaignPayload = buildSubmissionPayload("campaign", {
   sessionId: campaignSubmission().sessionId, sessionSource: "level-select",
