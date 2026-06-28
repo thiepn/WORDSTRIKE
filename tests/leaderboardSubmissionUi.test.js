@@ -5,7 +5,16 @@ const daily = { boardKey: "daily-strike-v1" };
 assert.match(renderGlobalSubmissionMarkup({ ...daily, status: "ineligible", reason: "signed-out" }), /Sign in.*CONTINUE WITH GOOGLE.*VIEW DAILY LEADERBOARD/s);
 assert.match(renderGlobalSubmissionMarkup({ ...daily, status: "ineligible", reason: "username-required" }), /Choose a public username/);
 assert.match(renderGlobalSubmissionMarkup({ ...daily, status: "ready" }), /SUBMIT GLOBAL SCORE.*view-daily-leaderboard/s);
-assert.match(renderGlobalSubmissionMarkup({ ...daily, status: "submitting" }), /disabled/);
+const automaticReady = renderGlobalSubmissionMarkup({ ...daily, status: "ready", automatic: true });
+assert.match(automaticReady, /Submitting global score/);
+assert.match(automaticReady, /aria-busy="true"/);
+assert.doesNotMatch(automaticReady, /SUBMIT GLOBAL SCORE|submit-global-score/);
+const checking = renderGlobalSubmissionMarkup({ ...daily, status: "checking", automatic: true });
+assert.match(checking, /Checking global account/);
+assert.match(checking, /aria-busy="true"/);
+const submitting = renderGlobalSubmissionMarkup({ ...daily, status: "submitting" });
+assert.match(submitting, /Submitting global score/);
+assert.match(submitting, /aria-busy="true"/);
 assert.match(renderGlobalSubmissionMarkup({ ...daily, status: "submitted", rank: 42 }), /Global score submitted.*Rank #42/s);
 assert.match(renderGlobalSubmissionMarkup({ ...daily, status: "already-submitted" }), /already submitted/);
 assert.match(renderGlobalSubmissionMarkup({ ...daily, status: "error" }), /local result is safe.*RETRY.*VIEW DAILY LEADERBOARD/s);
@@ -20,4 +29,4 @@ assert.match(renderGlobalSubmissionMarkup({ boardKey: "typing-60s-english200-v1"
 assert.match(renderGlobalSubmissionMarkup({ boardKey: "typing-15s-english200-v1", status: "ready" }), /VIEW 15S LEADERBOARD/);
 assert.match(renderGlobalSubmissionMarkup({ mode: "typing", boardKey: null, status: "ineligible", reason: "unsupported-test" }), /Only 15-second and 60-second English 200 tests/);
 
-console.log("Result submission UI covers signed-out, username, ready, pending, success, duplicate, error, offline, rank, and board links.");
+console.log("Result submission UI covers signed-out, username, automatic checking/submitting, manual readiness, success, duplicate, error, offline, rank, and board links.");
