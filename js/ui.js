@@ -1114,12 +1114,20 @@ export function renderGlobalSubmissionMarkup(state = {}) {
     message = "Only successfully completed levels are eligible for the Campaign leaderboard.";
   } else if (state.status === "ineligible" && state.reason === "unsupported-test") {
     message = "Only 15-second and 60-second English 200 tests are eligible for global submission.";
+  } else if (state.status === "checking") {
+    message = "Checking global account…";
+    buttons = "";
   } else if (state.status === "ready") {
-    message = "This result is saved locally.";
-    buttons = submissionButton("SUBMIT GLOBAL SCORE", "submit-global-score") + submissionButton(viewLabel, viewAction);
+    if (state.automatic) {
+      message = "Submitting global score…";
+      buttons = "";
+    } else {
+      message = "This result is saved locally.";
+      buttons = submissionButton("SUBMIT GLOBAL SCORE", "submit-global-score") + submissionButton(viewLabel, viewAction);
+    }
   } else if (state.status === "submitting") {
     message = "Submitting global score…";
-    buttons = submissionButton("SUBMITTING…", "submit-global-score", true);
+    buttons = "";
   } else if (state.status === "submitted") {
     message = `Global score submitted.${state.rank ? `<strong>Rank #${state.rank}</strong>` : ""}`;
     buttons = submissionButton(viewLabel, viewAction);
@@ -1128,12 +1136,13 @@ export function renderGlobalSubmissionMarkup(state = {}) {
     buttons = submissionButton(viewLabel, viewAction);
   } else if (state.status === "offline") {
     message = "Global submission is unavailable while offline.<span>Your local result is safe.</span>";
-    buttons = submissionButton("RETRY", "retry-global-score");
+    buttons = submissionButton("RETRY SUBMISSION", "retry-global-score") + submissionButton(viewLabel, viewAction);
   } else if (state.status === "error") {
     message = "Global submission failed.<span>Your local result is safe.</span>";
-    buttons = submissionButton("RETRY", "retry-global-score") + submissionButton(viewLabel, viewAction);
+    buttons = submissionButton("RETRY SUBMISSION", "retry-global-score") + submissionButton(viewLabel, viewAction);
   }
-  return `<section id="global-submission-region" class="global-submission" aria-live="polite"><p>${message}</p><div class="global-submission-actions">${buttons}</div></section>`;
+  const busy = ["checking", "submitting"].includes(state.status) || (state.status === "ready" && state.automatic);
+  return `<section id="global-submission-region" class="global-submission" aria-live="polite"${busy ? " aria-busy=\"true\"" : ""}><p>${message}</p><div class="global-submission-actions">${buttons}</div></section>`;
 }
 
 export function updateGlobalSubmissionRegion(state) {

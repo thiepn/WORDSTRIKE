@@ -173,11 +173,15 @@ import {
   clearSubmissionState,
   getSubmissionState,
   prepareResultSubmission,
-  refreshSubmissionEligibility,
   retryCurrentSubmission,
   submitCurrentResult,
   subscribeToSubmissions,
 } from "./leaderboardSubmissionService.js";
+import {
+  armPreparedResult,
+  clearAutomaticSubmission,
+  handleAutomaticSubmissionStateChange,
+} from "./automaticSubmissionController.js";
 import {
   consumeLeaderboardReturnState,
   leaderboardReturnStateForBoard,
@@ -216,7 +220,19 @@ function cleanupCampaignAttempt(reason, { clearSessionState = true } = {}) {
   });
   appState.game = null;
   appState.pauseIndex = 0;
+  clearAutomaticSubmission();
   clearSubmissionState();
+}
+
+function prepareAutomaticResultSubmission(mode, result) {
+  const authState = getAuthState();
+  const profileState = getLeaderboardProfileState();
+  prepareResultSubmission(mode, result, authState, profileState);
+  armPreparedResult(authState, profileState);
+}
+
+function startPreparedAutomaticSubmission() {
+  void handleAutomaticSubmissionStateChange(getAuthState(), getLeaderboardProfileState());
 }
 
 function getAttemptSeed() {
@@ -370,9 +386,10 @@ function finishSpeedTest(state, result) {
   appState.speedTestRecordFlags = { ...state.recordFlags };
   appState.speedTestResultsIndex = 1;
   appState.speedTestResultsReadyAt = currentTimeMs() + 200;
-  prepareResultSubmission("typing", result, getAuthState(), getLeaderboardProfileState());
+  prepareAutomaticResultSubmission("typing", result);
   changeScreen(Screens.SPEED_TEST_RESULTS);
   renderCurrentScreen();
+  startPreparedAutomaticSubmission();
 }
 
 function resetSpeedTestAttempt(source = "mode-select") {
@@ -411,9 +428,10 @@ function finishEndless(game, result) {
   appState.endlessResult = result;
   appState.endlessResultsIndex = 0;
   appState.endlessResultsReadyAt = currentTimeMs() + 200;
-  prepareResultSubmission("endless", result, getAuthState(), getLeaderboardProfileState());
+  prepareAutomaticResultSubmission("endless", result);
   changeScreen(Screens.ENDLESS_RESULTS);
   renderCurrentScreen();
+  startPreparedAutomaticSubmission();
 }
 
 function finishDaily(game, result) {
@@ -422,9 +440,10 @@ function finishDaily(game, result) {
   appState.dailyRecordFlags = { ...game.recordFlags };
   appState.dailyResultsIndex = 0;
   appState.dailyResultsReadyAt = currentTimeMs() + 200;
-  prepareResultSubmission("daily", result, getAuthState(), getLeaderboardProfileState());
+  prepareAutomaticResultSubmission("daily", result);
   changeScreen(Screens.DAILY_RESULTS);
   renderCurrentScreen();
+  startPreparedAutomaticSubmission();
 }
 
 function startDaily(source = "daily-ready", dateKey = appState.dailyDateKey) {
@@ -575,16 +594,12 @@ function finishLevel(game, success) {
   if (success && game.persistResult) {
     updateLevelResult(appState.save, game.levelNumber, appState.results);
   }
-  prepareResultSubmission(
-    "campaign",
-    appState.campaignResult,
-    getAuthState(),
-    getLeaderboardProfileState(),
-  );
+  prepareAutomaticResultSubmission("campaign", appState.campaignResult);
   appState.resultsIndex = getDefaultResultsIndex(appState.results);
   appState.resultsReadyAt = currentTimeMs() + 200;
   changeScreen(Screens.RESULTS);
   renderCurrentScreen();
+  startPreparedAutomaticSubmission();
 }
 
 function pauseGame() {
@@ -1322,7 +1337,7 @@ async function bootstrap() {
     }
     else resetLeaderboardProfile();
     if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS, Screens.SPEED_TEST_RESULTS, Screens.RESULTS].includes(appState.screen)) {
-      refreshSubmissionEligibility(authState, getLeaderboardProfileState());
+      void handleAutomaticSubmissionStateChange(authState, getLeaderboardProfileState());
     }
     if (
       authUiChanged &&
@@ -1338,7 +1353,7 @@ async function bootstrap() {
     }
     if (appState.screen === Screens.LEADERBOARDS) renderCurrentScreen();
     if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS, Screens.SPEED_TEST_RESULTS, Screens.RESULTS].includes(appState.screen)) {
-      refreshSubmissionEligibility(getAuthState(), profileState);
+      void handleAutomaticSubmissionStateChange(getAuthState(), profileState);
     }
   });
   subscribeToSubmissions((submissionState) => {

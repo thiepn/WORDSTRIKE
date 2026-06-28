@@ -19,6 +19,7 @@ function boardForMode(mode, result) {
 
 const makeState = ({
   status = "idle", mode = null, boardKey = null, sessionId = null, rank = null, error = null, reason = null,
+  automatic = false,
 } = {}) => Object.freeze({
   status,
   mode,
@@ -27,6 +28,7 @@ const makeState = ({
   rank: Number.isSafeInteger(rank) && rank > 0 ? rank : null,
   error: error ? Object.freeze({ code: String(error.code || "SERVER_ERROR") }) : null,
   reason,
+  automatic: automatic === true,
 });
 
 function validSessionId(value) {
@@ -42,6 +44,12 @@ function hasCompleteMetrics(value) {
   if (["string", "boolean"].includes(typeof value)) return true;
   if (Array.isArray(value)) return false;
   return typeof value === "object" && Object.values(value).every(hasCompleteMetrics);
+}
+
+function freezePayload(value) {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+  for (const nested of Object.values(value)) freezePayload(nested);
+  return Object.freeze(value);
 }
 
 export function buildSubmissionPayload(mode, result) {
@@ -223,11 +231,29 @@ export function createLeaderboardSubmissionService({
       if (activeMode === "typing") return { status: "ineligible", reason: "unsupported-test" };
       return { status: "ineligible", reason: "invalid-result" };
     }
+    if (
+      activeMode === "typing" && (
+        payload.result.completed !== true ||
+        payload.result.configId !== `time-${payload.result.durationSeconds}` ||
+        payload.result.wordSetId !== "english-200" ||
+        payload.result.wordSetVersion !== 1 ||
+        payload.result.metricVersion !== 2
+      )
+    ) return { status: "ineligible", reason: "unsupported-test" };
+    if (activeMode === "daily" && payload.result.dateOverride !== false) {
+      return { status: "ineligible", reason: "local-only" };
+    }
     if (payload.result.developerMode || !payload.result.recordEligible) {
       return { status: "ineligible", reason: "local-only" };
     }
+    if (["idle", "loading"].includes(authState?.status)) {
+      return { status: "checking", reason: "auth-loading" };
+    }
     if (authState?.status !== "signed-in" || !authState.user?.id) {
       return { status: "ineligible", reason: "signed-out" };
+    }
+    if (!profileState?.profile?.username && ["idle", "loading"].includes(profileState?.status)) {
+      return { status: "checking", reason: "profile-loading" };
     }
     if (!profileState?.profile?.username) {
       return { status: "ineligible", reason: "username-required" };
@@ -239,7 +265,13 @@ export function createLeaderboardSubmissionService({
     if (!payload || ["submitting", "submitted", "already-submitted"].includes(state.status)) {
       return state;
     }
-    return publish({ ...state, ...eligibility(authState, profileState), error: null });
+    const nextEligibility = eligibility(authState, profileState);
+    return publish({
+      ...state,
+      ...nextEligibility,
+      automatic: state.automatic && ["checking", "ready"].includes(nextEligibility.status),
+      error: null,
+    });
   };
 
   const submit = async () => {
@@ -250,23 +282,24 @@ export function createLeaderboardSubmissionService({
     if (!client?.functions?.invoke) return publish({ ...state, status: "error", error: true });
     const requestId = ++requestSequence;
     const submittedSessionId = payload.sessionId;
+    const submittedBoardKey = payload.boardKey;
     publish({ ...state, status: "submitting", error: null });
     try {
       const { data, error } = await client.functions.invoke("submit-score", { body: payload });
       let response = data;
       if (!response?.ok && error) response = await readFunctionError(error);
+      if (response?.ok) invalidateBoard(submittedBoardKey);
       if (requestId !== requestSequence || payload?.sessionId !== submittedSessionId) return state;
       if (!response?.ok) {
         const code = response?.error?.code || "SERVER_ERROR";
         if (code === "NOT_AUTHENTICATED") {
-          return publish({ ...state, status: "ineligible", reason: "signed-out", error: null });
+          return publish({ ...state, status: "ineligible", reason: "signed-out", automatic: false, error: null });
         }
         if (code === "PROFILE_REQUIRED") {
-          return publish({ ...state, status: "ineligible", reason: "username-required", error: null });
+          return publish({ ...state, status: "ineligible", reason: "username-required", automatic: false, error: null });
         }
         return publish({ ...state, status: isOnline() ? "error" : "offline", error: { code } });
       }
-      invalidateBoard(payload.boardKey);
       return publish({
         ...state,
         status: response.data?.duplicate ? "already-submitted" : "submitted",
@@ -291,10 +324,24 @@ export function createLeaderboardSubmissionService({
     prepareResultSubmission(mode, result, authState, profileState) {
       requestSequence += 1;
       activeMode = mode;
-      payload = buildSubmissionPayload(mode, result);
+      payload = freezePayload(buildSubmissionPayload(mode, result));
       const boardKey = boardForMode(mode, result);
       const sessionId = payload?.sessionId || result?.sessionId || null;
       return publish({ mode, boardKey, sessionId, ...eligibility(authState, profileState) });
+    },
+    markAutomaticSubmissionPending(sessionId) {
+      if (state.sessionId !== sessionId || !["checking", "ready"].includes(state.status)) return state;
+      return publish({ ...state, automatic: true });
+    },
+    expireAutomaticSubmissionCheck(sessionId) {
+      if (state.sessionId !== sessionId || state.status !== "checking" || !state.automatic) return state;
+      return publish({
+        ...state,
+        status: "error",
+        automatic: false,
+        reason: null,
+        error: { code: "ACCOUNT_CHECK_TIMEOUT" },
+      });
     },
     refreshSubmissionEligibility: refreshEligibility,
     submitCurrentResult: submit,
@@ -313,6 +360,8 @@ const submissionService = createLeaderboardSubmissionService();
 export const getSubmissionState = submissionService.getSubmissionState;
 export const subscribeToSubmissions = submissionService.subscribeToSubmissions;
 export const prepareResultSubmission = submissionService.prepareResultSubmission;
+export const markAutomaticSubmissionPending = submissionService.markAutomaticSubmissionPending;
+export const expireAutomaticSubmissionCheck = submissionService.expireAutomaticSubmissionCheck;
 export const refreshSubmissionEligibility = submissionService.refreshSubmissionEligibility;
 export const submitCurrentResult = submissionService.submitCurrentResult;
 export const retryCurrentSubmission = submissionService.retryCurrentSubmission;

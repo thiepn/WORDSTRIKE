@@ -41,7 +41,7 @@ assert.equal(typingPayload.boardKey, "typing-15s-english200-v1");
 const main = await readFile(new URL("../js/main.js", import.meta.url), "utf8");
 const speed = await readFile(new URL("../js/speedTest.js", import.meta.url), "utf8");
 const campaignFinish = main.slice(main.indexOf("function finishLevel"), main.indexOf("function pauseGame"));
-assert.ok(campaignFinish.indexOf("updateLevelResult") < campaignFinish.indexOf("prepareResultSubmission"));
+assert.ok(campaignFinish.indexOf("updateLevelResult") < campaignFinish.indexOf("prepareAutomaticResultSubmission"));
 assert.ok(speed.indexOf("recordCompletedSession(result)") < speed.indexOf("callbacks.onComplete?.(currentSpeedTest, result)"));
 assert.doesNotMatch(main.slice(main.indexOf("function openLeaderboardReturn"), main.indexOf("function openModeSelect")), /submitCurrentResult/);
 

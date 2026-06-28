@@ -19,7 +19,7 @@ const endlessMode = await readFile(new URL("../js/endlessMode.js", import.meta.u
 const main = await readFile(new URL("../js/main.js", import.meta.url), "utf8");
 assert.ok(dailyMode.indexOf("recordCompletedSession(result)") < dailyMode.indexOf("callbacks.onComplete?.(game, result)"));
 assert.ok(endlessMode.indexOf("recordCompletedSession(result)") < endlessMode.indexOf("callbacks.onComplete?.(game, result)"));
-assert.match(main, /function finishDaily[\s\S]*prepareResultSubmission\("daily", result/);
-assert.match(main, /function finishEndless[\s\S]*prepareResultSubmission\("endless", result/);
+assert.match(main, /function finishDaily[\s\S]*prepareAutomaticResultSubmission\("daily", result/);
+assert.match(main, /function finishEndless[\s\S]*prepareAutomaticResultSubmission\("endless", result/);
 
 console.log("Daily/Endless run IDs remain stable through finalization while separate runs receive separate IDs.");
