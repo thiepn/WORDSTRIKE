@@ -156,6 +156,11 @@ export function createLeaderboardService({
     refreshLeaderboard() {
       return load(state.selectedBoard, { force: true });
     },
+    invalidateLeaderboardBoard(boardKey) {
+      if (!VALID_BOARDS.includes(boardKey)) return false;
+      cache.delete(requestKey(boardKey));
+      return true;
+    },
     resetLeaderboardState() {
       requestSequence += 1;
       inFlight.clear();
@@ -172,4 +177,5 @@ export const getLeaderboardState = leaderboardService.getLeaderboardState;
 export const subscribeToLeaderboards = leaderboardService.subscribeToLeaderboards;
 export const selectLeaderboardBoard = leaderboardService.selectLeaderboardBoard;
 export const refreshLeaderboard = leaderboardService.refreshLeaderboard;
+export const invalidateLeaderboardBoard = leaderboardService.invalidateLeaderboardBoard;
 export const resetLeaderboardState = leaderboardService.resetLeaderboardState;

@@ -1083,7 +1083,53 @@ export function showSpeedTestPauseOverlay(selectedIndex, handlers) {
   });
 }
 
-export function renderEndlessResults(result, selectedIndex, handlers) {
+function submissionButton(label, action, disabled = false) {
+  return `<button class="arcade-button" data-action="${action}"${disabled ? " disabled aria-disabled=\"true\"" : ""}>${label}</button>`;
+}
+
+export function renderGlobalSubmissionMarkup(state = {}) {
+  if (!['daily-strike-v1', 'endless-v1'].includes(state.boardKey)) return "";
+  const daily = state.boardKey === "daily-strike-v1";
+  const boardLabel = daily ? "DAILY" : "ENDLESS";
+  const viewAction = daily ? "view-daily-leaderboard" : "view-endless-leaderboard";
+  let message = "This run is not eligible for global submission.";
+  let buttons = submissionButton(`VIEW ${boardLabel} LEADERBOARD`, viewAction);
+  if (state.status === "ineligible" && state.reason === "signed-out") {
+    message = "Sign in to submit this score globally.";
+    buttons = submissionButton("OPEN PROFILE", "open-global-profile") + submissionButton("VIEW LEADERBOARD", viewAction);
+  } else if (state.status === "ineligible" && state.reason === "username-required") {
+    message = "Choose a public username before submitting scores.";
+    buttons = submissionButton("OPEN PROFILE", "open-global-profile") + submissionButton("VIEW LEADERBOARD", viewAction);
+  } else if (state.status === "ready") {
+    message = "This result is saved locally.";
+    buttons = submissionButton("SUBMIT GLOBAL SCORE", "submit-global-score") + submissionButton("VIEW LEADERBOARD", viewAction);
+  } else if (state.status === "submitting") {
+    message = "Submitting global score…";
+    buttons = submissionButton("SUBMITTING…", "submit-global-score", true);
+  } else if (state.status === "submitted") {
+    message = `Global score submitted.${state.rank ? `<strong>Rank #${state.rank}</strong>` : ""}`;
+    buttons = submissionButton("VIEW LEADERBOARD", viewAction);
+  } else if (state.status === "already-submitted") {
+    message = `This result was already submitted.${state.rank ? `<strong>Rank #${state.rank}</strong>` : ""}`;
+    buttons = submissionButton("VIEW LEADERBOARD", viewAction);
+  } else if (state.status === "offline") {
+    message = "Global submission is unavailable while offline.<span>Your local result is safe.</span>";
+    buttons = submissionButton("RETRY", "retry-global-score");
+  } else if (state.status === "error") {
+    message = "Global submission failed.<span>Your local result is safe.</span>";
+    buttons = submissionButton("RETRY", "retry-global-score") + submissionButton("VIEW LEADERBOARD", viewAction);
+  }
+  return `<section id="global-submission-region" class="global-submission" aria-live="polite"><p>${message}</p><div class="global-submission-actions">${buttons}</div></section>`;
+}
+
+export function updateGlobalSubmissionRegion(state) {
+  const current = document.querySelector("#global-submission-region");
+  if (!current) return false;
+  current.outerHTML = renderGlobalSubmissionMarkup(state);
+  return true;
+}
+
+export function renderEndlessResults(result, selectedIndex, handlers, submissionState = {}) {
   const data = result.modeData;
   const actions = [
     ["RETRY", "retry"],
@@ -1119,15 +1165,16 @@ export function renderEndlessResults(result, selectedIndex, handlers) {
           <div><span>STAGE BONUSES</span><strong>${data.stageBonusPoints.toLocaleString()}</strong></div>
           <div class="total"><span>TOTAL</span><strong>${result.score.toLocaleString()}</strong></div>
         </section>
+        ${renderGlobalSubmissionMarkup(submissionState)}
         <div class="menu-list">${actions.map(([label, action], index) => (
     menuButton(label, action, index === selectedIndex)
   )).join("")}</div>
       </div>
     </section>`;
-  wireMenuSelection(app(), ".endless-results-panel .arcade-button", handlers.select);
+  wireMenuSelection(app(), ".endless-results-panel > .menu-list .arcade-button", handlers.select);
 }
 
-export function renderDailyResults(result, recordFlags, selectedIndex, handlers) {
+export function renderDailyResults(result, recordFlags, selectedIndex, handlers, submissionState = {}) {
   const data = result.modeData;
   const actions = [
     ["RETRY", "retry"],
@@ -1157,12 +1204,13 @@ export function renderDailyResults(result, recordFlags, selectedIndex, handlers)
           <div><span>Time bonus</span><strong>${data.timeBonus}</strong></div>
           <div><span>Resolved</span><strong>${data.wordsResolved} / ${DAILY_TOTAL_WORDS}</strong></div>
         </div>
+        ${renderGlobalSubmissionMarkup(submissionState)}
         <div class="menu-list">${actions.map(([label, action], index) => (
     menuButton(label, action, index === selectedIndex)
   )).join("")}</div>
       </div>
     </section>`;
-  wireMenuSelection(app(), ".daily-results-panel .arcade-button", handlers.select);
+  wireMenuSelection(app(), ".daily-results-panel > .menu-list .arcade-button", handlers.select);
 }
 
 export function hidePauseOverlay() {

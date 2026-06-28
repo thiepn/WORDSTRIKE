@@ -321,6 +321,7 @@ function buildEndlessResult(game) {
     sessionId: session.id,
     modeId: MODE_IDS.ENDLESS,
     variantId: "standard",
+    sessionSource: session.source,
     startedAt: session.startedAtEpochMs ?? session.createdAtEpochMs,
     endedAt,
     durationMs: Math.max(0, endedAt - session.createdAtEpochMs),

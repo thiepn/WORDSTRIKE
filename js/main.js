@@ -72,6 +72,7 @@ import {
   updateBossHud,
   updateHud,
   updateSpeedTestRun,
+  updateGlobalSubmissionRegion,
 } from "./ui.js";
 import { getAllModes, isModeEnabled, MODE_IDS } from "./modes.js";
 import {
@@ -165,6 +166,15 @@ import {
   subscribeToLeaderboards,
 } from "./leaderboardService.js";
 import { renderLeaderboards } from "./leaderboardUi.js";
+import {
+  clearSubmissionState,
+  getSubmissionState,
+  prepareResultSubmission,
+  refreshSubmissionEligibility,
+  retryCurrentSubmission,
+  submitCurrentResult,
+  subscribeToSubmissions,
+} from "./leaderboardSubmissionService.js";
 
 const titleActions = ["modes", "leaderboards", "profile", "settings"];
 const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
@@ -196,6 +206,7 @@ function cleanupCampaignAttempt(reason, { clearSessionState = true } = {}) {
   });
   appState.game = null;
   appState.pauseIndex = 0;
+  clearSubmissionState();
 }
 
 function getAttemptSeed() {
@@ -225,11 +236,20 @@ function openProfileStatistics() {
   renderCurrentScreen();
 }
 
-function openLeaderboards() {
+function openGlobalProfile() {
+  openProfileStatistics();
+  selectStatisticsTab(STATISTICS_TABS.length - 1);
+}
+
+function openLeaderboardBoard(boardKey) {
   cleanupCampaignAttempt("leaderboards");
   changeScreen(Screens.LEADERBOARDS);
   renderCurrentScreen();
-  void initializeLeaderboards(LEADERBOARD_BOARDS.DAILY);
+  void initializeLeaderboards(boardKey);
+}
+
+function openLeaderboards() {
+  openLeaderboardBoard(LEADERBOARD_BOARDS.DAILY);
 }
 
 function openModeSelect() {
@@ -368,6 +388,7 @@ function finishEndless(game, result) {
   appState.endlessResult = result;
   appState.endlessResultsIndex = 0;
   appState.endlessResultsReadyAt = currentTimeMs() + 200;
+  prepareResultSubmission("endless", result, getAuthState(), getLeaderboardProfileState());
   changeScreen(Screens.ENDLESS_RESULTS);
   renderCurrentScreen();
 }
@@ -378,6 +399,7 @@ function finishDaily(game, result) {
   appState.dailyRecordFlags = { ...game.recordFlags };
   appState.dailyResultsIndex = 0;
   appState.dailyResultsReadyAt = currentTimeMs() + 200;
+  prepareResultSubmission("daily", result, getAuthState(), getLeaderboardProfileState());
   changeScreen(Screens.DAILY_RESULTS);
   renderCurrentScreen();
 }
@@ -735,6 +757,7 @@ function renderCurrentScreen() {
           renderCurrentScreen();
         },
       },
+      getSubmissionState(),
     );
   } else if (appState.screen === Screens.DAILY_READY) {
     renderDailyReady({
@@ -759,6 +782,7 @@ function renderCurrentScreen() {
           renderCurrentScreen();
         },
       },
+      getSubmissionState(),
     );
   } else if (appState.screen === Screens.SPEED_TEST_RUN) {
     const state = getCurrentSpeedTest();
@@ -865,11 +889,19 @@ function handleAppClick(event) {
   if (!action) return;
   event.preventDefault();
   if (appState.screen === Screens.ENDLESS_RESULTS) {
-    if (action === "retry") startEndless("retry");
+    if (action === "submit-global-score") void submitCurrentResult();
+    else if (action === "retry-global-score") void retryCurrentSubmission();
+    else if (action === "view-endless-leaderboard") openLeaderboardBoard(LEADERBOARD_BOARDS.ENDLESS);
+    else if (action === "open-global-profile") openGlobalProfile();
+    else if (action === "retry") startEndless("retry");
     else if (action === "modes") openModeSelect();
     else if (action === "title") openTitle();
   } else if (appState.screen === Screens.DAILY_RESULTS) {
-    if (action === "retry") startDaily("retry", appState.dailyResult.modeData.dateKey);
+    if (action === "submit-global-score") void submitCurrentResult();
+    else if (action === "retry-global-score") void retryCurrentSubmission();
+    else if (action === "view-daily-leaderboard") openLeaderboardBoard(LEADERBOARD_BOARDS.DAILY);
+    else if (action === "open-global-profile") openGlobalProfile();
+    else if (action === "retry") startDaily("retry", appState.dailyResult.modeData.dateKey);
     else if (action === "modes") openModeSelect();
     else if (action === "title") openTitle();
   } else if (appState.screen === Screens.PROFILE_STATS) {
@@ -1203,6 +1235,9 @@ async function bootstrap() {
     }
     if (authState.status === "signed-in") void initializeLeaderboardProfile(authState.user);
     else resetLeaderboardProfile();
+    if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS].includes(appState.screen)) {
+      refreshSubmissionEligibility(authState, getLeaderboardProfileState());
+    }
     if (
       authUiChanged &&
       appState.screen === Screens.PROFILE_STATS &&
@@ -1216,6 +1251,14 @@ async function bootstrap() {
       updateProfileAuthSection(getAuthState(), profileState);
     }
     if (appState.screen === Screens.LEADERBOARDS) renderCurrentScreen();
+    if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS].includes(appState.screen)) {
+      refreshSubmissionEligibility(getAuthState(), profileState);
+    }
+  });
+  subscribeToSubmissions((submissionState) => {
+    if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS].includes(appState.screen)) {
+      updateGlobalSubmissionRegion(submissionState);
+    }
   });
   subscribeToLeaderboards(() => {
     if (appState.screen === Screens.LEADERBOARDS) renderCurrentScreen();
