@@ -1,13 +1,22 @@
 export const CURRENT_GAME_VERSION = "1.0.0";
 export const DAILY_BOARD_KEY = "daily-strike-v1";
 export const ENDLESS_BOARD_KEY = "endless-v1";
-export const SUPPORTED_BOARD_KEYS = Object.freeze([DAILY_BOARD_KEY, ENDLESS_BOARD_KEY]);
+export const CAMPAIGN_BOARD_KEY = "campaign-highest-level-v1";
+export const TYPING_60_BOARD_KEY = "typing-60s-english200-v1";
+export const TYPING_15_BOARD_KEY = "typing-15s-english200-v1";
+export const SUPPORTED_BOARD_KEYS = Object.freeze([
+  CAMPAIGN_BOARD_KEY, TYPING_60_BOARD_KEY, TYPING_15_BOARD_KEY,
+  ENDLESS_BOARD_KEY, DAILY_BOARD_KEY,
+]);
 export const SUBMISSION_RATE_LIMIT_PER_HOUR = 30;
 
 const ROOT_FIELDS = new Set(["boardKey", "sessionId", "clientVersion", "result"]);
 const NORMAL_SOURCES = Object.freeze({
   [DAILY_BOARD_KEY]: new Set(["daily-ready", "retry"]),
   [ENDLESS_BOARD_KEY]: new Set(["mode-select", "retry", "restart"]),
+  [CAMPAIGN_BOARD_KEY]: new Set(["level-select", "retry", "next-level"]),
+  [TYPING_60_BOARD_KEY]: new Set(["mode-select", "retry", "change-test"]),
+  [TYPING_15_BOARD_KEY]: new Set(["mode-select", "retry", "change-test"]),
 });
 const DAILY_FIELDS = new Set([
   "score", "accuracy", "durationMs", "wordsCompleted", "completed", "failureReason",
@@ -22,6 +31,20 @@ const ENDLESS_FIELDS = new Set([
   "finalStage", "stageProgress", "completedStages", "survivalPoints", "wordPoints",
   "stageBonusPoints", "coreHits", "coreBreaches", "startStage",
 ]);
+const CAMPAIGN_FIELDS = new Set([
+  "level", "completed", "grade", "accuracy", "durationMs", "wordsCompleted",
+  "wordsTotal", "variantId", "correctCharacters", "correctKeystrokes",
+  "totalKeystrokes", "missedCharacters", "recordEligible", "developerMode",
+  "sessionSource",
+]);
+const TYPING_FIELDS = new Set([
+  "durationSeconds", "configId", "wordSetId", "wordSetVersion", "metricVersion",
+  "wpm", "rawWpm", "accuracy", "durationMs", "correctTestCharacters",
+  "rawTestCharacters", "correctKeystrokes", "incorrectKeystrokes",
+  "missedCharacters", "wordsCompleted", "exactWords", "incorrectWords",
+  "completed", "recordEligible", "developerMode", "sessionSource",
+]);
+const CAMPAIGN_GRADES = Object.freeze(["D", "C", "B", "A", "S"]);
 
 const failure = (code) => Object.freeze({ valid: false, code });
 const success = (value) => Object.freeze({ valid: true, value: Object.freeze(value) });
@@ -123,6 +146,10 @@ function validateDaily(body, now) {
     clientVersion: body.clientVersion,
     score: result.score,
     stage: null,
+    level: null,
+    grade: null,
+    wpm: null,
+    rawWpm: null,
     accuracy: result.accuracy,
     durationMs: result.durationMs,
     completed: result.completed,
@@ -180,6 +207,10 @@ function validateEndless(body) {
     clientVersion: body.clientVersion,
     score: result.score,
     stage: result.stage,
+    level: null,
+    grade: null,
+    wpm: null,
+    rawWpm: null,
     accuracy: result.accuracy,
     durationMs: result.durationMs,
     completed: false,
@@ -199,10 +230,148 @@ function validateEndless(body) {
   });
 }
 
+function campaignGrade(accuracy) {
+  if (accuracy >= 98) return "S";
+  if (accuracy >= 95) return "A";
+  if (accuracy >= 90) return "B";
+  if (accuracy >= 80) return "C";
+  return "D";
+}
+
+function closeEnough(actual, expected) {
+  return Number.isFinite(actual) && Math.abs(actual - expected) <= 1e-9;
+}
+
+function validateCampaign(body) {
+  const result = body.result;
+  if (!ownKeysOnly(result, CAMPAIGN_FIELDS) || Object.keys(result).length !== CAMPAIGN_FIELDS.size) {
+    return failure("INVALID_RESULT");
+  }
+  const ineligible = validateEligibility(result, body.boardKey);
+  if (ineligible) return ineligible;
+  const expectedVariant = result.level % 10 === 0 ? "boss" : "normal";
+  if (
+    result.completed !== true || !integer(result.level, 1, 100) ||
+    result.variantId !== expectedVariant || !CAMPAIGN_GRADES.includes(result.grade) ||
+    !finite(result.accuracy, 0, 100) || campaignGrade(result.accuracy) !== result.grade ||
+    !integer(result.durationMs, 1, 21600000) ||
+    !integer(result.wordsCompleted, 1, 1000) || !integer(result.wordsTotal, 1, 1000) ||
+    result.wordsCompleted !== result.wordsTotal ||
+    !integer(result.correctCharacters, 0, 100000) ||
+    !integer(result.correctKeystrokes, 0, 100000) ||
+    !integer(result.totalKeystrokes, result.correctKeystrokes, 200000) ||
+    !integer(result.missedCharacters, 0, 100000)
+  ) return failure("INVALID_RESULT");
+  const denominator = result.totalKeystrokes + result.missedCharacters;
+  const expectedAccuracy = denominator === 0
+    ? 100
+    : Math.min(100, result.correctKeystrokes / denominator * 100);
+  if (!closeEnough(result.accuracy, expectedAccuracy)) return failure("SCORE_MISMATCH");
+  return success({
+    boardKey: body.boardKey,
+    sessionId: body.sessionId,
+    clientVersion: body.clientVersion,
+    score: null,
+    stage: null,
+    level: result.level,
+    grade: result.grade,
+    wpm: null,
+    rawWpm: null,
+    accuracy: result.accuracy,
+    durationMs: result.durationMs,
+    completed: true,
+    wordsCompleted: result.wordsCompleted,
+    integrityRemaining: null,
+    challengeDate: null,
+    challengeVersion: null,
+    metrics: Object.freeze({
+      variantId: result.variantId,
+      wordsTotal: result.wordsTotal,
+      correctCharacters: result.correctCharacters,
+      correctKeystrokes: result.correctKeystrokes,
+      totalKeystrokes: result.totalKeystrokes,
+      missedCharacters: result.missedCharacters,
+    }),
+  });
+}
+
+function validateTyping(body) {
+  const result = body.result;
+  if (!ownKeysOnly(result, TYPING_FIELDS) || Object.keys(result).length !== TYPING_FIELDS.size) {
+    return failure("INVALID_RESULT");
+  }
+  const ineligible = validateEligibility(result, body.boardKey);
+  if (ineligible) return ineligible;
+  const expectedDuration = body.boardKey === TYPING_60_BOARD_KEY ? 60 : 15;
+  if (result.durationSeconds !== expectedDuration || result.configId !== `time-${expectedDuration}`) {
+    return failure("UNSUPPORTED_TEST_DURATION");
+  }
+  if (result.wordSetId !== "english-200" || result.wordSetVersion !== 1) {
+    return failure("UNSUPPORTED_WORD_SET");
+  }
+  if (
+    result.metricVersion !== 2 || result.completed !== true ||
+    result.durationMs !== expectedDuration * 1000 ||
+    !finite(result.wpm, 0, 1000) || !finite(result.rawWpm, 0, 2000) ||
+    !finite(result.accuracy, 0, 100) ||
+    !integer(result.correctTestCharacters, 0, 100000) ||
+    !integer(result.rawTestCharacters, 1, 200000) ||
+    result.correctTestCharacters > result.rawTestCharacters ||
+    !integer(result.correctKeystrokes, 0, 100000) ||
+    !integer(result.incorrectKeystrokes, 0, 100000) ||
+    !integer(result.missedCharacters, 0, 100000) ||
+    result.correctKeystrokes + result.incorrectKeystrokes !== result.rawTestCharacters ||
+    !integer(result.wordsCompleted, 0, 10000) || !integer(result.exactWords, 0, 10000) ||
+    !integer(result.incorrectWords, 0, 10000) ||
+    result.exactWords + result.incorrectWords !== result.wordsCompleted
+  ) return failure("INVALID_RESULT");
+  const expectedWpm = (result.correctTestCharacters / 5) / (expectedDuration / 60);
+  const expectedRawWpm = (result.rawTestCharacters / 5) / (expectedDuration / 60);
+  const accuracyDenominator = result.correctKeystrokes + result.incorrectKeystrokes + result.missedCharacters;
+  const expectedAccuracy = accuracyDenominator <= 0
+    ? 100
+    : result.correctKeystrokes / accuracyDenominator * 100;
+  if (
+    !closeEnough(result.wpm, expectedWpm) || !closeEnough(result.rawWpm, expectedRawWpm) ||
+    !closeEnough(result.accuracy, expectedAccuracy)
+  ) return failure("SCORE_MISMATCH");
+  return success({
+    boardKey: body.boardKey,
+    sessionId: body.sessionId,
+    clientVersion: body.clientVersion,
+    score: null,
+    stage: null,
+    level: null,
+    grade: null,
+    wpm: result.wpm,
+    rawWpm: result.rawWpm,
+    accuracy: result.accuracy,
+    durationMs: result.durationMs,
+    completed: true,
+    wordsCompleted: result.wordsCompleted,
+    integrityRemaining: null,
+    challengeDate: null,
+    challengeVersion: null,
+    metrics: Object.freeze({
+      durationSeconds: expectedDuration,
+      wordSetId: result.wordSetId,
+      wordSetVersion: result.wordSetVersion,
+      correctTestCharacters: result.correctTestCharacters,
+      rawTestCharacters: result.rawTestCharacters,
+      correctKeystrokes: result.correctKeystrokes,
+      incorrectKeystrokes: result.incorrectKeystrokes,
+      missedCharacters: result.missedCharacters,
+      exactWords: result.exactWords,
+      incorrectWords: result.incorrectWords,
+    }),
+  });
+}
+
 export function validateScoreSubmission(body, { now = new Date() } = {}) {
   const commonFailure = validateCommon(body);
   if (commonFailure) return commonFailure;
-  return body.boardKey === DAILY_BOARD_KEY
-    ? validateDaily(body, now)
-    : validateEndless(body);
+  if (body.boardKey === DAILY_BOARD_KEY) return validateDaily(body, now);
+  if (body.boardKey === ENDLESS_BOARD_KEY) return validateEndless(body);
+  if (body.boardKey === CAMPAIGN_BOARD_KEY) return validateCampaign(body);
+  return validateTyping(body);
 }

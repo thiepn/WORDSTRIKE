@@ -5,15 +5,15 @@ import { validateLeaderboardRequest } from "../supabase/functions/_shared/leader
 
 assert.equal(validateLeaderboardRequest({ boardKey: "endless-v1" }).valid, true);
 assert.equal(validateLeaderboardRequest({ boardKey: "daily-strike-v1", challengeDate: "2026-06-27" }).valid, true);
-assert.equal(validateLeaderboardRequest({ boardKey: "campaign-highest-level-v1" }).code, "INVALID_BOARD");
+assert.equal(validateLeaderboardRequest({ boardKey: "campaign-highest-level-v1" }).valid, true);
 assert.equal(validateLeaderboardRequest({ boardKey: "daily-strike-v1", challengeDate: "bad" }).code, "INVALID_CHALLENGE_DATE");
 assert.equal(validateLeaderboardRequest({ boardKey: "endless-v1", limit: 1000 }).code, "INVALID_REQUEST");
 assert.equal(validateLeaderboardRequest({ boardKey: "endless-v1", orderBy: "raw sql" }).code, "INVALID_REQUEST");
-assert.equal(validateLeaderboardRequest({ boardKey: "endless-v1", user_id: "ignored" }).valid, true);
+assert.equal(validateLeaderboardRequest({ boardKey: "endless-v1", user_id: "ignored" }).code, "INVALID_REQUEST");
 assert.equal(getCorsHeaders("https://evil.example"), null);
 
 const edge = await readFile(new URL("../supabase/functions/get-leaderboard/index.ts", import.meta.url), "utf8");
-const migration = await readFile(new URL("../supabase/migrations/20260628003000_add_public_leaderboard_reads.sql", import.meta.url), "utf8");
+const migration = await readFile(new URL("../supabase/migrations/20260628023000_complete_global_leaderboards.sql", import.meta.url), "utf8");
 const config = await readFile(new URL("../supabase/config.toml", import.meta.url), "utf8");
 assert.match(edge, /auth\.getUser\(token\)/);
 assert.match(edge, /viewerUserId = null/);

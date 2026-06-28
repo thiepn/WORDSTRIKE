@@ -513,18 +513,18 @@ WORDSTRIKE is designed as a **local-first** application.
 | Is an account required?                | No                                            |
 | Is login supported?                    | Optional Google sign-in                       |
 | Where is progress stored?              | In the current browser’s local storage        |
-| Does gameplay data leave the device?   | Only after explicit Daily/Endless submission  |
+| Does gameplay data leave the device?   | Only after explicit eligible-score submission |
 | Is cloud synchronization used?         | No                                            |
 | Are analytics included?                | No analytics are implemented                  |
 | Is a backend required?                 | No for local play; yes for global rankings    |
 | Is the local player ID uploaded?       | No                                            |
 | Is Daily Strike fetched from a server? | No, it is generated locally from the UTC date |
-| Is a global leaderboard supported?     | Yes, for Daily Strike and Endless             |
+| Is a global leaderboard supported?     | Yes, across five mode boards                  |
 
 > [!IMPORTANT]
 > The local player ID is a browser-generated identifier intended as a future integration point. It is currently stored and used only on the local device.
 
-Daily Strike and Endless results can be submitted explicitly from their result screens after Google sign-in and public-username setup. Local saving happens first and remains independent of submission success. Historical records are never uploaded automatically, and duplicate retries are safe. Campaign and Typing Test submissions are not supported. Server validation rejects obvious inconsistencies, but—as with any browser-produced score—it cannot make client gameplay fully cheat-proof.
+Global rankings are ordered as Campaign, Typing Test, Endless, and Daily Strike. Typing Test defaults to the 60-second English 200 board and provides a separate 15-second English 200 tab. Campaign accepts only successfully completed levels. Eligible current results are submitted explicitly after Google sign-in and public-username setup; public rankings remain visible while signed out, with direct Google sign-in available on the leaderboard screen. Local saving happens first, historical records are never uploaded automatically, and duplicate retries are safe. Server validation rejects obvious inconsistencies, but—as with any browser-produced score—it cannot make client gameplay fully cheat-proof.
 
 ---
 
@@ -664,7 +664,7 @@ https://thiepn.github.io/WORDSTRIKE/
 | Player Profile & Statistics          |   Implemented   |
 | Automated test suite                 |     Passing     |
 | Practice Lab                         | Not implemented |
-| Global Daily/Endless leaderboard     |   Implemented   |
+| Five-board global leaderboard        |   Implemented   |
 | Accounts and cloud sync              | Not implemented |
 | Final visual and accessibility audit |     Pending     |
 
@@ -677,7 +677,7 @@ WORDSTRIKE is suitable for local testing and continued development, but it shoul
 * Progress is tied to the current browser and device.
 * No built-in backup, export, import, or cloud synchronization is available.
 * Practice Lab is currently disabled.
-* No global leaderboard or account system is implemented.
+* Global ranking requires the Supabase migrations and Edge Functions to be deployed.
 * The game currently focuses on English vocabulary.
 * Audio, alternate themes, achievements, and upgrades are not implemented.
 * Some result-screen pointer interactions and muted-text contrast are still in the final UI-polish queue.
@@ -697,9 +697,6 @@ Result actions, mouse support, contrast, responsive layout, accessibility
       ↓
 Practice Lab
 Focused configurable training without changing the core modes
-      ↓
-Optional global leaderboard
-Daily and Endless comparison through a dedicated backend
       ↓
 Whole-project audit
 Architecture, accessibility, performance, storage, and regression review

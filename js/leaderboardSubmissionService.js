@@ -3,14 +3,25 @@ import { CURRENT_GAME_VERSION } from "./gameVersion.js";
 import { invalidateLeaderboardBoard, LEADERBOARD_BOARDS } from "./leaderboardService.js";
 
 const MODE_BOARDS = Object.freeze({
+  campaign: LEADERBOARD_BOARDS.CAMPAIGN,
   daily: LEADERBOARD_BOARDS.DAILY,
   endless: LEADERBOARD_BOARDS.ENDLESS,
 });
 
+function boardForMode(mode, result) {
+  if (mode === "typing") {
+    if (result?.modeData?.durationSeconds === 60) return LEADERBOARD_BOARDS.TYPING_60;
+    if (result?.modeData?.durationSeconds === 15) return LEADERBOARD_BOARDS.TYPING_15;
+    return null;
+  }
+  return MODE_BOARDS[mode] || null;
+}
+
 const makeState = ({
-  status = "idle", boardKey = null, sessionId = null, rank = null, error = null, reason = null,
+  status = "idle", mode = null, boardKey = null, sessionId = null, rank = null, error = null, reason = null,
 } = {}) => Object.freeze({
   status,
+  mode,
   boardKey,
   sessionId,
   rank: Number.isSafeInteger(rank) && rank > 0 ? rank : null,
@@ -34,7 +45,7 @@ function hasCompleteMetrics(value) {
 }
 
 export function buildSubmissionPayload(mode, result) {
-  const boardKey = MODE_BOARDS[mode];
+  const boardKey = boardForMode(mode, result);
   const data = result?.modeData;
   if (!boardKey || !result || !data || !validSessionId(result.sessionId)) return null;
   if (mode === "daily") {
@@ -68,6 +79,63 @@ export function buildSubmissionPayload(mode, result) {
         coreHits: data.coreHits,
         coreBreaches: data.coreBreaches,
         finalWave: data.finalWave,
+      },
+    };
+    return hasCompleteMetrics(payload) ? payload : null;
+  }
+  if (mode === "campaign") {
+    if (result.success !== true) return null;
+    const payload = {
+      boardKey,
+      sessionId: result.sessionId,
+      clientVersion: CURRENT_GAME_VERSION,
+      result: {
+        level: data.level,
+        completed: true,
+        grade: result.grade,
+        accuracy: result.accuracy,
+        durationMs: Math.ceil(result.activeDurationMs),
+        wordsCompleted: result.words.completed,
+        wordsTotal: data.wordsTotal,
+        variantId: result.variantId,
+        correctCharacters: result.characters.correct,
+        correctKeystrokes: data.correctKeystrokes,
+        totalKeystrokes: data.totalKeystrokes,
+        missedCharacters: data.missedCharacters,
+        recordEligible: data.recordEligible === true,
+        developerMode: result.developerMode === true,
+        sessionSource: result.sessionSource,
+      },
+    };
+    return hasCompleteMetrics(payload) ? payload : null;
+  }
+  if (mode === "typing") {
+    const payload = {
+      boardKey,
+      sessionId: result.sessionId,
+      clientVersion: CURRENT_GAME_VERSION,
+      result: {
+        durationSeconds: data.durationSeconds,
+        configId: data.configId,
+        wordSetId: data.wordSetId,
+        wordSetVersion: data.wordSetVersion,
+        metricVersion: data.metricVersion,
+        wpm: result.wpm,
+        rawWpm: data.rawWpm,
+        accuracy: result.accuracy,
+        durationMs: Math.round(result.activeDurationMs),
+        correctTestCharacters: data.correctTestCharacters,
+        rawTestCharacters: data.rawTestCharacters,
+        correctKeystrokes: data.correctKeystrokes,
+        incorrectKeystrokes: data.incorrectKeystrokes,
+        missedCharacters: data.missedCharacters,
+        wordsCompleted: data.completedWordCount,
+        exactWords: data.exactWords,
+        incorrectWords: data.incorrectWords,
+        completed: result.success === true,
+        recordEligible: data.recordEligible === true,
+        developerMode: result.developerMode === true,
+        sessionSource: result.sessionSource,
       },
     };
     return hasCompleteMetrics(payload) ? payload : null;
@@ -119,6 +187,7 @@ export function createLeaderboardSubmissionService({
 } = {}) {
   let state = makeState();
   let payload = null;
+  let activeMode = null;
   let requestSequence = 0;
   const listeners = new Set();
 
@@ -129,7 +198,11 @@ export function createLeaderboardSubmissionService({
   };
 
   const eligibility = (authState, profileState) => {
-    if (!payload) return { status: "ineligible", reason: "invalid-result" };
+    if (!payload) {
+      if (activeMode === "campaign") return { status: "ineligible", reason: "campaign-failed" };
+      if (activeMode === "typing") return { status: "ineligible", reason: "unsupported-test" };
+      return { status: "ineligible", reason: "invalid-result" };
+    }
     if (payload.result.developerMode || !payload.result.recordEligible) {
       return { status: "ineligible", reason: "local-only" };
     }
@@ -197,10 +270,11 @@ export function createLeaderboardSubmissionService({
     },
     prepareResultSubmission(mode, result, authState, profileState) {
       requestSequence += 1;
+      activeMode = mode;
       payload = buildSubmissionPayload(mode, result);
-      const boardKey = MODE_BOARDS[mode] || null;
+      const boardKey = boardForMode(mode, result);
       const sessionId = payload?.sessionId || result?.sessionId || null;
-      return publish({ boardKey, sessionId, ...eligibility(authState, profileState) });
+      return publish({ mode, boardKey, sessionId, ...eligibility(authState, profileState) });
     },
     refreshSubmissionEligibility: refreshEligibility,
     submitCurrentResult: submit,
@@ -208,6 +282,7 @@ export function createLeaderboardSubmissionService({
     clearSubmissionState() {
       requestSequence += 1;
       payload = null;
+      activeMode = null;
       return publish(makeState());
     },
   });

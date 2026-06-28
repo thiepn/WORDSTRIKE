@@ -68,6 +68,7 @@ const campaignResult = {
 const normalized = finalizeCampaignSession(game, campaignResult, true);
 assert.equal(normalized.modeId, "campaign");
 assert.equal(normalized.variantId, "normal");
+assert.equal(normalized.sessionSource, "level-select");
 assert.equal(normalized.modeData.level, 22);
 assert.equal("modifierId" in normalized.modeData, false);
 assert.equal(normalized.activeDurationMs, game.elapsedMs);

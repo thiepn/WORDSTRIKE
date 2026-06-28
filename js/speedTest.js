@@ -224,6 +224,7 @@ function buildSpeedTestResult(state, completedAtMs) {
     sessionId: session.id,
     modeId: MODE_IDS.SPEED_TEST,
     variantId: state.config.testType,
+    sessionSource: session.source,
     startedAt: session.startedAtEpochMs ?? session.createdAtEpochMs,
     endedAt,
     durationMs: Math.max(0, endedAt - session.createdAtEpochMs),
@@ -250,6 +251,13 @@ function buildSpeedTestResult(state, completedAtMs) {
     combo: { maximum: 0, final: 0 },
     modeData: {
       metricVersion: 2,
+      recordEligible: (
+        state.developerMode !== true &&
+        state.config.testType === SPEED_TEST_TYPES.TIME &&
+        [15, 60].includes(state.config.durationSeconds) &&
+        state.wordSet.id === SPEED_TEST_WORD_SET.id &&
+        state.wordSet.version === SPEED_TEST_WORD_SET.version
+      ),
       wordSetId: state.wordSet.id,
       wordSetName: state.wordSet.name,
       wordSetVersion: state.wordSet.version,
@@ -261,6 +269,10 @@ function buildSpeedTestResult(state, completedAtMs) {
       rawWpm: live.rawWpm,
       correctTestCharacters: live.correctTestCharacters,
       rawTestCharacters: live.rawTestCharacters,
+      correctKeystrokes: state.metrics.correctKeystrokes,
+      incorrectKeystrokes: state.metrics.incorrectKeystrokes,
+      missedCharacters: state.metrics.missedCharacters,
+      printableKeystrokes: state.metrics.printableKeystrokes,
       correctSpaces: state.metrics.correctSpaces,
       validSpaces: state.metrics.validSpaces,
       backspaces: state.metrics.backspaces,

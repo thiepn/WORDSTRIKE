@@ -23,14 +23,14 @@ renderLeaderboards({
 }, authOut, profileNone);
 assert.match(app.html, /CANONICAL UTC CHALLENGE 2026-06-27/);
 assert.match(app.html, /No ranked Daily Strike results yet/);
-assert.match(app.html, /submission is introduced/);
-assert.match(app.html, /Sign in to view your personal rank/);
+assert.match(app.html, /SIGN IN FOR GLOBAL RANKS/);
+assert.match(app.html, /CONTINUE WITH GOOGLE/);
 
 renderLeaderboards({
   status: "empty", selectedBoard: "endless-v1", entries: [], viewer: null,
 }, authOut, profileNone);
 assert.match(app.html, /No ranked Endless results yet/);
-assert.match(app.html, /submission is not available yet/);
+assert.match(app.html, /No ranked Endless results yet/);
 
 renderLeaderboards({ status: "offline", selectedBoard: "daily-strike-v1", entries: [] }, authOut, profileNone);
 assert.match(app.html, /unavailable while offline/);
@@ -73,6 +73,7 @@ renderLeaderboards(
   authIn,
   { status: "needs-username", profile: null },
 );
-assert.match(app.html, /Choose a public username before joining global rankings/);
+assert.match(app.html, /Choose a public username to submit scores/);
+assert.match(app.html, /SET USERNAME/);
 
 console.log("Leaderboards screen covers tabs, canonical date, loading, empty, offline, error, safe rows, and viewer rank.");

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const edge = await readFile(new URL("../supabase/functions/submit-score/index.ts", import.meta.url), "utf8");
-const migration = await readFile(new URL("../supabase/migrations/20260628013000_add_authenticated_score_submission.sql", import.meta.url), "utf8");
+const migration = await readFile(new URL("../supabase/migrations/20260628023000_complete_global_leaderboards.sql", import.meta.url), "utf8");
 const frontend = await readFile(new URL("../js/leaderboardSubmissionService.js", import.meta.url), "utf8");
 assert.match(edge, /auth\.getUser\(token\)/);
 assert.match(edge, /p_user_id: userId/);
