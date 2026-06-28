@@ -95,6 +95,7 @@ assert.equal(state.result.modeData.wordSetId, "english-200");
 assert.equal(state.result.modeData.wordSetName, "English 200");
 assert.equal(state.result.modeData.wordSetVersion, 1);
 assert.equal(state.result.modeData.wordSetWordCount, 199);
+assert.equal(state.result.sessionSource, "mode-select");
 assert.equal(state.result.modeData.correctSpaces, 0);
 assert.equal(state.result.modeData.validSpaces, 0);
 assert.equal(state.result.modeData.wordDeletes, 0);

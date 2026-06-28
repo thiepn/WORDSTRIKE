@@ -45,6 +45,7 @@ function menuButton(label, action, selected = false, extraClass = "") {
 function wireMenuActions(root, selector, handlers = {}) {
   root?.querySelectorAll?.(selector).forEach((button, index) => {
     const action = button.dataset?.action;
+    if (typeof handlers[action] !== "function") return;
     button.onclick = (event) => {
       event?.preventDefault?.();
       handlers[action]?.();
@@ -510,7 +511,7 @@ export function updateSpeedTestRun(state, nowMs) {
   if (diagnostics) diagnostics.textContent = getSpeedTestDiagnosticText(state, now);
 }
 
-export function renderSpeedTestResults(result, recordFlags, selectedIndex, handlers) {
+export function renderSpeedTestResults(result, recordFlags, selectedIndex, handlers, submissionState = {}) {
   const actions = [
     ["RETRY TEST", "retry"],
     ["NEXT TEST", "change"],
@@ -545,6 +546,7 @@ export function renderSpeedTestResults(result, recordFlags, selectedIndex, handl
           <div><span>Word deletes</span><strong>${mode.wordDeletes ?? 0}</strong></div>
           <div><span>Duration</span><strong>${(result.activeDurationMs / 1000).toFixed(1)}s</strong></div>
         </div>
+        ${renderGlobalSubmissionMarkup(submissionState)}
         <div class="menu-list">
           ${actions.map(([label, action], index) => menuButton(
     label,
@@ -1088,36 +1090,48 @@ function submissionButton(label, action, disabled = false) {
 }
 
 export function renderGlobalSubmissionMarkup(state = {}) {
-  if (!['daily-strike-v1', 'endless-v1'].includes(state.boardKey)) return "";
-  const daily = state.boardKey === "daily-strike-v1";
-  const boardLabel = daily ? "DAILY" : "ENDLESS";
-  const viewAction = daily ? "view-daily-leaderboard" : "view-endless-leaderboard";
+  const boardDetails = ({
+    "campaign-highest-level-v1": ["CAMPAIGN", "view-campaign-leaderboard"],
+    "typing-60s-english200-v1": ["60S", "view-typing-60-leaderboard"],
+    "typing-15s-english200-v1": ["15S", "view-typing-15-leaderboard"],
+    "daily-strike-v1": ["DAILY", "view-daily-leaderboard"],
+    "endless-v1": ["ENDLESS", "view-endless-leaderboard"],
+  }[state.boardKey]) || (state.mode === "typing"
+    ? ["TYPING TEST", "view-typing-60-leaderboard"]
+    : null);
+  if (!boardDetails) return "";
+  const [boardLabel, viewAction] = boardDetails;
+  const viewLabel = `VIEW ${boardLabel} LEADERBOARD`;
   let message = "This run is not eligible for global submission.";
-  let buttons = submissionButton(`VIEW ${boardLabel} LEADERBOARD`, viewAction);
+  let buttons = submissionButton(viewLabel, viewAction);
   if (state.status === "ineligible" && state.reason === "signed-out") {
     message = "Sign in to submit this score globally.";
-    buttons = submissionButton("OPEN PROFILE", "open-global-profile") + submissionButton("VIEW LEADERBOARD", viewAction);
+    buttons = submissionButton("CONTINUE WITH GOOGLE", "result-google-sign-in") + submissionButton(viewLabel, viewAction);
   } else if (state.status === "ineligible" && state.reason === "username-required") {
     message = "Choose a public username before submitting scores.";
-    buttons = submissionButton("OPEN PROFILE", "open-global-profile") + submissionButton("VIEW LEADERBOARD", viewAction);
+    buttons = submissionButton("SET USERNAME", "open-global-profile") + submissionButton(viewLabel, viewAction);
+  } else if (state.status === "ineligible" && state.reason === "campaign-failed") {
+    message = "Only successfully completed levels are eligible for the Campaign leaderboard.";
+  } else if (state.status === "ineligible" && state.reason === "unsupported-test") {
+    message = "Only 15-second and 60-second English 200 tests are eligible for global submission.";
   } else if (state.status === "ready") {
     message = "This result is saved locally.";
-    buttons = submissionButton("SUBMIT GLOBAL SCORE", "submit-global-score") + submissionButton("VIEW LEADERBOARD", viewAction);
+    buttons = submissionButton("SUBMIT GLOBAL SCORE", "submit-global-score") + submissionButton(viewLabel, viewAction);
   } else if (state.status === "submitting") {
     message = "Submitting global score…";
     buttons = submissionButton("SUBMITTING…", "submit-global-score", true);
   } else if (state.status === "submitted") {
     message = `Global score submitted.${state.rank ? `<strong>Rank #${state.rank}</strong>` : ""}`;
-    buttons = submissionButton("VIEW LEADERBOARD", viewAction);
+    buttons = submissionButton(viewLabel, viewAction);
   } else if (state.status === "already-submitted") {
     message = `This result was already submitted.${state.rank ? `<strong>Rank #${state.rank}</strong>` : ""}`;
-    buttons = submissionButton("VIEW LEADERBOARD", viewAction);
+    buttons = submissionButton(viewLabel, viewAction);
   } else if (state.status === "offline") {
     message = "Global submission is unavailable while offline.<span>Your local result is safe.</span>";
     buttons = submissionButton("RETRY", "retry-global-score");
   } else if (state.status === "error") {
     message = "Global submission failed.<span>Your local result is safe.</span>";
-    buttons = submissionButton("RETRY", "retry-global-score") + submissionButton("VIEW LEADERBOARD", viewAction);
+    buttons = submissionButton("RETRY", "retry-global-score") + submissionButton(viewLabel, viewAction);
   }
   return `<section id="global-submission-region" class="global-submission" aria-live="polite"><p>${message}</p><div class="global-submission-actions">${buttons}</div></section>`;
 }
@@ -1218,7 +1232,7 @@ export function hidePauseOverlay() {
   document.querySelector(".speed-test-screen")?.classList.remove("paused");
 }
 
-export function renderResults(result, selectedIndex, handlers) {
+export function renderResults(result, selectedIndex, handlers, submissionState = {}) {
   const cleared = result.grade !== "Fail";
   const canAdvance = cleared && result.levelNumber < 100;
   const actions = [
@@ -1245,6 +1259,7 @@ export function renderResults(result, selectedIndex, handlers) {
     : `<div class="stat"><span class="micro-label">Lives</span><strong>${result.livesRemaining}/${result.startingLives}</strong></div>
           <div class="stat"><span class="micro-label">Level</span><strong>${result.levelNumber}</strong></div>`}
         </div>
+        ${renderGlobalSubmissionMarkup(submissionState)}
         <div class="menu-list">
           ${actions.map(([label, action], index) => menuButton(
     label,

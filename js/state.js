@@ -29,6 +29,7 @@ export const appState = {
   currentLevel: 1,
   game: null,
   results: null,
+  campaignResult: null,
   menuIndex: 0,
   modeSelection: 0,
   speedTestConfigId: "time-60",

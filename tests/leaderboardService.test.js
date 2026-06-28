@@ -25,10 +25,10 @@ const service = createLeaderboardService({
 assert.equal(service.getLeaderboardState().status, "idle");
 assert.equal(calls.length, 0);
 const dailyRequest = service.initializeLeaderboards();
-assert.equal(service.getLeaderboardState().selectedBoard, LEADERBOARD_BOARDS.DAILY);
+assert.equal(service.getLeaderboardState().selectedBoard, LEADERBOARD_BOARDS.CAMPAIGN);
 assert.deepEqual(calls[0], {
   name: "get-leaderboard",
-  options: { body: { boardKey: "daily-strike-v1", challengeDate: "2026-06-27" } },
+  options: { body: { boardKey: "campaign-highest-level-v1" } },
 });
 assert.equal(service.initializeLeaderboards(), dailyRequest);
 const endlessRequest = service.selectLeaderboardBoard(LEADERBOARD_BOARDS.ENDLESS);

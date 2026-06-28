@@ -1,4 +1,10 @@
-export const PUBLIC_BOARD_KEYS = Object.freeze(["daily-strike-v1", "endless-v1"]);
+export const PUBLIC_BOARD_KEYS = Object.freeze([
+  "campaign-highest-level-v1",
+  "typing-60s-english200-v1",
+  "typing-15s-english200-v1",
+  "endless-v1",
+  "daily-strike-v1",
+]);
 export const LEADERBOARD_LIMIT = 100;
 export const LEADERBOARD_RULES_VERSION = 1;
 export const DAILY_CHALLENGE_VERSION = 1;
@@ -15,7 +21,7 @@ export function validateLeaderboardRequest(body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { valid: false, code: "INVALID_REQUEST" };
   }
-  const allowedKeys = new Set(["boardKey", "challengeDate", "user_id"]);
+  const allowedKeys = new Set(["boardKey", "challengeDate"]);
   if (Object.keys(body).some((key) => !allowedKeys.has(key))) {
     return { valid: false, code: "INVALID_REQUEST" };
   }
@@ -25,7 +31,7 @@ export function validateLeaderboardRequest(body) {
   if (body.boardKey === "daily-strike-v1" && !isValidChallengeDate(body.challengeDate)) {
     return { valid: false, code: "INVALID_CHALLENGE_DATE" };
   }
-  if (body.boardKey === "endless-v1" && body.challengeDate != null) {
+  if (body.boardKey !== "daily-strike-v1" && body.challengeDate != null) {
     return { valid: false, code: "INVALID_REQUEST" };
   }
   return {
@@ -73,18 +79,49 @@ export function compareEndlessLeaderboardRows(a, b) {
   ].find(Boolean) || finalTie(a, b);
 }
 
-function publicEntry(row, rank) {
-  return Object.freeze({
+const GRADE_RANK = Object.freeze({ D: 1, C: 2, B: 3, A: 4, S: 5 });
+
+export function compareCampaignLeaderboardRows(a, b) {
+  return [
+    higher(a.level, b.level),
+    higher(GRADE_RANK[a.grade], GRADE_RANK[b.grade]),
+    higher(a.accuracy, b.accuracy),
+  ].find(Boolean) || finalTie(a, b);
+}
+
+export function compareTypingLeaderboardRows(a, b) {
+  return [
+    higher(a.wpm, b.wpm),
+    higher(a.accuracy, b.accuracy),
+    higher(a.rawWpm ?? a.raw_wpm, b.rawWpm ?? b.raw_wpm),
+  ].find(Boolean) || finalTie(a, b);
+}
+
+function publicEntry(row, rank, boardKey) {
+  const common = {
     rank,
     username: String(row.username),
+    accuracy: number(row.accuracy),
+    submittedAt: String(row.submittedAt || row.submitted_at || ""),
+  };
+  if (boardKey === "campaign-highest-level-v1") {
+    return Object.freeze({ ...common, level: number(row.level), grade: String(row.grade) });
+  }
+  if (boardKey.startsWith("typing-")) {
+    return Object.freeze({
+      ...common,
+      wpm: number(row.wpm),
+      rawWpm: number(row.rawWpm ?? row.raw_wpm),
+    });
+  }
+  return Object.freeze({
+    ...common,
     stage: row.stage == null ? null : number(row.stage),
     score: number(row.score),
-    accuracy: number(row.accuracy),
     durationMs: row.durationMs == null && row.duration_ms == null
       ? null
       : number(row.durationMs ?? row.duration_ms),
     completed: row.completed === true,
-    submittedAt: String(row.submittedAt || row.submitted_at || ""),
   });
 }
 
@@ -95,12 +132,18 @@ export function rankLeaderboardRows(rows, {
 } = {}) {
   const comparator = boardKey === "daily-strike-v1"
     ? compareDailyLeaderboardRows
-    : compareEndlessLeaderboardRows;
+    : boardKey === "endless-v1"
+      ? compareEndlessLeaderboardRows
+      : boardKey === "campaign-highest-level-v1"
+        ? compareCampaignLeaderboardRows
+        : compareTypingLeaderboardRows;
   const eligible = (Array.isArray(rows) ? rows : []).filter((row) => (
     row.boardKey === boardKey &&
     number(row.rulesVersion) === LEADERBOARD_RULES_VERSION &&
     row.moderationStatus === "accepted" &&
     typeof row.username === "string" && row.username.length > 0 &&
+    (boardKey !== "campaign-highest-level-v1" || row.completed === true) &&
+    (!boardKey.startsWith("typing-") || row.completed === true) &&
     (
       boardKey !== "daily-strike-v1" ||
       (
@@ -116,7 +159,7 @@ export function rankLeaderboardRows(rows, {
   }
   const ranked = [...best.values()].sort(comparator).map((row, index) => ({ row, rank: index + 1 }));
   return Object.freeze({
-    entries: Object.freeze(ranked.slice(0, LEADERBOARD_LIMIT).map(({ row, rank }) => publicEntry(row, rank))),
+    entries: Object.freeze(ranked.slice(0, LEADERBOARD_LIMIT).map(({ row, rank }) => publicEntry(row, rank, boardKey))),
     viewer: viewerUserId == null
       ? null
       : ranked.find(({ row }) => row.userId === viewerUserId)
@@ -125,6 +168,7 @@ export function rankLeaderboardRows(rows, {
           entry: publicEntry(
             ranked.find(({ row }) => row.userId === viewerUserId).row,
             ranked.find(({ row }) => row.userId === viewerUserId).rank,
+            boardKey,
           ),
         })
         : null,

@@ -29,5 +29,21 @@ button.closest = function (selector) {
   return null;
 };
 assert.equal(resolveAppClickAction(event, { root, screen: Screens.ENDLESS_RESULTS, now: 2, readyAt: 1 }), "view-endless-leaderboard");
+button.dataset.action = "view-campaign-leaderboard";
+screen.className = "results-screen";
+button.closest = function (selector) {
+  if (selector === "[data-action]") return this;
+  if (selector === ".results-screen") return screen;
+  return null;
+};
+assert.equal(resolveAppClickAction(event, { root, screen: Screens.RESULTS, now: 2, readyAt: 1 }), "view-campaign-leaderboard");
+button.dataset.action = "view-typing-15-leaderboard";
+screen.className = "speed-results-screen";
+button.closest = function (selector) {
+  if (selector === "[data-action]") return this;
+  if (selector === ".speed-results-screen") return screen;
+  return null;
+};
+assert.equal(resolveAppClickAction(event, { root, screen: Screens.SPEED_TEST_RESULTS, now: 2, readyAt: 1 }), "view-typing-15-leaderboard");
 
 console.log("Delegated result routing recognizes submission, retry, profile, and contextual leaderboard actions without new listeners.");

@@ -2,18 +2,58 @@ import { getSupabaseClient } from "./supabaseClient.js";
 import { getUtcDateKey } from "./dailyDate.js";
 
 export const LEADERBOARD_BOARDS = Object.freeze({
-  DAILY: "daily-strike-v1",
+  CAMPAIGN: "campaign-highest-level-v1",
+  TYPING_60: "typing-60s-english200-v1",
+  TYPING_15: "typing-15s-english200-v1",
   ENDLESS: "endless-v1",
+  DAILY: "daily-strike-v1",
+});
+
+export const LEADERBOARD_CATEGORIES = Object.freeze({
+  CAMPAIGN: "campaign",
+  TYPING: "typing",
+  ENDLESS: "endless",
+  DAILY: "daily",
 });
 
 const VALID_BOARDS = Object.freeze(Object.values(LEADERBOARD_BOARDS));
+const VALID_CATEGORIES = Object.freeze(Object.values(LEADERBOARD_CATEGORIES));
 const CACHE_TTL_MS = 30000;
+
+export function getLeaderboardSelection(boardKey) {
+  if (boardKey === LEADERBOARD_BOARDS.TYPING_15) {
+    return { selectedCategory: LEADERBOARD_CATEGORIES.TYPING, selectedTypingDuration: 15 };
+  }
+  if (boardKey === LEADERBOARD_BOARDS.TYPING_60) {
+    return { selectedCategory: LEADERBOARD_CATEGORIES.TYPING, selectedTypingDuration: 60 };
+  }
+  if (boardKey === LEADERBOARD_BOARDS.ENDLESS) {
+    return { selectedCategory: LEADERBOARD_CATEGORIES.ENDLESS, selectedTypingDuration: 60 };
+  }
+  if (boardKey === LEADERBOARD_BOARDS.DAILY) {
+    return { selectedCategory: LEADERBOARD_CATEGORIES.DAILY, selectedTypingDuration: 60 };
+  }
+  return { selectedCategory: LEADERBOARD_CATEGORIES.CAMPAIGN, selectedTypingDuration: 60 };
+}
+
+export function getBoardKeyForSelection(category, typingDuration = 60) {
+  if (category === LEADERBOARD_CATEGORIES.TYPING) {
+    return typingDuration === 15 ? LEADERBOARD_BOARDS.TYPING_15 : LEADERBOARD_BOARDS.TYPING_60;
+  }
+  if (category === LEADERBOARD_CATEGORIES.ENDLESS) return LEADERBOARD_BOARDS.ENDLESS;
+  if (category === LEADERBOARD_CATEGORIES.DAILY) return LEADERBOARD_BOARDS.DAILY;
+  return LEADERBOARD_BOARDS.CAMPAIGN;
+}
 
 const safeEntry = (entry) => Object.freeze({
   rank: Math.max(1, Number(entry?.rank) || 1),
   username: String(entry?.username || ""),
+  level: entry?.level == null ? null : Math.max(1, Number(entry.level) || 1),
+  grade: entry?.grade == null ? null : String(entry.grade),
+  wpm: entry?.wpm == null ? null : Math.max(0, Number(entry.wpm) || 0),
+  rawWpm: entry?.rawWpm == null ? null : Math.max(0, Number(entry.rawWpm) || 0),
   stage: entry?.stage == null ? null : Math.max(0, Number(entry.stage) || 0),
-  score: Math.max(0, Number(entry?.score) || 0),
+  score: entry?.score == null ? null : Math.max(0, Number(entry.score) || 0),
   accuracy: Math.max(0, Math.min(100, Number(entry?.accuracy) || 0)),
   durationMs: entry?.durationMs == null ? null : Math.max(0, Number(entry.durationMs) || 0),
   completed: entry?.completed === true,
@@ -27,26 +67,44 @@ const safeViewer = (viewer) => viewer?.entry ? Object.freeze({
 
 const makeState = ({
   status = "idle",
-  selectedBoard = LEADERBOARD_BOARDS.DAILY,
+  selectedCategory = LEADERBOARD_CATEGORIES.CAMPAIGN,
+  selectedTypingDuration = 60,
+  selectedBoardKey = null,
+  selectedBoard = null,
   board = null,
   entries = [],
   viewer = null,
   error = null,
   lastUpdatedAt = null,
-} = {}) => Object.freeze({
-  status,
-  selectedBoard: VALID_BOARDS.includes(selectedBoard) ? selectedBoard : LEADERBOARD_BOARDS.DAILY,
-  board: board ? Object.freeze({
-    boardKey: String(board.boardKey || selectedBoard),
-    displayName: String(board.displayName || ""),
-    rulesVersion: Math.max(1, Number(board.rulesVersion) || 1),
-    challengeDate: board.challengeDate ?? null,
-  }) : null,
-  entries: Object.freeze((Array.isArray(entries) ? entries : []).slice(0, 100).map(safeEntry)),
-  viewer: safeViewer(viewer),
-  error: error ? Object.freeze({ message: "Unable to load global rankings." }) : null,
-  lastUpdatedAt: Number.isFinite(Number(lastUpdatedAt)) ? Number(lastUpdatedAt) : null,
-});
+} = {}) => {
+  const category = VALID_CATEGORIES.includes(selectedCategory)
+    ? selectedCategory
+    : getLeaderboardSelection(selectedBoardKey || selectedBoard).selectedCategory;
+  const typingDuration = selectedTypingDuration === 15 ? 15 : 60;
+  const inferredBoard = selectedBoardKey || selectedBoard || getBoardKeyForSelection(category, typingDuration);
+  const boardKey = VALID_BOARDS.includes(inferredBoard)
+    ? inferredBoard
+    : getBoardKeyForSelection(category, typingDuration);
+  const selection = getLeaderboardSelection(boardKey);
+  return Object.freeze({
+    status,
+    selectedCategory: selection.selectedCategory,
+    selectedTypingDuration: selection.selectedTypingDuration,
+    selectedBoardKey: boardKey,
+    // Retained as a read-only compatibility alias for existing integrations.
+    selectedBoard: boardKey,
+    board: board ? Object.freeze({
+      boardKey: String(board.boardKey || boardKey),
+      displayName: String(board.displayName || ""),
+      rulesVersion: Math.max(1, Number(board.rulesVersion) || 1),
+      challengeDate: board.challengeDate ?? null,
+    }) : null,
+    entries: Object.freeze((Array.isArray(entries) ? entries : []).slice(0, 100).map(safeEntry)),
+    viewer: safeViewer(viewer),
+    error: error ? Object.freeze({ message: "Unable to load global rankings." }) : null,
+    lastUpdatedAt: Number.isFinite(Number(lastUpdatedAt)) ? Number(lastUpdatedAt) : null,
+  });
+};
 
 async function functionErrorPayload(error) {
   try {
@@ -74,7 +132,6 @@ export function createLeaderboardService({
     for (const listener of listeners) listener(state);
     return state;
   };
-
   const requestKey = (boardKey) => boardKey === LEADERBOARD_BOARDS.DAILY
     ? `${boardKey}:${getDateKey()}`
     : boardKey;
@@ -83,23 +140,18 @@ export function createLeaderboardService({
     if (!VALID_BOARDS.includes(boardKey)) return Promise.resolve(state);
     const key = requestKey(boardKey);
     if (inFlight.has(key)) return inFlight.get(key);
+    const selection = getLeaderboardSelection(boardKey);
     const cached = cache.get(key);
     if (!force && cached && now() - cached.cachedAt < CACHE_TTL_MS) {
-      return Promise.resolve(publish({ ...cached.state, selectedBoard: boardKey }));
+      return Promise.resolve(publish({ ...cached.state, ...selection, selectedBoardKey: boardKey }));
     }
     const client = getClient();
     if (!isOnline() || !client?.functions?.invoke) {
-      return Promise.resolve(publish({ status: "offline", selectedBoard: boardKey }));
+      return Promise.resolve(publish({ status: "offline", ...selection, selectedBoardKey: boardKey }));
     }
-
     const requestId = ++requestSequence;
-    const refreshing = state.selectedBoard === boardKey && state.entries.length > 0;
-    publish({
-      ...state,
-      status: refreshing ? "refreshing" : "loading",
-      selectedBoard: boardKey,
-      error: null,
-    });
+    const refreshing = state.selectedBoardKey === boardKey && state.entries.length > 0;
+    publish({ ...state, status: refreshing ? "refreshing" : "loading", ...selection, selectedBoardKey: boardKey, error: null });
     const body = boardKey === LEADERBOARD_BOARDS.DAILY
       ? { boardKey, challengeDate: getDateKey() }
       : { boardKey };
@@ -108,13 +160,12 @@ export function createLeaderboardService({
         const { data, error } = await client.functions.invoke("get-leaderboard", { body });
         let payload = data;
         if (!payload?.ok && error) payload = await functionErrorPayload(error);
-        if (requestId !== requestSequence || state.selectedBoard !== boardKey) return state;
-        if (!payload?.ok) {
-          return publish({ status: "error", selectedBoard: boardKey, error: true });
-        }
+        if (requestId !== requestSequence || state.selectedBoardKey !== boardKey) return state;
+        if (!payload?.ok) return publish({ status: "error", ...selection, selectedBoardKey: boardKey, error: true });
         const next = makeState({
           status: payload.data?.entries?.length ? "ready" : "empty",
-          selectedBoard: boardKey,
+          ...selection,
+          selectedBoardKey: boardKey,
           board: payload.data?.board,
           entries: payload.data?.entries,
           viewer: payload.data?.viewer,
@@ -123,8 +174,8 @@ export function createLeaderboardService({
         cache.set(key, { state: next, cachedAt: now() });
         return publish(next);
       } catch {
-        if (requestId !== requestSequence || state.selectedBoard !== boardKey) return state;
-        return publish({ status: isOnline() ? "error" : "offline", selectedBoard: boardKey, error: true });
+        if (requestId !== requestSequence || state.selectedBoardKey !== boardKey) return state;
+        return publish({ status: isOnline() ? "error" : "offline", ...selection, selectedBoardKey: boardKey, error: true });
       } finally {
         inFlight.delete(key);
       }
@@ -133,10 +184,17 @@ export function createLeaderboardService({
     return promise;
   };
 
+  const selectBoard = (boardKey) => {
+    if (!VALID_BOARDS.includes(boardKey)) return Promise.resolve(state);
+    if (state.selectedBoardKey === boardKey && ["loading", "refreshing", "ready", "empty"].includes(state.status)) {
+      return inFlight.get(requestKey(boardKey)) || Promise.resolve(state);
+    }
+    requestSequence += 1;
+    return load(boardKey);
+  };
+
   return Object.freeze({
-    initializeLeaderboards(boardKey = LEADERBOARD_BOARDS.DAILY) {
-      return load(boardKey);
-    },
+    initializeLeaderboards(boardKey = LEADERBOARD_BOARDS.CAMPAIGN) { return load(boardKey); },
     getLeaderboardState: () => state,
     subscribeToLeaderboards(listener) {
       if (typeof listener !== "function") return () => {};
@@ -144,18 +202,16 @@ export function createLeaderboardService({
       listener(state);
       return () => listeners.delete(listener);
     },
-    selectLeaderboardBoard(boardKey) {
-      if (!VALID_BOARDS.includes(boardKey)) return Promise.resolve(state);
-      if (
-        state.selectedBoard === boardKey &&
-        ["loading", "refreshing", "ready", "empty"].includes(state.status)
-      ) return inFlight.get(requestKey(boardKey)) || Promise.resolve(state);
-      requestSequence += 1;
-      return load(boardKey);
+    selectLeaderboardBoard: selectBoard,
+    selectLeaderboardCategory(category) {
+      if (!VALID_CATEGORIES.includes(category)) return Promise.resolve(state);
+      return selectBoard(getBoardKeyForSelection(category, 60));
     },
-    refreshLeaderboard() {
-      return load(state.selectedBoard, { force: true });
+    selectTypingDuration(duration) {
+      if (![15, 60].includes(duration)) return Promise.resolve(state);
+      return selectBoard(getBoardKeyForSelection(LEADERBOARD_CATEGORIES.TYPING, duration));
     },
+    refreshLeaderboard() { return load(state.selectedBoardKey, { force: true }); },
     invalidateLeaderboardBoard(boardKey) {
       if (!VALID_BOARDS.includes(boardKey)) return false;
       cache.delete(requestKey(boardKey));
@@ -171,11 +227,12 @@ export function createLeaderboardService({
 }
 
 const leaderboardService = createLeaderboardService();
-
 export const initializeLeaderboards = leaderboardService.initializeLeaderboards;
 export const getLeaderboardState = leaderboardService.getLeaderboardState;
 export const subscribeToLeaderboards = leaderboardService.subscribeToLeaderboards;
 export const selectLeaderboardBoard = leaderboardService.selectLeaderboardBoard;
+export const selectLeaderboardCategory = leaderboardService.selectLeaderboardCategory;
+export const selectTypingDuration = leaderboardService.selectTypingDuration;
 export const refreshLeaderboard = leaderboardService.refreshLeaderboard;
 export const invalidateLeaderboardBoard = leaderboardService.invalidateLeaderboardBoard;
 export const resetLeaderboardState = leaderboardService.resetLeaderboardState;

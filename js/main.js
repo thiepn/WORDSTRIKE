@@ -159,10 +159,13 @@ import { isTextEntryTarget } from "./inputSafety.js";
 import {
   getLeaderboardState,
   initializeLeaderboards,
+  LEADERBOARD_CATEGORIES,
   LEADERBOARD_BOARDS,
   refreshLeaderboard,
   resetLeaderboardState,
   selectLeaderboardBoard,
+  selectLeaderboardCategory,
+  selectTypingDuration,
   subscribeToLeaderboards,
 } from "./leaderboardService.js";
 import { renderLeaderboards } from "./leaderboardUi.js";
@@ -175,10 +178,17 @@ import {
   submitCurrentResult,
   subscribeToSubmissions,
 } from "./leaderboardSubmissionService.js";
+import {
+  consumeLeaderboardReturnState,
+  leaderboardReturnStateForBoard,
+  saveLeaderboardReturnState,
+} from "./leaderboardReturnState.js";
 
 const titleActions = ["modes", "leaderboards", "profile", "settings"];
 const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
 let lastAuthUiKey = "";
+let bootstrapReady = false;
+let pendingLeaderboardReturn = null;
 
 function stopActiveLoops() {
   stopGameLoop();
@@ -249,7 +259,18 @@ function openLeaderboardBoard(boardKey) {
 }
 
 function openLeaderboards() {
-  openLeaderboardBoard(LEADERBOARD_BOARDS.DAILY);
+  openLeaderboardBoard(LEADERBOARD_BOARDS.CAMPAIGN);
+}
+
+function openLeaderboardReturn(returnState) {
+  const boardKey = returnState?.selectedCategory === LEADERBOARD_CATEGORIES.TYPING
+    ? returnState.typingDuration === 15 ? LEADERBOARD_BOARDS.TYPING_15 : LEADERBOARD_BOARDS.TYPING_60
+    : returnState?.selectedCategory === LEADERBOARD_CATEGORIES.ENDLESS
+      ? LEADERBOARD_BOARDS.ENDLESS
+      : returnState?.selectedCategory === LEADERBOARD_CATEGORIES.DAILY
+        ? LEADERBOARD_BOARDS.DAILY
+        : LEADERBOARD_BOARDS.CAMPAIGN;
+  openLeaderboardBoard(boardKey);
 }
 
 function openModeSelect() {
@@ -300,6 +321,7 @@ function startLevel(levelNumber, source = "level-select") {
   const legitimatelyUnlocked = safeLevel <= appState.save.currentFurthestLevel;
   if (!canLaunchLevel(appState.devMode, appState.save.currentFurthestLevel, safeLevel)) return;
   cleanupCampaignAttempt(source === "retry" ? "retry" : "new-session");
+  appState.campaignResult = null;
   appState.currentLevel = safeLevel;
   if (safeLevel % 10 === 0) {
     startBossLevel(safeLevel, legitimatelyUnlocked, source);
@@ -348,6 +370,7 @@ function finishSpeedTest(state, result) {
   appState.speedTestRecordFlags = { ...state.recordFlags };
   appState.speedTestResultsIndex = 1;
   appState.speedTestResultsReadyAt = currentTimeMs() + 200;
+  prepareResultSubmission("typing", result, getAuthState(), getLeaderboardProfileState());
   changeScreen(Screens.SPEED_TEST_RESULTS);
   renderCurrentScreen();
 }
@@ -548,10 +571,16 @@ function finishLevel(game, success) {
     phrasesCompleted: isBoss ? game.phrasesCompleted : 0,
     phraseCount: isBoss ? game.phrases.length : 0,
   };
-  finalizeCampaignSession(game, appState.results, success);
+  appState.campaignResult = finalizeCampaignSession(game, appState.results, success);
   if (success && game.persistResult) {
     updateLevelResult(appState.save, game.levelNumber, appState.results);
   }
+  prepareResultSubmission(
+    "campaign",
+    appState.campaignResult,
+    getAuthState(),
+    getLeaderboardProfileState(),
+  );
   appState.resultsIndex = getDefaultResultsIndex(appState.results);
   appState.resultsReadyAt = currentTimeMs() + 200;
   changeScreen(Screens.RESULTS);
@@ -808,6 +837,7 @@ function renderCurrentScreen() {
           renderCurrentScreen();
         },
       },
+      getSubmissionState(),
     );
   } else if (appState.screen === Screens.LEVEL_SELECT) {
     renderLevelSelect(
@@ -830,7 +860,7 @@ function renderCurrentScreen() {
       levels: openLevelSelect,
       title: openTitle,
       select: (index) => { appState.resultsIndex = index; },
-    });
+    }, getSubmissionState());
   } else if (appState.screen === Screens.SETTINGS) {
     renderSettings(appState.save, appState.settingsIndex, {
       toggle: toggleSetting,
@@ -879,7 +909,11 @@ function handleAppClick(event) {
   const root = document.querySelector("#app");
   const readyAt = appState.screen === Screens.ENDLESS_RESULTS
     ? appState.endlessResultsReadyAt
-    : appState.dailyResultsReadyAt;
+    : appState.screen === Screens.DAILY_RESULTS
+      ? appState.dailyResultsReadyAt
+      : appState.screen === Screens.SPEED_TEST_RESULTS
+        ? appState.speedTestResultsReadyAt
+        : appState.resultsReadyAt;
   const action = resolveAppClickAction(event, {
     root,
     screen: appState.screen,
@@ -888,11 +922,16 @@ function handleAppClick(event) {
   });
   if (!action) return;
   event.preventDefault();
+  const startResultGoogleSignIn = (boardKey) => {
+    saveLeaderboardReturnState(leaderboardReturnStateForBoard(boardKey));
+    void signInWithGoogle();
+  };
   if (appState.screen === Screens.ENDLESS_RESULTS) {
     if (action === "submit-global-score") void submitCurrentResult();
     else if (action === "retry-global-score") void retryCurrentSubmission();
     else if (action === "view-endless-leaderboard") openLeaderboardBoard(LEADERBOARD_BOARDS.ENDLESS);
     else if (action === "open-global-profile") openGlobalProfile();
+    else if (action === "result-google-sign-in") startResultGoogleSignIn(LEADERBOARD_BOARDS.ENDLESS);
     else if (action === "retry") startEndless("retry");
     else if (action === "modes") openModeSelect();
     else if (action === "title") openTitle();
@@ -901,9 +940,26 @@ function handleAppClick(event) {
     else if (action === "retry-global-score") void retryCurrentSubmission();
     else if (action === "view-daily-leaderboard") openLeaderboardBoard(LEADERBOARD_BOARDS.DAILY);
     else if (action === "open-global-profile") openGlobalProfile();
+    else if (action === "result-google-sign-in") startResultGoogleSignIn(LEADERBOARD_BOARDS.DAILY);
     else if (action === "retry") startDaily("retry", appState.dailyResult.modeData.dateKey);
     else if (action === "modes") openModeSelect();
     else if (action === "title") openTitle();
+  } else if (appState.screen === Screens.SPEED_TEST_RESULTS) {
+    const boardKey = appState.speedTestResult?.modeData?.durationSeconds === 15
+      ? LEADERBOARD_BOARDS.TYPING_15
+      : LEADERBOARD_BOARDS.TYPING_60;
+    if (action === "submit-global-score") void submitCurrentResult();
+    else if (action === "retry-global-score") void retryCurrentSubmission();
+    else if (action === "result-google-sign-in") startResultGoogleSignIn(boardKey);
+    else if (action === "open-global-profile") openGlobalProfile();
+    else if (action === "view-typing-15-leaderboard") openLeaderboardBoard(LEADERBOARD_BOARDS.TYPING_15);
+    else if (action === "view-typing-60-leaderboard") openLeaderboardBoard(LEADERBOARD_BOARDS.TYPING_60);
+  } else if (appState.screen === Screens.RESULTS) {
+    if (action === "submit-global-score") void submitCurrentResult();
+    else if (action === "retry-global-score") void retryCurrentSubmission();
+    else if (action === "result-google-sign-in") startResultGoogleSignIn(LEADERBOARD_BOARDS.CAMPAIGN);
+    else if (action === "open-global-profile") openGlobalProfile();
+    else if (action === "view-campaign-leaderboard") openLeaderboardBoard(LEADERBOARD_BOARDS.CAMPAIGN);
   } else if (appState.screen === Screens.PROFILE_STATS) {
     if (action === "auth-google-sign-in") void signInWithGoogle();
     else if (action === "auth-sign-out") void signOut();
@@ -918,12 +974,30 @@ function handleAppClick(event) {
   } else if (appState.screen === Screens.TITLE && action === "open-leaderboards") {
     openLeaderboards();
   } else if (appState.screen === Screens.LEADERBOARDS) {
-    if (action === "leaderboard-select-daily") {
+    if (action === "leaderboard-select-campaign") {
+      void selectLeaderboardCategory(LEADERBOARD_CATEGORIES.CAMPAIGN);
+    } else if (action === "leaderboard-select-typing") {
+      void selectLeaderboardCategory(LEADERBOARD_CATEGORIES.TYPING);
+    } else if (action === "leaderboard-select-daily") {
       void selectLeaderboardBoard(LEADERBOARD_BOARDS.DAILY);
     } else if (action === "leaderboard-select-endless") {
       void selectLeaderboardBoard(LEADERBOARD_BOARDS.ENDLESS);
     } else if (action === "leaderboard-refresh") {
       void refreshLeaderboard();
+    } else if (action === "leaderboard-typing-select-60") {
+      void selectTypingDuration(60);
+    } else if (action === "leaderboard-typing-select-15") {
+      void selectTypingDuration(15);
+    } else if (action === "leaderboard-google-sign-in") {
+      const state = getLeaderboardState();
+      saveLeaderboardReturnState({
+        screen: "leaderboards",
+        selectedCategory: state.selectedCategory,
+        typingDuration: state.selectedTypingDuration,
+      });
+      void signInWithGoogle();
+    } else if (action === "leaderboard-open-username") {
+      openGlobalProfile();
     } else if (action === "leaderboard-main-menu") {
       openTitle();
     }
@@ -1229,13 +1303,25 @@ async function bootstrap() {
     const authUiChanged = authUiKey !== lastAuthUiKey;
     lastAuthUiKey = authUiKey;
     if (authUiChanged) {
-      const selectedBoard = getLeaderboardState().selectedBoard;
+      const selectedBoard = getLeaderboardState().selectedBoardKey;
       resetLeaderboardState();
       if (appState.screen === Screens.LEADERBOARDS) void initializeLeaderboards(selectedBoard);
     }
-    if (authState.status === "signed-in") void initializeLeaderboardProfile(authState.user);
+    if (authState.status === "signed-in") {
+      void initializeLeaderboardProfile(authState.user);
+      if (authUiChanged) {
+        const returnState = consumeLeaderboardReturnState();
+        if (returnState) {
+          pendingLeaderboardReturn = returnState;
+          if (bootstrapReady) {
+            openLeaderboardReturn(returnState);
+            pendingLeaderboardReturn = null;
+          }
+        }
+      }
+    }
     else resetLeaderboardProfile();
-    if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS].includes(appState.screen)) {
+    if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS, Screens.SPEED_TEST_RESULTS, Screens.RESULTS].includes(appState.screen)) {
       refreshSubmissionEligibility(authState, getLeaderboardProfileState());
     }
     if (
@@ -1251,12 +1337,12 @@ async function bootstrap() {
       updateProfileAuthSection(getAuthState(), profileState);
     }
     if (appState.screen === Screens.LEADERBOARDS) renderCurrentScreen();
-    if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS].includes(appState.screen)) {
+    if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS, Screens.SPEED_TEST_RESULTS, Screens.RESULTS].includes(appState.screen)) {
       refreshSubmissionEligibility(getAuthState(), profileState);
     }
   });
   subscribeToSubmissions((submissionState) => {
-    if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS].includes(appState.screen)) {
+    if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS, Screens.SPEED_TEST_RESULTS, Screens.RESULTS].includes(appState.screen)) {
       updateGlobalSubmissionRegion(submissionState);
     }
   });
@@ -1292,6 +1378,7 @@ async function bootstrap() {
   const appRoot = document.querySelector("#app");
   attachAppClickListener(appRoot, handleAppClick);
   appRoot?.addEventListener("input", handleAppInput);
+  bootstrapReady = true;
   if (
     appState.devMode &&
     search.get("mode") === MODE_IDS.SPEED_TEST
@@ -1304,6 +1391,10 @@ async function bootstrap() {
     openEndlessReady("developer");
   } else if (appState.devMode && search.get("mode") === MODE_IDS.DAILY) {
     openDailyReady("developer");
+  } else if (pendingLeaderboardReturn) {
+    const returnState = pendingLeaderboardReturn;
+    pendingLeaderboardReturn = null;
+    openLeaderboardReturn(returnState);
   } else {
     renderCurrentScreen();
   }
