@@ -49,37 +49,13 @@ export function buildSubmissionPayload(mode, result) {
   const data = result?.modeData;
   if (!boardKey || !result || !data || !validSessionId(result.sessionId)) return null;
   if (mode === "daily") {
+    const normalizedResult = buildDailySubmissionResult(result);
+    if (!normalizedResult) return null;
     const payload = {
       boardKey,
       sessionId: result.sessionId,
       clientVersion: CURRENT_GAME_VERSION,
-      result: {
-        score: result.score,
-        accuracy: result.accuracy,
-        // Daily's rounded time bonus keeps the same value when fractional frame time is ceiled.
-        durationMs: Math.ceil(result.activeDurationMs),
-        wordsCompleted: data.wordsCompleted,
-        completed: result.success === true,
-        failureReason: result.failureReason,
-        integrityRemaining: data.integrityRemaining,
-        challengeDate: data.dateKey,
-        challengeVersion: data.challengeVersion,
-        wordsResolved: data.wordsResolved,
-        wordsSpawned: data.wordsSpawned,
-        totalWords: data.totalWords,
-        dateOverride: data.dateOverride === true,
-        recordEligible: data.recordEligible === true,
-        developerMode: result.developerMode === true,
-        sessionSource: result.sessionSource,
-        wordPoints: data.wordPoints,
-        completionBonus: data.completionBonus,
-        integrityBonus: data.integrityBonus,
-        accuracyBonus: data.accuracyBonus,
-        timeBonus: data.timeBonus,
-        coreHits: data.coreHits,
-        coreBreaches: data.coreBreaches,
-        finalWave: data.finalWave,
-      },
+      result: normalizedResult,
     };
     return hasCompleteMetrics(payload) ? payload : null;
   }
@@ -110,33 +86,13 @@ export function buildSubmissionPayload(mode, result) {
     return hasCompleteMetrics(payload) ? payload : null;
   }
   if (mode === "typing") {
+    const normalizedResult = buildTypingSubmissionResult(result, data.durationSeconds);
+    if (!normalizedResult) return null;
     const payload = {
       boardKey,
       sessionId: result.sessionId,
       clientVersion: CURRENT_GAME_VERSION,
-      result: {
-        durationSeconds: data.durationSeconds,
-        configId: data.configId,
-        wordSetId: data.wordSetId,
-        wordSetVersion: data.wordSetVersion,
-        metricVersion: data.metricVersion,
-        wpm: result.wpm,
-        rawWpm: data.rawWpm,
-        accuracy: result.accuracy,
-        durationMs: Math.round(result.activeDurationMs),
-        correctTestCharacters: data.correctTestCharacters,
-        rawTestCharacters: data.rawTestCharacters,
-        correctKeystrokes: data.correctKeystrokes,
-        incorrectKeystrokes: data.incorrectKeystrokes,
-        missedCharacters: data.missedCharacters,
-        wordsCompleted: data.completedWordCount,
-        exactWords: data.exactWords,
-        incorrectWords: data.incorrectWords,
-        completed: result.success === true,
-        recordEligible: data.recordEligible === true,
-        developerMode: result.developerMode === true,
-        sessionSource: result.sessionSource,
-      },
+      result: normalizedResult,
     };
     return hasCompleteMetrics(payload) ? payload : null;
   }
@@ -169,6 +125,70 @@ export function buildSubmissionPayload(mode, result) {
     },
   };
   return hasCompleteMetrics(payload) ? payload : null;
+}
+
+export function buildDailySubmissionResult(result) {
+  const data = result?.modeData;
+  const resolved = Number(data?.wordsResolved);
+  const missed = Number(result?.words?.missed);
+  const wordsCompleted = resolved - missed;
+  const normalized = {
+    score: result?.score,
+    accuracy: result?.accuracy,
+    // Daily's rounded time bonus keeps the same value when fractional frame time is ceiled.
+    durationMs: Math.ceil(result?.activeDurationMs),
+    wordsCompleted,
+    completed: result?.success === true,
+    failureReason: result?.failureReason ?? null,
+    integrityRemaining: data?.integrityRemaining,
+    challengeDate: data?.dateKey,
+    challengeVersion: data?.challengeVersion,
+    wordsResolved: resolved,
+    wordsSpawned: data?.wordsSpawned,
+    totalWords: data?.totalWords,
+    dateOverride: data?.dateOverride === true,
+    recordEligible: data?.recordEligible === true,
+    developerMode: result?.developerMode === true,
+    sessionSource: result?.sessionSource,
+    wordPoints: data?.wordPoints,
+    completionBonus: data?.completionBonus,
+    integrityBonus: data?.integrityBonus,
+    accuracyBonus: data?.accuracyBonus,
+    timeBonus: data?.timeBonus,
+    coreHits: data?.coreHits,
+    coreBreaches: data?.coreBreaches,
+    finalWave: data?.finalWave,
+  };
+  return hasCompleteMetrics(normalized) ? normalized : null;
+}
+
+export function buildTypingSubmissionResult(result, durationSeconds) {
+  const data = result?.modeData;
+  if (![15, 60].includes(durationSeconds)) return null;
+  const normalized = {
+    durationSeconds,
+    configId: data?.configId,
+    wordSetId: data?.wordSetId,
+    wordSetVersion: data?.wordSetVersion,
+    metricVersion: data?.metricVersion,
+    wpm: result?.wpm,
+    rawWpm: data?.rawWpm,
+    accuracy: result?.accuracy,
+    durationMs: Math.round(result?.activeDurationMs),
+    correctTestCharacters: data?.correctTestCharacters,
+    rawTestCharacters: data?.rawTestCharacters,
+    correctKeystrokes: data?.correctKeystrokes,
+    incorrectKeystrokes: data?.incorrectKeystrokes,
+    missedCharacters: data?.missedCharacters,
+    wordsCompleted: data?.completedWordCount,
+    exactWords: data?.exactWords,
+    incorrectWords: data?.incorrectWords,
+    completed: result?.success === true,
+    recordEligible: data?.recordEligible === true,
+    developerMode: result?.developerMode === true,
+    sessionSource: result?.sessionSource,
+  };
+  return hasCompleteMetrics(normalized) ? normalized : null;
 }
 
 async function readFunctionError(error) {

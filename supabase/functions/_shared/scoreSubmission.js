@@ -15,8 +15,8 @@ const NORMAL_SOURCES = Object.freeze({
   [DAILY_BOARD_KEY]: new Set(["daily-ready", "retry"]),
   [ENDLESS_BOARD_KEY]: new Set(["mode-select", "retry", "restart"]),
   [CAMPAIGN_BOARD_KEY]: new Set(["level-select", "retry", "next-level"]),
-  [TYPING_60_BOARD_KEY]: new Set(["mode-select", "retry", "change-test"]),
-  [TYPING_15_BOARD_KEY]: new Set(["mode-select", "retry", "change-test"]),
+  [TYPING_60_BOARD_KEY]: new Set(["mode-select", "retry", "change-test", "tab-reset", "quit-test"]),
+  [TYPING_15_BOARD_KEY]: new Set(["mode-select", "retry", "change-test", "tab-reset", "quit-test"]),
 });
 const DAILY_FIELDS = new Set([
   "score", "accuracy", "durationMs", "wordsCompleted", "completed", "failureReason",
@@ -92,10 +92,10 @@ function validateCommon(body) {
 }
 
 function validateEligibility(result, boardKey) {
-  if (
-    result.developerMode !== false || result.recordEligible !== true ||
-    !NORMAL_SOURCES[boardKey].has(result.sessionSource)
-  ) return failure("INELIGIBLE_RESULT");
+  if (result.developerMode === true) return failure("DEVELOPER_RESULT");
+  if (result.developerMode !== false) return failure("INVALID_RESULT");
+  if (result.recordEligible !== true) return failure("RECORD_NOT_ELIGIBLE");
+  if (!NORMAL_SOURCES[boardKey].has(result.sessionSource)) return failure("INVALID_SESSION_SOURCE");
   return null;
 }
 
@@ -109,22 +109,29 @@ function validateDaily(body, now) {
   if (result.challengeDate !== canonicalDate(now) || result.challengeVersion !== 1) {
     return failure("CHALLENGE_MISMATCH");
   }
+  if (result.dateOverride !== false) return failure("RECORD_NOT_ELIGIBLE");
   if (
-    result.totalWords !== 60 || result.dateOverride !== false ||
-    !integer(result.score) || !finite(result.accuracy, 0, 100) ||
-    !integer(result.durationMs, 1, 21600000) ||
+    result.totalWords !== 60 ||
     !integer(result.wordsCompleted, 0, 60) || !integer(result.wordsResolved, 0, 60) ||
     !integer(result.wordsSpawned, 0, 60) || result.wordsCompleted > result.wordsResolved ||
     result.wordsResolved > result.wordsSpawned ||
+    !integer(result.coreBreaches, 0, 60) ||
+    result.wordsCompleted + result.coreBreaches !== result.wordsResolved
+  ) return failure("INVALID_WORD_COUNTERS");
+  if (
+    typeof result.completed !== "boolean" ||
+    (result.completed && (result.failureReason !== null || result.wordsResolved !== 60 || result.integrityRemaining < 1)) ||
+    (!result.completed && result.failureReason !== "core-destroyed")
+  ) return failure("INVALID_FAILURE_STATE");
+  if (
+    !integer(result.score) || !finite(result.accuracy, 0, 100) ||
+    !integer(result.durationMs, 1, 21600000) ||
     !integer(result.integrityRemaining, 0, 3) ||
     !integer(result.wordPoints) || !integer(result.completionBonus) ||
     !integer(result.integrityBonus) || !integer(result.accuracyBonus) ||
     !integer(result.timeBonus) || !integer(result.coreHits, 0, 3) ||
-    !integer(result.coreBreaches, result.coreHits, 60) || !integer(result.finalWave, 1, 3) ||
-    result.coreHits !== 3 - result.integrityRemaining ||
-    typeof result.completed !== "boolean" ||
-    (result.completed && (result.failureReason !== null || result.wordsResolved !== 60 || result.integrityRemaining < 1)) ||
-    (!result.completed && result.failureReason !== "core-destroyed")
+    result.coreBreaches < result.coreHits || !integer(result.finalWave, 1, 3) ||
+    result.coreHits !== 3 - result.integrityRemaining
   ) return failure("INVALID_RESULT");
 
   const completionBonus = result.completed ? 10000 : 0;
@@ -179,9 +186,11 @@ function validateEndless(body) {
   }
   const ineligible = validateEligibility(result, body.boardKey);
   if (ineligible) return ineligible;
+  if (result.completed !== false || result.failureReason !== "core-destroyed") {
+    return failure("INVALID_FAILURE_STATE");
+  }
   if (
-    result.metricVersion !== 1 || result.startStage !== 1 || result.completed !== false ||
-    result.failureReason !== "core-destroyed" ||
+    result.metricVersion !== 1 || result.startStage !== 1 ||
     !integer(result.score) || !integer(result.stage, 1, 10000) || result.finalStage !== result.stage ||
     !finite(result.accuracy, 0, 100) || !integer(result.durationMs, 1, 86400000) ||
     !integer(result.wordsCompleted, 0, 200000) ||
@@ -251,7 +260,7 @@ function validateCampaign(body) {
   if (ineligible) return ineligible;
   const expectedVariant = result.level % 10 === 0 ? "boss" : "normal";
   if (
-    result.completed !== true || !integer(result.level, 1, 100) ||
+    !integer(result.level, 1, 100) ||
     result.variantId !== expectedVariant || !CAMPAIGN_GRADES.includes(result.grade) ||
     !finite(result.accuracy, 0, 100) || campaignGrade(result.accuracy) !== result.grade ||
     !integer(result.durationMs, 1, 21600000) ||
@@ -262,6 +271,7 @@ function validateCampaign(body) {
     !integer(result.totalKeystrokes, result.correctKeystrokes, 200000) ||
     !integer(result.missedCharacters, 0, 100000)
   ) return failure("INVALID_RESULT");
+  if (result.completed !== true) return failure("TEST_NOT_COMPLETED");
   const denominator = result.totalKeystrokes + result.missedCharacters;
   const expectedAccuracy = denominator === 0
     ? 100
@@ -306,12 +316,12 @@ function validateTyping(body) {
   if (result.durationSeconds !== expectedDuration || result.configId !== `time-${expectedDuration}`) {
     return failure("UNSUPPORTED_TEST_DURATION");
   }
-  if (result.wordSetId !== "english-200" || result.wordSetVersion !== 1) {
-    return failure("UNSUPPORTED_WORD_SET");
-  }
+  if (result.wordSetId !== "english-200") return failure("UNSUPPORTED_WORD_SET");
+  if (result.wordSetVersion !== 1) return failure("WORD_SET_VERSION_MISMATCH");
+  if (result.completed !== true) return failure("TEST_NOT_COMPLETED");
+  if (result.durationMs !== expectedDuration * 1000) return failure("UNSUPPORTED_TEST_DURATION");
+  if (result.metricVersion !== 2) return failure("INVALID_RESULT");
   if (
-    result.metricVersion !== 2 || result.completed !== true ||
-    result.durationMs !== expectedDuration * 1000 ||
     !finite(result.wpm, 0, 1000) || !finite(result.rawWpm, 0, 2000) ||
     !finite(result.accuracy, 0, 100) ||
     !integer(result.correctTestCharacters, 0, 100000) ||
@@ -324,7 +334,7 @@ function validateTyping(body) {
     !integer(result.wordsCompleted, 0, 10000) || !integer(result.exactWords, 0, 10000) ||
     !integer(result.incorrectWords, 0, 10000) ||
     result.exactWords + result.incorrectWords !== result.wordsCompleted
-  ) return failure("INVALID_RESULT");
+  ) return failure("METRIC_MISMATCH");
   const expectedWpm = (result.correctTestCharacters / 5) / (expectedDuration / 60);
   const expectedRawWpm = (result.rawTestCharacters / 5) / (expectedDuration / 60);
   const accuracyDenominator = result.correctKeystrokes + result.incorrectKeystrokes + result.missedCharacters;
@@ -334,7 +344,7 @@ function validateTyping(body) {
   if (
     !closeEnough(result.wpm, expectedWpm) || !closeEnough(result.rawWpm, expectedRawWpm) ||
     !closeEnough(result.accuracy, expectedAccuracy)
-  ) return failure("SCORE_MISMATCH");
+  ) return failure("METRIC_MISMATCH");
   return success({
     boardKey: body.boardKey,
     sessionId: body.sessionId,

@@ -21,9 +21,9 @@ assert.equal(validateScoreSubmission(dailySubmission({ score: 24999 }), options)
 assert.equal(validateScoreSubmission(dailySubmission({ challengeDate: "2026-06-27" }), options).code, "CHALLENGE_MISMATCH");
 assert.equal(validateScoreSubmission(dailySubmission({ challengeVersion: 2 }), options).code, "CHALLENGE_MISMATCH");
 assert.equal(validateScoreSubmission(dailySubmission({ accuracy: 101 }), options).code, "INVALID_RESULT");
-assert.equal(validateScoreSubmission(dailySubmission({ wordsResolved: 58 }), options).code, "INVALID_RESULT");
-assert.equal(validateScoreSubmission(dailySubmission({ developerMode: true }), options).code, "INELIGIBLE_RESULT");
-assert.equal(validateScoreSubmission(dailySubmission({ sessionSource: "test" }), options).code, "INELIGIBLE_RESULT");
+assert.equal(validateScoreSubmission(dailySubmission({ wordsResolved: 58 }), options).code, "INVALID_WORD_COUNTERS");
+assert.equal(validateScoreSubmission(dailySubmission({ developerMode: true }), options).code, "DEVELOPER_RESULT");
+assert.equal(validateScoreSubmission(dailySubmission({ sessionSource: "test" }), options).code, "INVALID_SESSION_SOURCE");
 const extraMetric = dailySubmission();
 extraMetric.result.email = "private@example.com";
 assert.equal(validateScoreSubmission(extraMetric, options).code, "INVALID_RESULT");
@@ -34,8 +34,8 @@ assert.equal(validateScoreSubmission(endlessSubmission({ wordsCompleted: 85 }), 
 assert.equal(validateScoreSubmission(endlessSubmission({ score: 49001 }), options).code, "SCORE_MISMATCH");
 assert.equal(validateScoreSubmission(endlessSubmission({ accuracy: -1 }), options).code, "INVALID_RESULT");
 assert.equal(validateScoreSubmission(endlessSubmission({ durationMs: 0 }), options).code, "INVALID_RESULT");
-assert.equal(validateScoreSubmission(endlessSubmission({ completed: true }), options).code, "INVALID_RESULT");
-assert.equal(validateScoreSubmission(endlessSubmission({ developerMode: true }), options).code, "INELIGIBLE_RESULT");
+assert.equal(validateScoreSubmission(endlessSubmission({ completed: true }), options).code, "INVALID_FAILURE_STATE");
+assert.equal(validateScoreSubmission(endlessSubmission({ developerMode: true }), options).code, "DEVELOPER_RESULT");
 assert.equal(validateScoreSubmission({ ...endlessSubmission(), userId: "forged" }, options).code, "INVALID_REQUEST");
 assert.equal(validateScoreSubmission({ ...endlessSubmission(), boardKey: "campaign-v1" }, options).code, "INVALID_BOARD");
 
