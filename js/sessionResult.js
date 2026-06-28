@@ -55,6 +55,7 @@ export function buildSessionResult(input = {}) {
     sessionId: input.sessionId,
     modeId: input.modeId,
     variantId: nullableString(input.variantId),
+    sessionSource: nullableString(input.sessionSource),
     startedAt,
     endedAt,
     durationMs: nonNegative(input.durationMs, endedAt - startedAt),

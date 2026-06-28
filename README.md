@@ -511,18 +511,20 @@ WORDSTRIKE is designed as a **local-first** application.
 | Question                               | Answer                                        |
 | -------------------------------------- | --------------------------------------------- |
 | Is an account required?                | No                                            |
-| Is login supported?                    | No                                            |
+| Is login supported?                    | Optional Google sign-in                       |
 | Where is progress stored?              | In the current browser’s local storage        |
-| Does gameplay data leave the device?   | No                                            |
+| Does gameplay data leave the device?   | Only after explicit Daily/Endless submission  |
 | Is cloud synchronization used?         | No                                            |
 | Are analytics included?                | No analytics are implemented                  |
-| Is a backend required?                 | No                                            |
+| Is a backend required?                 | No for local play; yes for global rankings    |
 | Is the local player ID uploaded?       | No                                            |
 | Is Daily Strike fetched from a server? | No, it is generated locally from the UTC date |
-| Is a global leaderboard active?        | No                                            |
+| Is a global leaderboard supported?     | Yes, for Daily Strike and Endless             |
 
 > [!IMPORTANT]
 > The local player ID is a browser-generated identifier intended as a future integration point. It is currently stored and used only on the local device.
+
+Daily Strike and Endless results can be submitted explicitly from their result screens after Google sign-in and public-username setup. Local saving happens first and remains independent of submission success. Historical records are never uploaded automatically, and duplicate retries are safe. Campaign and Typing Test submissions are not supported. Server validation rejects obvious inconsistencies, but—as with any browser-produced score—it cannot make client gameplay fully cheat-proof.
 
 ---
 
@@ -662,7 +664,7 @@ https://thiepn.github.io/WORDSTRIKE/
 | Player Profile & Statistics          |   Implemented   |
 | Automated test suite                 |     Passing     |
 | Practice Lab                         | Not implemented |
-| Global leaderboard                   | Not implemented |
+| Global Daily/Endless leaderboard     |   Implemented   |
 | Accounts and cloud sync              | Not implemented |
 | Final visual and accessibility audit |     Pending     |
 
@@ -717,8 +719,6 @@ Documentation, final QA, deployment checks, and license decision
 ### Possible later work
 
 * Practice-specific drills
-* Global Daily Strike leaderboard
-* Global Endless leaderboard
 * Optional cloud profile synchronization
 * Backup and restore
 * Audio and presentation settings

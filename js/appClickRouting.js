@@ -18,11 +18,17 @@ const RESULT_ACTIONS = Object.freeze({
   }),
   [Screens.ENDLESS_RESULTS]: Object.freeze({
     selector: ".endless-results-screen",
-    actions: Object.freeze(["retry", "modes", "title"]),
+    actions: Object.freeze([
+      "retry", "modes", "title", "submit-global-score", "retry-global-score",
+      "view-endless-leaderboard", "open-global-profile",
+    ]),
   }),
   [Screens.DAILY_RESULTS]: Object.freeze({
     selector: ".daily-results-screen",
-    actions: Object.freeze(["retry", "modes", "title"]),
+    actions: Object.freeze([
+      "retry", "modes", "title", "submit-global-score", "retry-global-score",
+      "view-daily-leaderboard", "open-global-profile",
+    ]),
   }),
   [Screens.PROFILE_STATS]: Object.freeze({
     selector: ".global-account",

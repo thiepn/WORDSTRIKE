@@ -256,6 +256,7 @@ function buildDailyResult(game, success) {
     sessionId: session.id,
     modeId: MODE_IDS.DAILY,
     variantId: `v${game.config.challengeVersion}`,
+    sessionSource: session.source,
     startedAt: session.startedAtEpochMs ?? session.createdAtEpochMs,
     endedAt,
     durationMs: Math.max(0, endedAt - session.createdAtEpochMs),

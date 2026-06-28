@@ -1476,6 +1476,42 @@ button {
     drop-shadow(0 0 18px rgb(255 0 153 / 12%));
 }
 
+.global-submission {
+  width: min(100%, 640px);
+  margin: 18px auto;
+  padding: 14px 16px;
+  border: 1px solid rgba(95, 229, 255, 0.28);
+  background: rgba(6, 13, 20, 0.72);
+  text-align: center;
+}
+
+.global-submission p {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+}
+
+.global-submission p span,
+.global-submission p strong {
+  display: block;
+  margin-top: 5px;
+}
+
+.global-submission p strong {
+  color: var(--primary);
+}
+
+.global-submission-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.global-submission-actions .arcade-button {
+  width: auto;
+  min-width: 210px;
+}
+
 .subtitle {
   margin: 14px 0 34px;
   color: var(--muted);
