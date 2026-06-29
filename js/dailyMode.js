@@ -34,6 +34,11 @@ import { buildSessionResult } from "./sessionResult.js";
 import { calculateSessionAccuracy, calculateSessionWpm } from "./sessionMetrics.js";
 import { getDailyRecord, recordCompletedSession } from "./modeStorage.js";
 import { MODE_IDS } from "./modes.js";
+import {
+  advanceWordTrajectory,
+  createWordTrajectory,
+  projectWordTrajectory,
+} from "./gameplayWorld.js";
 
 let currentDaily = null;
 let animationFrameId = null;
@@ -115,32 +120,18 @@ function dimensions(game) {
   return { width: area.clientWidth, height: area.clientHeight };
 }
 
-function positionFor(entry, size) {
-  const margin = 32;
-  const x = margin + entry.edgeRatio * Math.max(0, size.width - margin * 2);
-  const y = margin + entry.edgeRatio * Math.max(0, size.height - margin * 2);
-  if (entry.edge === "top") return [x, margin];
-  if (entry.edge === "right") return [size.width - margin, y];
-  if (entry.edge === "bottom") return [x, size.height - margin];
-  return [margin, y];
-}
-
 export function spawnDailyWord(game, size) {
   const entry = game.plan.entries[game.spawnedWordCount];
   if (!entry || game.words.length >= entry.profile.maxSimultaneousWords) return false;
-  const [x, y] = positionFor(entry, size);
-  const dx = game.coreX - x;
-  const dy = game.coreY - y;
-  const distance = Math.max(1, Math.hypot(dx, dy));
   const speed = entry.profile.wordSpeedPxPerSec;
+  const trajectory = createWordTrajectory({ edge: entry.edge, ratio: entry.edgeRatio, speed });
   const word = {
     id: game.nextWordId++,
     text: entry.word,
     typedIndex: 0,
-    x,
-    y,
-    vx: dx / distance * speed,
-    vy: dy / distance * speed,
+    x: 0,
+    y: 0,
+    ...trajectory,
     movementSpeed: speed,
     createdAt: game.elapsedMs,
     startedAt: null,
@@ -152,6 +143,7 @@ export function spawnDailyWord(game, size) {
   };
   game.words.push(word);
   game.spawnedWordCount += 1;
+  projectWordTrajectory(word, size);
   createWordElement(word);
   if (
     game.spawnedWordCount < DAILY_TOTAL_WORDS &&
@@ -177,7 +169,6 @@ function completeIfFinished(game) {
 }
 
 export function registerDailyWordCompletion(game, word) {
-  game.completedWordCount += 1;
   game.resolvedWordCount += 1;
   game.accumulatedWordPoints = game.score;
   game.maxCombo = Math.max(game.maxCombo, game.combo);
@@ -363,11 +354,8 @@ function tick(timestamp) {
   ) {
     game.lastSpawnAtMs = game.elapsedMs;
   }
-  const seconds = deltaMs / 1000;
   for (const word of [...game.words]) {
-    word.x += word.vx * seconds;
-    word.y += word.vy * seconds;
-    if (Math.hypot(word.x - game.coreX, word.y - game.coreY) <= 42) {
+    if (advanceWordTrajectory(word, deltaMs, size)) {
       processDailyCoreBreach(game, word);
       if (game.ended) {
         notifyCompletion(game);

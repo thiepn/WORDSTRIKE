@@ -17,11 +17,11 @@ const dailyResult = {
   score: 32031,
   accuracy: 98.91304347826086,
   activeDurationMs: 102487.2,
-  words: { completed: 120, missed: 0, total: 60 },
+  words: { completed: 60, missed: 0, total: 60 },
   modeData: {
     dateKey: "2026-06-28", challengeVersion: 1, dateOverride: false,
     totalWords: 60, recordEligible: true, wordsSpawned: 60,
-    wordsResolved: 60, wordsCompleted: 120, integrityRemaining: 3,
+    wordsResolved: 60, wordsCompleted: 60, integrityRemaining: 3,
     coreHits: 0, coreBreaches: 0, finalWave: 3, wordPoints: 11900,
     completionBonus: 10000, integrityBonus: 6000, accuracyBonus: 1978,
     timeBonus: 2153,
@@ -29,6 +29,11 @@ const dailyResult = {
 };
 
 const beforeDaily = structuredClone(dailyResult);
+assert.equal(buildDailySubmissionResult({
+  ...dailyResult,
+  words: { ...dailyResult.words, completed: 120 },
+  modeData: { ...dailyResult.modeData, wordsCompleted: 120 },
+}), null);
 const normalizedDaily = buildDailySubmissionResult(dailyResult);
 assert.deepEqual(dailyResult, beforeDaily);
 assert.equal(normalizedDaily.wordsCompleted, 60);

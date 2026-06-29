@@ -53,10 +53,10 @@ assert.match(getSpeedTestDiagnosticText(state, 0), /I PRESENT=NO/);
 state.words[0] = "apple";
 assert.equal(getCurrentSession().state, SESSION_STATES.PREPARING);
 assert.equal(getSpeedTestLoopActive(), true);
-handleCurrentSpeedTestKey(event("Backspace", 10));
-handleCurrentSpeedTestKey(event(" ", 20));
+handleCurrentSpeedTestKey(event("Backspace", 999999), 10);
+handleCurrentSpeedTestKey(event(" ", -5), 20);
 assert.equal(state.activeStartedAtMs, null);
-handleCurrentSpeedTestKey(event("a", 100));
+handleCurrentSpeedTestKey(event("a", 0), 100);
 assert.equal(state.activeStartedAtMs, 100);
 assert.equal(getCurrentSession().state, SESSION_STATES.ACTIVE);
 assert.equal(state.typedBuffer, "a");
@@ -71,7 +71,7 @@ assert.equal(getCurrentSession().state, SESSION_STATES.COMPLETED);
 assert.equal(state.result.characters.correct, 1);
 assert.equal(state.result.characters.missed, 0);
 assert.ok(state.result.wpm > 0);
-assert.equal(handleCurrentSpeedTestKey(event("x", 15101)), false);
+assert.equal(handleCurrentSpeedTestKey(event("x", 1)), false);
 assert.equal(completed, 1);
 
 const firstSessionId = getCurrentSession().id;
@@ -85,7 +85,7 @@ assert.equal(state.words.length, 25);
 state.words.splice(0, state.words.length, ...Array(24).fill("cat"), "word");
 state.currentWordIndex = 24;
 for (const [index, key] of [..."word"].entries()) {
-  handleCurrentSpeedTestKey(event(key, 200 + index));
+  handleCurrentSpeedTestKey(event(key, 900000 + index), 200 + index);
 }
 assert.equal(state.ended, true);
 assert.equal(state.metrics.wordsCompleted, 1);
@@ -106,7 +106,7 @@ state = startSpeedTest({
   attemptSeed: 777,
 });
 state.words[0] = "word";
-handleCurrentSpeedTestKey(event("w", 1000));
+handleCurrentSpeedTestKey(event("w", 0), 1000);
 assert.equal(state.typedBuffer, "w");
 assert.equal(pauseSpeedTest(11000), true);
 assert.equal(state.phase, "PAUSED");
@@ -114,7 +114,7 @@ assert.equal(state.accumulatedActiveMs, 10000);
 assert.equal(state.remainingDurationMs, 50000);
 assert.equal(state.deadlineMs, null);
 assert.equal(getCurrentSession().state, SESSION_STATES.PAUSED);
-assert.equal(handleCurrentSpeedTestKey(event("o", 21000)), false);
+assert.equal(handleCurrentSpeedTestKey(event("o", -1), 21000), false);
 assert.equal(state.typedBuffer, "w");
 assert.equal(resumeSpeedTest(31000), true);
 assert.equal(state.phase, "ACTIVE");
@@ -135,7 +135,7 @@ state = startSpeedTest({
 assert.equal(state.phase, "PREPARING");
 assert.equal(state.config.configId, "time-30");
 assert.equal(getCurrentSession(), null);
-handleCurrentSpeedTestKey(event(state.words[0][0], 500));
+handleCurrentSpeedTestKey(event(state.words[0][0], 500000), 500);
 assert.equal(getCurrentSession().modeId, "speed-test");
 assert.equal(getCurrentSession().state, SESSION_STATES.ACTIVE);
 abortSession("test-reset");

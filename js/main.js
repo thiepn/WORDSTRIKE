@@ -90,6 +90,7 @@ import {
   DEFAULT_SPEED_TEST_CONFIG_ID,
   getSpeedTestConfig,
   normalizeSpeedTestConfigId,
+  moveSpeedTestConfiguration,
   parseDeveloperSpeedTestConfig,
 } from "./speedTestConfig.js";
 import {
@@ -121,6 +122,7 @@ import { copyPlayerIdToClipboard, validateDisplayName } from "./playerProfile.js
 import { getStatisticsSnapshot } from "./statistics.js";
 import {
   renderProfileStatistics,
+  renderSettingsAccountManagement,
   STATISTICS_TABS,
   updateLeaderboardUsernameFeedback,
   updateProfileAuthSection,
@@ -157,7 +159,12 @@ import {
 } from "./leaderboardProfileService.js";
 import { isTextEntryTarget } from "./inputSafety.js";
 import {
+  createMobileInputAdapter,
+  keyboardEventFromNormalized,
+} from "./mobileInputAdapter.js";
+import {
   getLeaderboardState,
+  getLeaderboardKeyboardTarget,
   initializeLeaderboards,
   LEADERBOARD_CATEGORIES,
   LEADERBOARD_BOARDS,
@@ -193,6 +200,7 @@ const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
 let lastAuthUiKey = "";
 let bootstrapReady = false;
 let pendingLeaderboardReturn = null;
+let deactivateGameplayInput = () => {};
 
 function stopActiveLoops() {
   stopGameLoop();
@@ -203,11 +211,66 @@ function stopActiveLoops() {
 }
 
 function discardActiveAttempt() {
+  deactivateGameplayInput();
+  deactivateGameplayInput = () => {};
   clearAttemptRuntime(appState.game);
   clearSpeedTestLayout();
   clearSpeedTestRuntime();
   clearEndlessRuntime();
   clearDailyRuntime();
+}
+
+function routeActiveGameplayKey(event) {
+  if (appState.screen === Screens.SPEED_TEST_RUN) {
+    const speedState = getCurrentSpeedTest();
+    if (speedState?.phase === "PREPARING" && [
+      "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End",
+    ].includes(event.key)) {
+      event.preventDefault();
+      changeSpeedTestConfig(moveSpeedTestConfiguration(appState.speedTestConfigId, event.key));
+      return true;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      pauseTypingTest();
+      return true;
+    }
+    if (event.key === "Tab") {
+      event.preventDefault();
+      resetSpeedTestAttempt("tab-reset");
+      return true;
+    }
+    handleCurrentSpeedTestKey(event, currentTimeMs());
+    return true;
+  }
+  if (appState.screen !== Screens.PLAYING) return false;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    pauseGame();
+    return true;
+  }
+  if (appState.game?.mode === "endless") {
+    handleEndlessKey(event, appState.game);
+    updateEndlessHud(appState.game);
+  } else if (appState.game?.mode === "daily") {
+    handleDailyKey(event, appState.game);
+    updateDailyHud(appState.game);
+  } else if (appState.game?.mode === "boss") {
+    handleBossKey(event, appState.game, appState.save.settings, completeBossPhrase);
+    updateBossHud(appState.game);
+  } else {
+    handleGameplayKey(event, appState.game, appState.save.settings, updateHud);
+    updateHud(appState.game);
+  }
+  return true;
+}
+
+function mountGameplayInput() {
+  deactivateGameplayInput();
+  deactivateGameplayInput = createMobileInputAdapter({
+    onInput: (input) => routeActiveGameplayKey(keyboardEventFromNormalized(input)),
+    isEnabled: () => [Screens.PLAYING, Screens.SPEED_TEST_RUN].includes(appState.screen),
+  });
 }
 
 function cleanupCampaignAttempt(reason, { clearSessionState = true } = {}) {
@@ -362,6 +425,7 @@ function startLevel(levelNumber, source = "level-select") {
     appState.devMode,
     { attemptSeed, ...attempt },
   );
+  mountGameplayInput();
   const game = startLevelLoop(
     safeLevel,
     config,
@@ -420,6 +484,7 @@ function resetSpeedTestAttempt(source = "mode-select") {
   renderSpeedTestRun(state, appState.devMode, {
     selectConfig: changeSpeedTestConfig,
   });
+  mountGameplayInput();
   updateSpeedTestRun(state, currentTimeMs());
 }
 
@@ -469,6 +534,7 @@ function startDaily(source = "daily-ready", dateKey = appState.dailyDateKey) {
   appState.dailyDateKey = challengeDateKey;
   changeScreen(Screens.PLAYING);
   renderDailyShell(game, appState.devMode);
+  mountGameplayInput();
   updateDailyHud(game);
 }
 
@@ -494,6 +560,7 @@ function startEndless(source = "mode-select") {
   }
   changeScreen(Screens.PLAYING);
   renderEndlessShell(game, appState.devMode);
+  mountGameplayInput();
   updateEndlessHud(game);
 }
 
@@ -550,6 +617,7 @@ function startBossLevel(levelNumber, legitimatelyUnlocked, source) {
     attemptSeed,
     encounter,
   });
+  mountGameplayInput();
   const game = startBossLoop(levelNumber, config, phrases, {
     onUpdate: (currentGame) => {
       syncCampaignSession(currentGame);
@@ -698,6 +766,9 @@ function beginProfileNameEdit() {
   appState.profileDraft = profile.displayName;
   appState.profileNameError = "";
   renderCurrentScreen();
+  const input = document.querySelector("#profile-name-input");
+  input?.focus?.();
+  input?.select?.();
 }
 
 function cancelProfileNameEdit() {
@@ -877,11 +948,21 @@ function renderCurrentScreen() {
       select: (index) => { appState.resultsIndex = index; },
     }, getSubmissionState());
   } else if (appState.screen === Screens.SETTINGS) {
+    const localProfile = ensureStoredPlayerProfile();
     renderSettings(appState.save, appState.settingsIndex, {
       toggle: toggleSetting,
       reset: confirmReset,
       back: backFromSettings,
-    });
+      saveName: saveProfileName,
+      cancelName: cancelProfileNameEdit,
+    }, renderSettingsAccountManagement({
+      localProfile,
+      editing: appState.profileEditing,
+      draft: appState.profileDraft,
+      nameError: appState.profileNameError,
+      authState: getAuthState(),
+      leaderboardProfileState: getLeaderboardProfileState(),
+    }));
   } else if (appState.screen === Screens.PROFILE_STATS) {
     const storage = loadModeData();
     const profile = storage.profile || ensureStoredPlayerProfile();
@@ -941,6 +1022,20 @@ function handleAppClick(event) {
     saveLeaderboardReturnState(leaderboardReturnStateForBoard(boardKey));
     void signInWithGoogle();
   };
+  const handleAccountAction = () => {
+    if (action === "auth-google-sign-in") void signInWithGoogle();
+    else if (action === "auth-sign-out") void signOut();
+    else if (action === "leaderboard-username-start-change") startUsernameChange();
+    else if (action === "leaderboard-username-cancel-change") cancelUsernameChange();
+    else {
+      const username = document.querySelector("#leaderboard-username-input")?.value ?? "";
+      if (action === "leaderboard-username-check") void checkUsernameAvailability(username);
+      else if (action === "leaderboard-username-claim") void claimUsername(username);
+      else if (action === "leaderboard-username-save-change") void changeUsername(username);
+      else return false;
+    }
+    return true;
+  };
   if (appState.screen === Screens.ENDLESS_RESULTS) {
     if (action === "submit-global-score") void submitCurrentResult();
     else if (action === "retry-global-score") void retryCurrentSubmission();
@@ -976,16 +1071,12 @@ function handleAppClick(event) {
     else if (action === "open-global-profile") openGlobalProfile();
     else if (action === "view-campaign-leaderboard") openLeaderboardBoard(LEADERBOARD_BOARDS.CAMPAIGN);
   } else if (appState.screen === Screens.PROFILE_STATS) {
-    if (action === "auth-google-sign-in") void signInWithGoogle();
-    else if (action === "auth-sign-out") void signOut();
-    else if (action === "leaderboard-username-start-change") startUsernameChange();
-    else if (action === "leaderboard-username-cancel-change") cancelUsernameChange();
-    else {
-      const username = document.querySelector("#leaderboard-username-input")?.value ?? "";
-      if (action === "leaderboard-username-check") void checkUsernameAvailability(username);
-      else if (action === "leaderboard-username-claim") void claimUsername(username);
-      else if (action === "leaderboard-username-save-change") void changeUsername(username);
-    }
+    handleAccountAction();
+  } else if (appState.screen === Screens.SETTINGS) {
+    if (action === "settings-edit-name") beginProfileNameEdit();
+    else if (action === "settings-save-name") saveProfileName();
+    else if (action === "settings-cancel-name") cancelProfileNameEdit();
+    else handleAccountAction();
   } else if (appState.screen === Screens.TITLE && action === "open-leaderboards") {
     openLeaderboards();
   } else if (appState.screen === Screens.LEADERBOARDS) {
@@ -1045,47 +1136,8 @@ function inspectDevLevel(levelNumber) {
 
 function handleGlobalKeydown(event) {
   if (isTextEntryTarget(event.target)) return;
-  if (appState.screen === Screens.SPEED_TEST_RUN) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      pauseTypingTest();
-      return;
-    }
-    if (event.key === "Tab") {
-      event.preventDefault();
-      resetSpeedTestAttempt("tab-reset");
-      return;
-    }
-    handleCurrentSpeedTestKey(event);
-    return;
-  }
-
-  if (appState.screen === Screens.PLAYING) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      pauseGame();
-      return;
-    }
-    if (appState.game?.mode === "endless") {
-      handleEndlessKey(event, appState.game);
-      updateEndlessHud(appState.game);
-    } else if (appState.game?.mode === "daily") {
-      handleDailyKey(event, appState.game);
-      updateDailyHud(appState.game);
-    } else if (appState.game?.mode === "boss") {
-      handleBossKey(event, appState.game, appState.save.settings, completeBossPhrase);
-      updateBossHud(appState.game);
-    } else {
-      handleGameplayKey(
-        event,
-        appState.game,
-        appState.save.settings,
-        updateHud,
-      );
-      updateHud(appState.game);
-    }
-    return;
-  }
+  if (["Enter", " "].includes(event.key) && event.target?.matches?.("button, a, [role=tab]")) return;
+  if (routeActiveGameplayKey(event)) return;
 
   if (appState.screen === Screens.PROFILE_STATS) {
     if (appState.profileEditing) {
@@ -1112,7 +1164,7 @@ function handleGlobalKeydown(event) {
     return;
   }
 
-  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Escape"].includes(event.key)) {
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "Enter", "Escape"].includes(event.key)) {
     event.preventDefault();
   }
 
@@ -1155,8 +1207,10 @@ function handleGlobalKeydown(event) {
 
   if (appState.screen === Screens.LEADERBOARDS) {
     if (event.key === "Escape") openTitle();
-    else if (event.key === "ArrowLeft") void selectLeaderboardBoard(LEADERBOARD_BOARDS.DAILY);
-    else if (event.key === "ArrowRight") void selectLeaderboardBoard(LEADERBOARD_BOARDS.ENDLESS);
+    else if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
+      const boardKey = getLeaderboardKeyboardTarget(getLeaderboardState(), event.key);
+      if (boardKey) void selectLeaderboardBoard(boardKey);
+    }
     else if (event.key.toLowerCase() === "r") void refreshLeaderboard();
     return;
   }
@@ -1339,16 +1393,18 @@ async function bootstrap() {
     if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS, Screens.SPEED_TEST_RESULTS, Screens.RESULTS].includes(appState.screen)) {
       void handleAutomaticSubmissionStateChange(authState, getLeaderboardProfileState());
     }
-    if (
-      authUiChanged &&
-      appState.screen === Screens.PROFILE_STATS &&
-      appState.statisticsTabIndex === 6
-    ) {
+    if (authUiChanged && (
+      appState.screen === Screens.SETTINGS ||
+      (appState.screen === Screens.PROFILE_STATS && appState.statisticsTabIndex === 6)
+    )) {
       updateProfileAuthSection(authState, getLeaderboardProfileState());
     }
   });
   subscribeToLeaderboardProfile((profileState) => {
-    if (appState.screen === Screens.PROFILE_STATS && appState.statisticsTabIndex === 6) {
+    if (
+      appState.screen === Screens.SETTINGS ||
+      (appState.screen === Screens.PROFILE_STATS && appState.statisticsTabIndex === 6)
+    ) {
       updateProfileAuthSection(getAuthState(), profileState);
     }
     if (appState.screen === Screens.LEADERBOARDS) renderCurrentScreen();

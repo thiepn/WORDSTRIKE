@@ -119,12 +119,12 @@ export function renderLeaderboards(state, authState, profileState) {
   ];
   app().innerHTML = `<section class="screen leaderboards-screen"><main class="leaderboards-panel">
     <div class="eyebrow">Public rankings</div><h1>GLOBAL LEADERBOARDS</h1>
-    <nav class="leaderboard-tabs" aria-label="Leaderboard categories">${tabs.map(([value, label, action]) => (
-    `<button class="${category === value ? "selected" : ""}" data-action="${action}" aria-pressed="${category === value}">${label}</button>`
+    <nav class="leaderboard-tabs" aria-label="Leaderboard categories" role="tablist">${tabs.map(([value, label, action]) => (
+    `<button role="tab" class="${category === value ? "selected" : ""}" data-action="${action}" aria-selected="${category === value}" tabindex="${category === value ? "0" : "-1"}">${label}</button>`
   )).join("")}</nav>
-    ${typing ? `<nav class="leaderboard-duration-tabs" aria-label="Typing Test duration">
-      <button class="${typingDuration === 60 ? "selected" : ""}" data-action="leaderboard-typing-select-60" aria-pressed="${typingDuration === 60}">60 SECONDS</button>
-      <button class="${typingDuration === 15 ? "selected" : ""}" data-action="leaderboard-typing-select-15" aria-pressed="${typingDuration === 15}">15 SECONDS</button>
+    ${typing ? `<nav class="leaderboard-duration-tabs" aria-label="Typing Test duration" role="tablist">
+      <button role="tab" class="${typingDuration === 60 ? "selected" : ""}" data-action="leaderboard-typing-select-60" aria-selected="${typingDuration === 60}" tabindex="${typingDuration === 60 ? "0" : "-1"}">60 SECONDS</button>
+      <button role="tab" class="${typingDuration === 15 ? "selected" : ""}" data-action="leaderboard-typing-select-15" aria-selected="${typingDuration === 15}" tabindex="${typingDuration === 15 ? "0" : "-1"}">15 SECONDS</button>
     </nav>` : ""}
     <div class="leaderboard-board-meta">${meta}</div>
     ${authenticationPanel(authState, profileState)}

@@ -69,10 +69,10 @@ function dailyResult(overrides = {}) {
   return {
     sessionId: SESSION, sessionSource: "daily-ready", developerMode: false, success: true,
     failureReason: null, score: 25000, accuracy: 95, activeDurationMs: 90000,
-    words: { missed: 1 },
+    words: { completed: 59, missed: 1, total: 60 },
     modeData: {
       integrityRemaining: 2, dateKey: "2026-06-28", challengeVersion: 1,
-      wordsResolved: 60, wordsSpawned: 60, totalWords: 60, dateOverride: false,
+      wordsCompleted: 59, wordsResolved: 60, wordsSpawned: 60, totalWords: 60, dateOverride: false,
       recordEligible: true, wordPoints: 6600, completionBonus: 10000,
       integrityBonus: 4000, accuracyBonus: 1900, timeBonus: 2500,
       coreHits: 1, coreBreaches: 1, finalWave: 3,
