@@ -19,6 +19,7 @@ const RESULT_ACTIONS = Object.freeze({
       "leaderboard-open-username",
       "leaderboard-refresh",
       "leaderboard-main-menu",
+      "leaderboard-help",
     ]),
     guardReadyAt: false,
   }),

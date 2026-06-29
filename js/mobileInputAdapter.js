@@ -1,3 +1,8 @@
+import {
+  createGameplayViewportController,
+  focusGameplayInput,
+} from "./gameplayViewport.js";
+
 const KEY_ALIASES = Object.freeze({ Esc: "Escape", Spacebar: " ", Del: "Delete" });
 
 export function normalizeKeyboardInput(event) {
@@ -70,6 +75,11 @@ export function createMobileInputAdapter({
   const input = dock.querySelector(".gameplay-input");
   const trigger = dock.querySelector(".gameplay-keyboard-trigger");
   if (!input) return () => dock.remove?.();
+  const viewportController = createGameplayViewportController({
+    documentObject: root,
+    windowObject: globalThis.window,
+    visualViewport,
+  });
 
   let composing = false;
   let suppressBeforeInput = false;
@@ -81,7 +91,7 @@ export function createMobileInputAdapter({
   const focusInput = (event) => {
     if (!isEnabled()) return;
     event?.preventDefault?.();
-    input.focus?.({ preventScroll: true });
+    focusGameplayInput(input, globalThis.window);
     dock.classList?.add?.("keyboard-ready");
   };
   const onKeydown = (event) => {
@@ -130,25 +140,27 @@ export function createMobileInputAdapter({
     handledBeforeInput = true;
     clearValue();
   };
-  const updateViewport = () => {
-    const height = Number(visualViewport?.height);
-    if (Number.isFinite(height)) {
-      globalThis.document?.documentElement?.style?.setProperty?.("--visual-viewport-height", `${height}px`);
-    }
-  };
-
+  const onCompositionStart = () => { composing = true; };
   input.addEventListener("keydown", onKeydown);
   input.addEventListener("beforeinput", onBeforeInput);
   input.addEventListener("input", onFallbackInput);
-  input.addEventListener("compositionstart", () => { composing = true; });
+  input.addEventListener("compositionstart", onCompositionStart);
   input.addEventListener("compositionend", onCompositionEnd);
   trigger?.addEventListener?.("click", focusInput);
   arena?.addEventListener?.("pointerdown", focusInput);
-  visualViewport?.addEventListener?.("resize", updateViewport);
-  updateViewport();
-
-  return () => {
-    visualViewport?.removeEventListener?.("resize", updateViewport);
+  const cleanup = () => {
+    input.blur?.();
+    input.removeEventListener?.("keydown", onKeydown);
+    input.removeEventListener?.("beforeinput", onBeforeInput);
+    input.removeEventListener?.("input", onFallbackInput);
+    input.removeEventListener?.("compositionstart", onCompositionStart);
+    input.removeEventListener?.("compositionend", onCompositionEnd);
+    trigger?.removeEventListener?.("click", focusInput);
+    arena?.removeEventListener?.("pointerdown", focusInput);
+    viewportController.destroy();
     dock.remove?.();
   };
+  cleanup.blur = () => input.blur?.();
+  cleanup.focus = () => focusGameplayInput(input, globalThis.window);
+  return cleanup;
 }

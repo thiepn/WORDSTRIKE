@@ -193,8 +193,9 @@ assert.match(mainSource, /change:\s*\(\) => resetSpeedTestAttempt\("change-test"
 assert.match(mainSource, /const attemptSeed = getAttemptSeed\(\)/);
 assert.match(mainSource, /event\.key === "Tab"[\s\S]*resetSpeedTestAttempt\("tab-reset"\)/);
 assert.match(mainSource, /pauseTypingTest\(\)/);
-assert.match(mainSource, /quit:\s*\(\) => resetSpeedTestAttempt\("quit-test"\)/);
-assert.match(uiSource, /RESUME[\s\S]*RETRY[\s\S]*QUIT TEST[\s\S]*MAIN MENU/);
+assert.match(mainSource, /modes:\s*openModeSelect/);
+assert.match(uiSource, /RESUME[\s\S]*RESTART TEST[\s\S]*MODE SELECT[\s\S]*MAIN MENU/);
+assert.doesNotMatch(uiSource, /QUIT TEST/);
 assert.doesNotMatch(mainSource, /moveSpeedTestConfigSelection/);
 assert.doesNotMatch(mainSource, /SPEED_TEST_SETUP|openSpeedTestSetup|renderSpeedTestSetup/);
 

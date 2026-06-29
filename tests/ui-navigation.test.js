@@ -84,14 +84,14 @@ const calls = [];
 showPauseOverlay(0, {
   resume: () => calls.push("resume"),
   retry: () => calls.push("retry"),
-  levels: () => calls.push("levels"),
+  modes: () => calls.push("modes"),
   title: () => calls.push("title"),
   select: (index) => calls.push(`select:${index}`),
 });
 const overlay = gameScreen.children[0];
 assert.deepEqual(
   overlay.buttons.map((button) => button.dataset.action),
-  ["resume", "retry", "levels", "title"],
+  ["resume", "retry", "modes", "title"],
 );
 
 renderResults({

@@ -118,7 +118,9 @@ export function renderLeaderboards(state, authState, profileState) {
     [LEADERBOARD_CATEGORIES.DAILY, "DAILY STRIKE", "leaderboard-select-daily"],
   ];
   app().innerHTML = `<section class="screen leaderboards-screen"><main class="leaderboards-panel">
+    <button type="button" class="screen-back-button" data-action="leaderboard-main-menu" aria-label="Go back">â† BACK</button>
     <div class="eyebrow">Public rankings</div><h1>GLOBAL LEADERBOARDS</h1>
+    <button type="button" class="tutorial-help-button" data-action="leaderboard-help">? HOW TO PLAY</button>
     <nav class="leaderboard-tabs" aria-label="Leaderboard categories" role="tablist">${tabs.map(([value, label, action]) => (
     `<button role="tab" class="${category === value ? "selected" : ""}" data-action="${action}" aria-selected="${category === value}" tabindex="${category === value ? "0" : "-1"}">${label}</button>`
   )).join("")}</nav>
