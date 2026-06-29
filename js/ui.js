@@ -62,6 +62,18 @@ function wireMenuSelection(root, selector, select) {
   });
 }
 
+function tutorialHelpButton(id, label) {
+  return `<button type="button" class="tutorial-help-button" data-tutorial-help="${id}" aria-label="How to play ${label}">? HOW TO PLAY</button>`;
+}
+
+function resultMetricHelp({ grade = false } = {}) {
+  return `<details class="result-metric-help"><summary>UNDERSTANDING YOUR RESULT</summary>
+    <p><strong>WPM</strong> Your typing speed in words per minute.</p>
+    <p><strong>ACCURACY</strong> How often your typed characters were correct.</p>
+    ${grade ? "<p><strong>GRADE</strong> Your overall Campaign performance.</p>" : ""}
+  </details>`;
+}
+
 export function renderTitle(menuIndex, handlers) {
   const items = [
     ["START", "modes"],
@@ -149,6 +161,7 @@ export function renderEndlessReady(handlers = {}) {
       <div class="endless-ready-panel">
         <div class="eyebrow">Standard survival protocol</div>
         <h1>ENDLESS MODE</h1>
+        ${tutorialHelpButton("endless", "Endless")}
         <p class="endless-ready-lead">SURVIVE ESCALATING STAGES</p>
         <div class="endless-ready-rules">
           <span>${ENDLESS_CONFIG.startingIntegrity} CORE INTEGRITY</span>
@@ -163,6 +176,8 @@ export function renderEndlessReady(handlers = {}) {
   wireMenuActions(app(), ".endless-ready-panel .arcade-button", {
     "endless-start": handlers.start,
   });
+  const endlessHelp = app().querySelector('[data-tutorial-help="endless"]');
+  if (endlessHelp) endlessHelp.onclick = handlers.help;
 }
 
 export function renderDailyReady({ dateKey, record, developer = false } = {}, handlers = {}) {
@@ -172,6 +187,7 @@ export function renderDailyReady({ dateKey, record, developer = false } = {}, ha
       <div class="daily-ready-panel">
         <div class="eyebrow">${developer ? "Developer challenge preview" : "UTC daily challenge"}</div>
         <h1>DAILY STRIKE</h1>
+        ${tutorialHelpButton("daily", "Daily Strike")}
         <p class="daily-date">${dateKey}</p>
         <div class="daily-ready-rules">
           <span>3 WAVES</span><span>${DAILY_TOTAL_WORDS} WORDS</span>
@@ -189,6 +205,8 @@ export function renderDailyReady({ dateKey, record, developer = false } = {}, ha
   wireMenuActions(app(), ".daily-ready-panel .arcade-button", {
     "daily-start": handlers.start,
   });
+  const dailyHelp = app().querySelector('[data-tutorial-help="daily"]');
+  if (dailyHelp) dailyHelp.onclick = handlers.help;
 }
 
 export function renderDailyShell(game, devMode = false) {
@@ -351,6 +369,7 @@ export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
         </div>
       </header>
       <main class="speed-test-stage">
+        ${tutorialHelpButton("typing", "Typing Test")}
         <div class="speed-test-status" id="speed-test-status">START TYPING</div>
         <div class="speed-test-word-viewport" id="speed-test-word-viewport">
           <div class="speed-test-word-flow" id="speed-test-word-flow">
@@ -367,6 +386,8 @@ export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
   app().querySelectorAll("[data-speed-config]").forEach((button) => {
     button.onclick = () => handlers.selectConfig?.(button.dataset.speedConfig);
   });
+  const typingHelp = app().querySelector('[data-tutorial-help="typing"]');
+  if (typingHelp) typingHelp.onclick = handlers.help;
   app().querySelectorAll("[data-speed-category]").forEach((button) => {
     button.onclick = () => handlers.selectConfig?.(
       button.dataset.speedCategory === SPEED_TEST_TYPES.TIME ? "time-60" : "words-50",
@@ -508,6 +529,8 @@ export function updateSpeedTestRun(state, nowMs) {
   document.querySelectorAll?.(".speed-config-control").forEach((button) => {
     button.disabled = state.phase === "ACTIVE";
   });
+  const tutorialHelp = document.querySelector('[data-tutorial-help="typing"]');
+  if (tutorialHelp) tutorialHelp.disabled = state.phase === "ACTIVE";
   const diagnostics = document.querySelector("#speed-test-dev");
   if (diagnostics) diagnostics.textContent = getSpeedTestDiagnosticText(state, now);
 }
@@ -547,6 +570,7 @@ export function renderSpeedTestResults(result, recordFlags, selectedIndex, handl
           <div><span>Word deletes</span><strong>${mode.wordDeletes ?? 0}</strong></div>
           <div><span>Duration</span><strong>${(result.activeDurationMs / 1000).toFixed(1)}s</strong></div>
         </div>
+        ${resultMetricHelp()}
         ${renderGlobalSubmissionMarkup(submissionState)}
         <div class="menu-list">
           ${actions.map(([label, action], index) => menuButton(
@@ -675,6 +699,10 @@ export function renderLevelSelect(
         </div>
         ${menuButton("BACK", "back")}
       </header>
+      <div class="level-tutorial-actions">
+        ${tutorialHelpButton("campaign", "Campaign")}
+        ${selectedLevel % 10 === 0 ? tutorialHelpButton("boss", "Boss battles") : ""}
+      </div>
       ${devMode
     ? renderDevPanel(selectedLevel, bossWordBank, developerSeed)
     : ""}
@@ -686,6 +714,10 @@ export function renderLevelSelect(
       </div>
     </section>`;
   app().querySelector('[data-action="back"]').onclick = handlers.back;
+  const campaignHelp = app().querySelector('[data-tutorial-help="campaign"]');
+  const bossHelp = app().querySelector('[data-tutorial-help="boss"]');
+  if (campaignHelp) campaignHelp.onclick = handlers.helpCampaign;
+  if (bossHelp) bossHelp.onclick = handlers.helpBoss;
   app().querySelectorAll(".level-tile:not(:disabled)").forEach((tile) => {
     tile.onclick = () => handlers.select(Number(tile.dataset.level));
   });
@@ -1189,6 +1221,7 @@ export function renderEndlessResults(result, selectedIndex, handlers, submission
           <div><span>STAGE BONUSES</span><strong>${data.stageBonusPoints.toLocaleString()}</strong></div>
           <div class="total"><span>TOTAL</span><strong>${result.score.toLocaleString()}</strong></div>
         </section>
+        ${resultMetricHelp()}
         ${renderGlobalSubmissionMarkup(submissionState)}
         <div class="menu-list">${actions.map(([label, action], index) => (
     menuButton(label, action, index === selectedIndex)
@@ -1228,6 +1261,7 @@ export function renderDailyResults(result, recordFlags, selectedIndex, handlers,
           <div><span>Time bonus</span><strong>${data.timeBonus}</strong></div>
           <div><span>Resolved</span><strong>${data.wordsResolved} / ${DAILY_TOTAL_WORDS}</strong></div>
         </div>
+        ${resultMetricHelp()}
         ${renderGlobalSubmissionMarkup(submissionState)}
         <div class="menu-list">${actions.map(([label, action], index) => (
     menuButton(label, action, index === selectedIndex)
@@ -1269,6 +1303,7 @@ export function renderResults(result, selectedIndex, handlers, submissionState =
     : `<div class="stat"><span class="micro-label">Lives</span><strong>${result.livesRemaining}/${result.startingLives}</strong></div>
           <div class="stat"><span class="micro-label">Level</span><strong>${result.levelNumber}</strong></div>`}
         </div>
+        ${resultMetricHelp({ grade: true })}
         ${renderGlobalSubmissionMarkup(submissionState)}
         <div class="menu-list">
           ${actions.map(([label, action], index) => menuButton(
@@ -1296,6 +1331,21 @@ export function renderSettings(save, selectedIndex, handlers, accountMarkup = ""
         <div class="eyebrow">Local configuration</div>
         <h1>SETTINGS</h1>
         ${accountMarkup}
+        <details class="settings-tutorials" open>
+          <summary>HELP &amp; TUTORIALS</summary>
+          <div class="settings-tutorial-grid">
+            ${[
+    ["general", "GENERAL INTRODUCTION"], ["campaign", "CAMPAIGN GUIDE"],
+    ["typing", "TYPING TEST GUIDE"], ["endless", "ENDLESS GUIDE"],
+    ["daily", "DAILY STRIKE GUIDE"], ["boss", "BOSS GUIDE"],
+    ["leaderboards", "LEADERBOARD GUIDE"],
+  ].map(([id, label]) => `<button type="button" class="text-action" data-tutorial-id="${id}">REPLAY ${label}</button>`).join("")}
+          </div>
+          <div class="settings-tutorial-resets">
+            <button type="button" class="text-action" data-tutorial-reset="hints">RESET CONTEXTUAL HINTS</button>
+            <button type="button" class="text-action danger" data-tutorial-reset="all">RESET ALL TUTORIAL PROGRESS</button>
+          </div>
+        </details>
         <div class="settings-list">
           ${rows.map(([label, key, description], index) => `
             <div class="setting-row ${index === selectedIndex ? "selected" : ""}">
@@ -1315,6 +1365,13 @@ export function renderSettings(save, selectedIndex, handlers, accountMarkup = ""
   });
   app().querySelector('[data-action="reset"]').onclick = handlers.reset;
   app().querySelector('[data-action="back"]').onclick = handlers.back;
+  app().querySelectorAll("[data-tutorial-id]").forEach((button) => {
+    button.onclick = () => handlers.tutorial?.(button.dataset.tutorialId);
+  });
+  const resetHints = app().querySelector('[data-tutorial-reset="hints"]');
+  const resetTutorials = app().querySelector('[data-tutorial-reset="all"]');
+  if (resetHints) resetHints.onclick = handlers.resetHints;
+  if (resetTutorials) resetTutorials.onclick = handlers.resetTutorials;
   const displayNameInput = app().querySelector("#profile-name-input");
   if (displayNameInput) {
     displayNameInput.onkeydown = (event) => {

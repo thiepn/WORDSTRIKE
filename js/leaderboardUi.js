@@ -119,6 +119,7 @@ export function renderLeaderboards(state, authState, profileState) {
   ];
   app().innerHTML = `<section class="screen leaderboards-screen"><main class="leaderboards-panel">
     <div class="eyebrow">Public rankings</div><h1>GLOBAL LEADERBOARDS</h1>
+    <button type="button" class="tutorial-help-button" data-action="leaderboard-help">? HOW TO PLAY</button>
     <nav class="leaderboard-tabs" aria-label="Leaderboard categories" role="tablist">${tabs.map(([value, label, action]) => (
     `<button role="tab" class="${category === value ? "selected" : ""}" data-action="${action}" aria-selected="${category === value}" tabindex="${category === value ? "0" : "-1"}">${label}</button>`
   )).join("")}</nav>

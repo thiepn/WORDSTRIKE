@@ -96,6 +96,7 @@ import {
 import {
   clearSpeedTestRuntime,
   getCurrentSpeedTest,
+  getSpeedTestCurrentWord,
   handleCurrentSpeedTestKey,
   pauseSpeedTest,
   resumeSpeedTest,
@@ -162,6 +163,20 @@ import {
   createMobileInputAdapter,
   keyboardEventFromNormalized,
 } from "./mobileInputAdapter.js";
+import { createOnboardingController } from "./onboarding.js";
+import { createOnboardingView } from "./onboardingView.js";
+import {
+  isHintSeen,
+  getOnboardingStorageDiagnostic,
+  markHintSeen,
+  resetAllOnboarding,
+  resetContextualHints,
+} from "./onboardingStorage.js";
+import {
+  dismissContextualHint,
+  getActiveContextualHint,
+  showContextualHint,
+} from "./contextualHints.js";
 import {
   getLeaderboardState,
   getLeaderboardKeyboardTarget,
@@ -201,6 +216,33 @@ let lastAuthUiKey = "";
 let bootstrapReady = false;
 let pendingLeaderboardReturn = null;
 let deactivateGameplayInput = () => {};
+const onboardingController = createOnboardingController();
+let onboardingView = null;
+let tutorialHintMode = null;
+
+function ensureOnboardingView() {
+  onboardingView ||= createOnboardingView(onboardingController);
+  return onboardingView;
+}
+
+function openTutorial(id, { source = "help", onComplete = null, primaryLabel = null } = {}) {
+  ensureOnboardingView();
+  return onboardingController.open(id, { source, onComplete, primaryLabel });
+}
+
+function openAutomaticTutorial(id, onComplete = null, options = {}) {
+  if (!onboardingController.shouldOpenAutomatically(id)) return false;
+  return openTutorial(id, { source: "automatic", onComplete, ...options });
+}
+
+function beginContextualHints(mode, text, timeoutMs = 3500) {
+  const runId = `${mode}-tutorial-run`;
+  if (isHintSeen(runId)) return false;
+  markHintSeen(runId);
+  tutorialHintMode = mode;
+  showContextualHint(`${mode}-start`, text, { timeoutMs });
+  return true;
+}
 
 function stopActiveLoops() {
   stopGameLoop();
@@ -211,6 +253,8 @@ function stopActiveLoops() {
 }
 
 function discardActiveAttempt() {
+  dismissContextualHint();
+  tutorialHintMode = null;
   deactivateGameplayInput();
   deactivateGameplayInput = () => {};
   clearAttemptRuntime(appState.game);
@@ -240,7 +284,19 @@ function routeActiveGameplayKey(event) {
       resetSpeedTestAttempt("tab-reset");
       return true;
     }
-    handleCurrentSpeedTestKey(event, currentTimeMs());
+    const beforeWords = speedState?.metrics?.wordsCompleted || 0;
+    const handled = handleCurrentSpeedTestKey(event, currentTimeMs());
+    if (tutorialHintMode === "typing" && handled) {
+      if (event.key === " " && (speedState?.metrics?.wordsCompleted || 0) > beforeWords) {
+        dismissContextualHint();
+        tutorialHintMode = null;
+      } else if (
+        beforeWords === 0 &&
+        speedState?.typedBuffer === getSpeedTestCurrentWord(speedState)
+      ) {
+        showContextualHint("typing-space", "PRESS SPACE AFTER EACH WORD", { timeoutMs: 0 });
+      }
+    }
     return true;
   }
   if (appState.screen !== Screens.PLAYING) return false;
@@ -259,8 +315,16 @@ function routeActiveGameplayKey(event) {
     handleBossKey(event, appState.game, appState.save.settings, completeBossPhrase);
     updateBossHud(appState.game);
   } else {
+    const beforeCompleted = appState.game?.completedWordCount || 0;
     handleGameplayKey(event, appState.game, appState.save.settings, updateHud);
     updateHud(appState.game);
+    if (
+      tutorialHintMode === "campaign" &&
+      (appState.game?.completedWordCount || 0) > beforeCompleted
+    ) {
+      showContextualHint("campaign-continue", "KEEP GOING", { timeoutMs: 2200 });
+      tutorialHintMode = null;
+    }
   }
   return true;
 }
@@ -335,6 +399,12 @@ function openLeaderboardBoard(boardKey) {
   changeScreen(Screens.LEADERBOARDS);
   renderCurrentScreen();
   void initializeLeaderboards(boardKey);
+  openAutomaticTutorial("leaderboards", (choice) => {
+    if (choice === "google") {
+      saveLeaderboardReturnState(leaderboardReturnStateForBoard(boardKey));
+      void signInWithGoogle();
+    }
+  });
 }
 
 function openLeaderboards() {
@@ -363,6 +433,11 @@ function openEndlessReady(reason = "endless-ready") {
   cleanupCampaignAttempt(reason);
   changeScreen(Screens.ENDLESS_READY);
   renderCurrentScreen();
+  if (reason === "mode-select") {
+    openAutomaticTutorial("endless", (choice) => {
+      if (choice === "primary") startEndless("mode-select");
+    });
+  }
 }
 
 function openDailyReady(reason = "daily-ready") {
@@ -374,6 +449,11 @@ function openDailyReady(reason = "daily-ready") {
   appState.dailyRecordFlags = null;
   changeScreen(Screens.DAILY_READY);
   renderCurrentScreen();
+  if (reason === "mode-select") {
+    openAutomaticTutorial("daily", (choice) => {
+      if (choice === "primary") startDaily("daily-ready", appState.dailyDateKey);
+    });
+  }
 }
 
 function openLevelSelect(reason = "level-select") {
@@ -399,6 +479,9 @@ function startLevel(levelNumber, source = "level-select") {
   const safeLevel = Math.max(1, Math.min(100, levelNumber));
   const legitimatelyUnlocked = safeLevel <= appState.save.currentFurthestLevel;
   if (!canLaunchLevel(appState.devMode, appState.save.currentFurthestLevel, safeLevel)) return;
+  if (safeLevel % 10 === 0 && source !== "developer" && openAutomaticTutorial("boss", (choice) => {
+    if (choice === "primary") startLevel(safeLevel, source);
+  })) return;
   cleanupCampaignAttempt(source === "retry" ? "retry" : "new-session");
   appState.campaignResult = null;
   appState.currentLevel = safeLevel;
@@ -434,6 +517,14 @@ function startLevel(levelNumber, source = "level-select") {
       onHudUpdate: (currentGame) => {
         syncCampaignSession(currentGame);
         updateHud(currentGame);
+        if (
+          tutorialHintMode === "campaign" &&
+          !getActiveContextualHint() &&
+          !isHintSeen("campaign-danger") &&
+          currentGame.words.some((word) => Number(word.travelProgress) >= 0.7)
+        ) {
+          showContextualHint("campaign-danger", "WORDS DAMAGE THE CORE IF THEY REACH THE CENTER", { timeoutMs: 3000 });
+        }
       },
       onEnd: finishLevel,
     },
@@ -442,6 +533,7 @@ function startLevel(levelNumber, source = "level-select") {
   game.persistResult = shouldPersistLevelResult(appState.devMode, legitimatelyUnlocked);
   game.devMode = appState.devMode;
   syncCampaignSession(game);
+  if (!appState.devMode) beginContextualHints("campaign", "TYPE THE HIGHLIGHTED WORD", 3200);
 }
 
 function finishSpeedTest(state, result) {
@@ -483,9 +575,15 @@ function resetSpeedTestAttempt(source = "mode-select") {
   changeScreen(Screens.SPEED_TEST_RUN);
   renderSpeedTestRun(state, appState.devMode, {
     selectConfig: changeSpeedTestConfig,
+    help: () => {
+      if (getCurrentSpeedTest()?.phase === "PREPARING") openTutorial("typing");
+    },
   });
   mountGameplayInput();
   updateSpeedTestRun(state, currentTimeMs());
+  if (!appState.devMode && source === "mode-select") {
+    beginContextualHints("typing", "START TYPING TO BEGIN", 0);
+  }
 }
 
 function finishEndless(game, result) {
@@ -536,6 +634,7 @@ function startDaily(source = "daily-ready", dateKey = appState.dailyDateKey) {
   renderDailyShell(game, appState.devMode);
   mountGameplayInput();
   updateDailyHud(game);
+  if (!appState.devMode) beginContextualHints("daily", "COMPLETE ALL WAVES TO FINISH TODAY’S CHALLENGE");
 }
 
 function startEndless(source = "mode-select") {
@@ -562,6 +661,7 @@ function startEndless(source = "mode-select") {
   renderEndlessShell(game, appState.devMode);
   mountGameplayInput();
   updateEndlessHud(game);
+  if (!appState.devMode) beginContextualHints("endless", "DIFFICULTY INCREASES AS YOU SURVIVE");
 }
 
 function changeSpeedTestConfig(configId) {
@@ -809,10 +909,17 @@ async function copyPlayerId() {
 function activateSelectedMode(modeId = getAllModes()[appState.modeSelection]?.id) {
   if (!isModeEnabled(modeId)) return false;
   const route = getAllModes().find((mode) => mode.id === modeId)?.route;
-  if (route === "level-select") openLevelSelect("mode-select");
+  if (route === "level-select") {
+    openLevelSelect("mode-select");
+    openAutomaticTutorial("campaign", (choice) => {
+      if (choice === "primary" && appState.save.currentFurthestLevel === 1) startLevel(1, "level-select");
+    }, { primaryLabel: appState.save.currentFurthestLevel === 1 ? "START LEVEL 1" : "CONTINUE" });
+  }
   else if (route === "speed-test") {
     appState.speedTestConfigId = DEFAULT_SPEED_TEST_CONFIG_ID;
-    resetSpeedTestAttempt("mode-select");
+    if (!openAutomaticTutorial("typing", () => resetSpeedTestAttempt("mode-select"))) {
+      resetSpeedTestAttempt("mode-select");
+    }
   }
   else if (route === "endless-ready") openEndlessReady("mode-select");
   else if (route === "daily-ready") openDailyReady("mode-select");
@@ -857,7 +964,10 @@ function renderCurrentScreen() {
       back: openTitle,
     });
   } else if (appState.screen === Screens.ENDLESS_READY) {
-    renderEndlessReady({ start: () => startEndless("mode-select") });
+    renderEndlessReady({
+      start: () => startEndless("mode-select"),
+      help: () => openTutorial("endless"),
+    });
   } else if (appState.screen === Screens.ENDLESS_RESULTS) {
     renderEndlessResults(
       appState.endlessResult,
@@ -881,6 +991,7 @@ function renderCurrentScreen() {
       developer: appState.devMode,
     }, {
       start: () => startDaily("daily-ready", appState.dailyDateKey),
+      help: () => openTutorial("daily"),
     });
   } else if (appState.screen === Screens.DAILY_RESULTS) {
     renderDailyResults(
@@ -904,6 +1015,9 @@ function renderCurrentScreen() {
     if (state) {
       renderSpeedTestRun(state, appState.devMode, {
         selectConfig: changeSpeedTestConfig,
+        help: () => {
+          if (getCurrentSpeedTest()?.phase === "PREPARING") openTutorial("typing");
+        },
       });
       updateSpeedTestRun(state, currentTimeMs());
     }
@@ -937,6 +1051,8 @@ function renderCurrentScreen() {
       select: (level) => startLevel(level, "level-select"),
       devInspect: inspectDevLevel,
       devLaunch: (level) => startLevel(level, "developer"),
+      helpCampaign: () => openTutorial("campaign"),
+      helpBoss: () => openTutorial("boss"),
       },
     );
   } else if (appState.screen === Screens.RESULTS) {
@@ -955,6 +1071,14 @@ function renderCurrentScreen() {
       back: backFromSettings,
       saveName: saveProfileName,
       cancelName: cancelProfileNameEdit,
+      tutorial: (id) => openTutorial(id, { source: "settings" }),
+      resetHints: () => {
+        resetContextualHints();
+        dismissContextualHint({ persist: false });
+      },
+      resetTutorials: () => {
+        if (window.confirm("Reset every tutorial and contextual hint?")) resetAllOnboarding();
+      },
     }, renderSettingsAccountManagement({
       localProfile,
       editing: appState.profileEditing,
@@ -1106,6 +1230,8 @@ function handleAppClick(event) {
       openGlobalProfile();
     } else if (action === "leaderboard-main-menu") {
       openTitle();
+    } else if (action === "leaderboard-help") {
+      openTutorial("leaderboards");
     }
   }
 }
@@ -1423,6 +1549,13 @@ async function bootstrap() {
   void initializeAuth();
   const search = new URLSearchParams(window.location.search);
   appState.devMode = isDevelopmentMode(window.location.search);
+  if (appState.devMode) {
+    window.wordstrikeOnboarding = Object.freeze({
+      inspect: getOnboardingStorageDiagnostic,
+      open: (id) => openTutorial(id, { source: "help" }),
+      reset: resetAllOnboarding,
+    });
+  }
   appState.developerSeed = appState.devMode
     ? parseDeveloperSeed(window.location.search)
     : null;
@@ -1468,6 +1601,15 @@ async function bootstrap() {
     openLeaderboardReturn(returnState);
   } else {
     renderCurrentScreen();
+    openAutomaticTutorial("general", (choice) => {
+      if (choice === "primary") {
+        openLevelSelect("mode-select");
+        const startAtLevelOne = appState.save.currentFurthestLevel === 1;
+        openAutomaticTutorial("campaign", (campaignChoice) => {
+          if (campaignChoice === "primary" && startAtLevelOne) startLevel(1, "level-select");
+        }, { primaryLabel: startAtLevelOne ? "START LEVEL 1" : "CONTINUE" });
+      } else if (choice === "explore") openModeSelect();
+    });
   }
 }
 
