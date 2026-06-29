@@ -311,9 +311,10 @@ function speedTestConfigMarkup(config, disabled) {
   const options = getSpeedTestConfigsByType(config.testType);
   const control = (label, attributes, active) => `
     <button class="speed-config-control ${active ? "active" : ""}"
-            tabindex="-1" ${attributes} ${disabled ? "disabled" : ""}>${label}</button>`;
+            role="tab" aria-selected="${active}" tabindex="${active ? "0" : "-1"}"
+            ${attributes} ${disabled ? "disabled" : ""}>${label}</button>`;
   return `
-    <nav class="speed-test-config" aria-label="Typing Test configuration">
+    <nav class="speed-test-config" aria-label="Typing Test configuration" role="tablist">
       <div class="speed-test-categories">
         ${control("TIME", 'data-speed-category="time"', config.testType === SPEED_TEST_TYPES.TIME)}
         ${control("WORDS", 'data-speed-category="words"', config.testType === SPEED_TEST_TYPES.WORDS)}
@@ -1282,7 +1283,7 @@ export function renderResults(result, selectedIndex, handlers, submissionState =
   wireMenuActions(app(), ".results-panel .arcade-button", handlers);
 }
 
-export function renderSettings(save, selectedIndex, handlers) {
+export function renderSettings(save, selectedIndex, handlers, accountMarkup = "") {
   const settings = save.settings;
   const rows = [
     ["Strict mode", "strictMode", "Wrong keys break combo"],
@@ -1294,6 +1295,7 @@ export function renderSettings(save, selectedIndex, handlers) {
       <div class="settings-panel">
         <div class="eyebrow">Local configuration</div>
         <h1>SETTINGS</h1>
+        ${accountMarkup}
         <div class="settings-list">
           ${rows.map(([label, key, description], index) => `
             <div class="setting-row ${index === selectedIndex ? "selected" : ""}">
@@ -1313,4 +1315,14 @@ export function renderSettings(save, selectedIndex, handlers) {
   });
   app().querySelector('[data-action="reset"]').onclick = handlers.reset;
   app().querySelector('[data-action="back"]').onclick = handlers.back;
+  const displayNameInput = app().querySelector("#profile-name-input");
+  if (displayNameInput) {
+    displayNameInput.onkeydown = (event) => {
+      event.stopPropagation();
+      if (event.key === "Enter") handlers.saveName?.(displayNameInput.value);
+      else if (event.key === "Escape") handlers.cancelName?.();
+    };
+    displayNameInput.focus?.();
+    displayNameInput.select?.();
+  }
 }

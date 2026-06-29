@@ -329,10 +329,35 @@ function globalAccountContent(authState = { status: "loading" }, profileState) {
     <p>Local gameplay and records are unaffected.</p>`;
 }
 
-function renderGlobalAccount(authState, profileState) {
+export function renderGlobalAccount(authState, profileState) {
   return `<section class="global-account" aria-labelledby="global-account-heading">
     <h3 id="global-account-heading">GLOBAL ACCOUNT</h3>
     <div id="global-account-content">${globalAccountContent(authState, profileState)}</div>
+  </section>`;
+}
+
+export function renderSettingsAccountManagement({
+  localProfile,
+  editing = false,
+  draft = "",
+  nameError = "",
+  authState,
+  leaderboardProfileState,
+} = {}) {
+  const displayName = escapeHtml(localProfile?.displayName || "PLAYER");
+  const localEditor = editing
+    ? `<div class="profile-name-edit settings-name-edit">
+        <input id="profile-name-input" maxlength="20" value="${escapeHtml(draft)}" aria-label="Local display name">
+        <button type="button" data-action="settings-save-name">SAVE</button>
+        <button type="button" data-action="settings-cancel-name">CANCEL</button>
+        ${nameError ? `<small>${escapeHtml(nameError)}</small>` : ""}
+      </div>`
+    : `<strong class="profile-display-name">${displayName}</strong>
+       <button type="button" class="text-action" data-action="settings-edit-name">EDIT NAME</button>`;
+  return `<section class="settings-account-management" aria-labelledby="settings-account-heading">
+    <h2 id="settings-account-heading">ACCOUNT &amp; LEADERBOARDS</h2>
+    <div class="settings-local-profile"><span>LOCAL DISPLAY NAME</span>${localEditor}</div>
+    ${renderGlobalAccount(authState, leaderboardProfileState)}
   </section>`;
 }
 
@@ -429,6 +454,13 @@ export function renderProfileStatistics({
   }
   if (editing) {
     const input = app().querySelector?.("#profile-name-input");
+    if (input) {
+      input.onkeydown = (event) => {
+        event.stopPropagation?.();
+        if (event.key === "Enter") handlers.saveName?.(input.value);
+        else if (event.key === "Escape") handlers.cancelName?.();
+      };
+    }
     input?.focus?.();
     input?.select?.();
   }

@@ -356,13 +356,9 @@ function processCharacter(state, character, nowMs) {
   }
 }
 
-export function handleSpeedTestInput(state, event, nowMs = null) {
+export function handleSpeedTestInput(state, event, nowMs = monotonicNow()) {
   if (!state || state.ended || state.phase === "PAUSED") return false;
-  const eventNow = Number.isFinite(nowMs)
-    ? nowMs
-    : Number.isFinite(event?.timeStamp)
-      ? event.timeStamp
-      : monotonicNow();
+  const eventNow = Number.isFinite(nowMs) ? nowMs : monotonicNow();
 
   if (
     state.activeStartedAtMs != null &&
@@ -452,9 +448,9 @@ export function startSpeedTest({
   return state;
 }
 
-export function handleCurrentSpeedTestKey(event) {
-  const handled = handleSpeedTestInput(currentSpeedTest, event);
-  callbacks.onUpdate?.(currentSpeedTest, event?.timeStamp);
+export function handleCurrentSpeedTestKey(event, nowMs = monotonicNow()) {
+  const handled = handleSpeedTestInput(currentSpeedTest, event, nowMs);
+  callbacks.onUpdate?.(currentSpeedTest, nowMs);
   if (currentSpeedTest?.ended && !currentSpeedTest.completionNotified) {
     stopSpeedTestLoop();
     currentSpeedTest.completionNotified = true;

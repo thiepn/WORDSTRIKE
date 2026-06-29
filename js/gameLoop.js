@@ -9,6 +9,13 @@ import {
 } from "./renderer.js";
 import { createSeededRandom, mixSeed } from "./random.js";
 import { reconcileTargetingState } from "./input.js";
+import {
+  advanceWordTrajectory,
+  createWordTrajectory,
+  logicalSpawnPosition,
+  logicalWordDistance,
+  projectWordTrajectory,
+} from "./gameplayWorld.js";
 
 let animationFrameId = null;
 let callbacks = {};
@@ -72,40 +79,24 @@ function getDimensions(game) {
 }
 
 function spawnWord(game, dimensions) {
-  const { width, height } = dimensions;
   const edge = Math.floor(game.random() * 4);
-  const margin = 32;
-  let x = 0;
-  let y = 0;
+  let ratio = 0;
+  let logicalPosition = logicalSpawnPosition(edge, ratio);
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    if (edge === 0) {
-      x = game.random() * width;
-      y = margin;
-    } else if (edge === 1) {
-      x = width - margin;
-      y = game.random() * height;
-    } else if (edge === 2) {
-      x = game.random() * width;
-      y = height - margin;
-    } else {
-      x = margin;
-      y = game.random() * height;
-    }
-    const clear = game.words.every((word) => Math.hypot(word.x - x, word.y - y) >= 72);
+    ratio = game.random();
+    logicalPosition = logicalSpawnPosition(edge, ratio);
+    const clear = game.words.every((word) => logicalWordDistance(word, logicalPosition) >= 72);
     if (clear) break;
   }
-  const dx = game.coreX - x;
-  const dy = game.coreY - y;
-  const distance = Math.max(Math.hypot(dx, dy), 1);
   const speed = game.config.wordSpeedPxPerSec;
+  const trajectory = createWordTrajectory({ edge, ratio, speed });
   const word = {
     id: game.nextWordId,
     text: game.wordQueue[game.spawnedCount],
     typedIndex: 0,
-    x,
-    y,
-    vx: (dx / distance) * speed,
-    vy: (dy / distance) * speed,
+    x: 0,
+    y: 0,
+    ...trajectory,
     createdAt: game.elapsedMs,
     startedAt: null,
     missedCharactersRecorded: false,
@@ -116,6 +107,7 @@ function spawnWord(game, dimensions) {
   game.nextWordId += 1;
   game.spawnedCount += 1;
   game.words.push(word);
+  projectWordTrajectory(word, dimensions);
   createWordElement(word);
 }
 
@@ -248,11 +240,8 @@ function tick(timestamp) {
     game.lastSpawnAt = game.elapsedMs;
   }
 
-  const deltaSeconds = deltaMs / 1000;
   for (const word of [...game.words]) {
-    word.x += word.vx * deltaSeconds;
-    word.y += word.vy * deltaSeconds;
-    if (Math.hypot(word.x - game.coreX, word.y - game.coreY) <= 42) {
+    if (advanceWordTrajectory(word, deltaMs, dimensions)) {
       processWordCoreArrival(game, word);
       if (game.ended) return;
       if (game.lives <= 0) {

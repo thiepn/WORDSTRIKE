@@ -7,12 +7,15 @@ import {
   renderBossPhrase,
   updateWordElement,
 } from "./renderer.js";
+import { wordDistanceToImpact } from "./gameplayWorld.js";
 
 const IGNORED_KEYS = new Set([
   "Shift", "Control", "Alt", "Meta", "CapsLock", "Tab", "Escape", "Enter",
 ]);
 
 function distanceToCore(word, game) {
+  const logicalDistance = wordDistanceToImpact(word);
+  if (logicalDistance != null) return logicalDistance;
   return Math.hypot(word.x - game.coreX, word.y - game.coreY);
 }
 

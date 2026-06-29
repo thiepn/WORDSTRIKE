@@ -63,6 +63,22 @@ const RESULT_ACTIONS = Object.freeze({
     ]),
     guardReadyAt: false,
   }),
+  [Screens.SETTINGS]: Object.freeze({
+    selector: ".settings-screen",
+    actions: Object.freeze([
+      "settings-edit-name",
+      "settings-save-name",
+      "settings-cancel-name",
+      "auth-google-sign-in",
+      "auth-sign-out",
+      "leaderboard-username-check",
+      "leaderboard-username-claim",
+      "leaderboard-username-start-change",
+      "leaderboard-username-save-change",
+      "leaderboard-username-cancel-change",
+    ]),
+    guardReadyAt: false,
+  }),
 });
 
 const listenerRoots = new WeakSet();

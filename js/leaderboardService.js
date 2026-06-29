@@ -45,6 +45,29 @@ export function getBoardKeyForSelection(category, typingDuration = 60) {
   return LEADERBOARD_BOARDS.CAMPAIGN;
 }
 
+const KEYBOARD_CATEGORY_ORDER = Object.freeze([
+  LEADERBOARD_CATEGORIES.CAMPAIGN,
+  LEADERBOARD_CATEGORIES.TYPING,
+  LEADERBOARD_CATEGORIES.ENDLESS,
+  LEADERBOARD_CATEGORIES.DAILY,
+]);
+
+export function getLeaderboardKeyboardTarget(state, key) {
+  const selection = getLeaderboardSelection(state?.selectedBoardKey || state?.selectedBoard);
+  const category = state?.selectedCategory || selection.selectedCategory;
+  const typingDuration = state?.selectedTypingDuration || selection.selectedTypingDuration;
+  if (category === LEADERBOARD_CATEGORIES.TYPING && ["ArrowUp", "ArrowDown"].includes(key)) {
+    return getBoardKeyForSelection(category, typingDuration === 60 ? 15 : 60);
+  }
+  let index = Math.max(0, KEYBOARD_CATEGORY_ORDER.indexOf(category));
+  if (key === "ArrowLeft") index = (index - 1 + KEYBOARD_CATEGORY_ORDER.length) % KEYBOARD_CATEGORY_ORDER.length;
+  else if (key === "ArrowRight") index = (index + 1) % KEYBOARD_CATEGORY_ORDER.length;
+  else if (key === "Home") index = 0;
+  else if (key === "End") index = KEYBOARD_CATEGORY_ORDER.length - 1;
+  else return null;
+  return getBoardKeyForSelection(KEYBOARD_CATEGORY_ORDER[index], 60);
+}
+
 const safeEntry = (entry) => Object.freeze({
   rank: Math.max(1, Number(entry?.rank) || 1),
   username: String(entry?.username || ""),

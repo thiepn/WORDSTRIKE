@@ -42,6 +42,8 @@ body,
 #app {
   width: 100%;
   height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   overflow: hidden;
 }
@@ -56,7 +58,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -67,6 +70,8 @@ button {
 .screen {
   width: 100%;
   height: 100%;
+  height: var(--visual-viewport-height, 100dvh);
+  min-height: var(--visual-viewport-height, 100svh);
   position: relative;
 }
 
@@ -517,7 +522,11 @@ button {
 .leaderboards-screen {
   display: grid;
   place-items: center;
-  padding: 32px;
+  padding:
+    max(32px, env(safe-area-inset-top))
+    max(32px, env(safe-area-inset-right))
+    max(32px, env(safe-area-inset-bottom))
+    max(32px, env(safe-area-inset-left));
 }
 
 .leaderboards-screen {
@@ -747,6 +756,98 @@ button {
   background: rgb(10 14 20 / 91%);
   box-shadow: 0 0 36px rgb(0 255 242 / 10%), inset 0 0 30px rgb(0 255 242 / 3%);
   text-align: center;
+}
+
+.settings-screen {
+  align-items: start;
+  overflow-y: auto;
+}
+
+.settings-panel {
+  width: min(920px, 96vw);
+  margin-block: auto;
+  text-align: left;
+}
+
+.settings-panel > h1,
+.settings-panel > .eyebrow,
+.settings-panel > .footer-hint {
+  text-align: center;
+}
+
+.settings-account-management {
+  margin: 22px 0 28px;
+  padding: 18px;
+  border: 1px solid rgb(0 255 242 / 28%);
+  background: rgb(16 23 32 / 72%);
+}
+
+.settings-account-management h2 {
+  margin: 0 0 16px;
+  color: var(--primary);
+  font-size: 16px;
+  letter-spacing: 0.1em;
+}
+
+.settings-local-profile {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--locked);
+}
+
+.settings-local-profile > span {
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.settings-name-edit {
+  grid-column: 1 / -1;
+}
+
+.settings-account-management .global-account {
+  margin-top: 18px;
+}
+
+.gameplay-input-dock {
+  position: fixed;
+  z-index: 80;
+  right: max(10px, env(safe-area-inset-right));
+  bottom: max(10px, env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.gameplay-input {
+  position: fixed;
+  right: max(2px, env(safe-area-inset-right));
+  bottom: max(2px, env(safe-area-inset-bottom));
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0.01;
+  pointer-events: auto;
+  resize: none;
+}
+
+.gameplay-keyboard-trigger {
+  display: none;
+  padding: 9px 12px;
+  border: 1px solid var(--primary);
+  background: rgb(10 14 20 / 92%);
+  color: var(--primary);
+  box-shadow: 0 0 12px rgb(0 255 242 / 18%);
+  pointer-events: auto;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.gameplay-input-dock.keyboard-ready .gameplay-keyboard-trigger {
+  border-color: var(--success);
+  color: var(--success);
 }
 
 .mode-panel {
@@ -1780,6 +1881,7 @@ button {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  touch-action: manipulation;
 }
 
 .play-area.damage-flash::after {
@@ -2422,6 +2524,7 @@ button {
   .leaderboards-panel {
     width: 100%;
     min-height: 100vh;
+    min-height: 100dvh;
     padding: 20px 14px 32px;
     border: 0;
   }
@@ -2456,6 +2559,7 @@ button {
 
   .profile-stats-shell {
     min-height: 100vh;
+    min-height: 100dvh;
     padding: 18px 14px 40px;
     border: 0;
   }
@@ -2549,6 +2653,40 @@ button {
     display: none;
   }
 
+  .settings-panel {
+    width: 100%;
+    padding: 22px 14px;
+  }
+
+  .settings-local-profile {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-account-management .global-account-actions,
+  .settings-account-management .profile-name-edit {
+    flex-wrap: wrap;
+  }
+
+}
+
+@media (hover: none), (pointer: coarse) {
+  .gameplay-keyboard-trigger { display: block; }
+}
+
+@media (orientation: portrait) and (max-width: 760px) {
+  .speed-test-stage { padding: 18px 14px 64px; }
+  .speed-test-word-viewport { height: min(36vh, 230px); }
+  .play-area { min-height: 42vh; }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .gameplay-keyboard-trigger { padding: 6px 9px; }
+  .speed-test-topbar { min-height: 56px; padding-block: 6px; }
+  .speed-test-stage { padding: 8px 18px 48px; }
+  .speed-test-word-viewport { height: min(38vh, 150px); }
+  .hud, .daily-hud, .endless-hud { min-height: 56px; }
+  .game-screen { --hud-height: 56px; }
+  .daily-screen, .endless-screen { grid-template-rows: 56px minmax(0, 1fr); }
 }
 
 @media (max-height: 760px) {

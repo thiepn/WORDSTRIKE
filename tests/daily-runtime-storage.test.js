@@ -105,7 +105,8 @@ assert.equal(getCurrentSession().modeId, "daily");
 game.elapsedMs = 60000;
 game.spawnedWordCount = 60;
 game.resolvedWordCount = 59;
-game.completedWordCount = 59;
+// The shared target handler increments the completed counter before the Daily callback.
+game.completedWordCount = 60;
 game.score = 1000;
 game.accumulatedWordPoints = 1000;
 game.combo = 1;

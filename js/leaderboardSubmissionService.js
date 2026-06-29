@@ -137,9 +137,20 @@ export function buildSubmissionPayload(mode, result) {
 
 export function buildDailySubmissionResult(result) {
   const data = result?.modeData;
+  const wordsCompleted = Number(data?.wordsCompleted);
   const resolved = Number(data?.wordsResolved);
+  const spawned = Number(data?.wordsSpawned);
+  const total = Number(data?.totalWords);
   const missed = Number(result?.words?.missed);
-  const wordsCompleted = resolved - missed;
+  const breaches = Number(data?.coreBreaches);
+  const validCounters = [wordsCompleted, resolved, spawned, total, missed, breaches]
+    .every(Number.isSafeInteger) &&
+    total === 60 &&
+    wordsCompleted >= 0 && missed >= 0 && breaches >= 0 &&
+    wordsCompleted <= resolved && resolved <= spawned && spawned <= total &&
+    missed === breaches && wordsCompleted + missed === resolved &&
+    result?.words?.completed === wordsCompleted;
+  if (!validCounters) return null;
   const normalized = {
     score: result?.score,
     accuracy: result?.accuracy,
@@ -152,8 +163,8 @@ export function buildDailySubmissionResult(result) {
     challengeDate: data?.dateKey,
     challengeVersion: data?.challengeVersion,
     wordsResolved: resolved,
-    wordsSpawned: data?.wordsSpawned,
-    totalWords: data?.totalWords,
+    wordsSpawned: spawned,
+    totalWords: total,
     dateOverride: data?.dateOverride === true,
     recordEligible: data?.recordEligible === true,
     developerMode: result?.developerMode === true,

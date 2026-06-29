@@ -81,6 +81,20 @@ export function getSpeedTestConfigsByType(testType) {
   return CONFIGURATIONS.filter((config) => config.testType === testType);
 }
 
+export function moveSpeedTestConfiguration(configId, key) {
+  const current = getSpeedTestConfig(configId) || getSpeedTestConfig(DEFAULT_SPEED_TEST_CONFIG_ID);
+  const options = getSpeedTestConfigsByType(current.testType);
+  const index = Math.max(0, options.findIndex((option) => option.configId === current.configId));
+  if (key === "ArrowLeft") return options[(index - 1 + options.length) % options.length].configId;
+  if (key === "ArrowRight") return options[(index + 1) % options.length].configId;
+  if (key === "Home") return options[0].configId;
+  if (key === "End") return options.at(-1).configId;
+  if (["ArrowUp", "ArrowDown"].includes(key)) {
+    return current.testType === SPEED_TEST_TYPES.TIME ? "words-50" : "time-60";
+  }
+  return current.configId;
+}
+
 export function isValidSpeedTestConfigId(configId) {
   return CONFIG_BY_ID.has(configId);
 }
