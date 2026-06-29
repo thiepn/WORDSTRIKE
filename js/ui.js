@@ -66,6 +66,27 @@ function tutorialHelpButton(id, label) {
   return `<button type="button" class="tutorial-help-button" data-tutorial-help="${id}" aria-label="How to play ${label}">? HOW TO PLAY</button>`;
 }
 
+function screenBackButton(action = "back", direct = false) {
+  const attribute = direct ? `data-screen-back="${action}"` : `data-action="${action}"`;
+  return `<button type="button" class="screen-back-button" ${attribute} aria-label="Go back">â† BACK</button>`;
+}
+
+function gameplayPauseButton(label = "BACK") {
+  return `<button type="button" class="gameplay-pause-button" data-gameplay-action="pause" aria-label="Pause and go back">â† ${label}</button>`;
+}
+
+function wireGameplayAction(root, action, handler) {
+  root?.querySelectorAll?.(`[data-gameplay-action="${action}"]`).forEach((button) => {
+    button.onpointerdown = (event) => event.stopPropagation?.();
+    button.onclick = (event) => {
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      button.blur?.();
+      handler?.();
+    };
+  });
+}
+
 function resultMetricHelp({ grade = false } = {}) {
   return `<details class="result-metric-help"><summary>UNDERSTANDING YOUR RESULT</summary>
     <p><strong>WPM</strong> Your typing speed in words per minute.</p>
@@ -110,12 +131,14 @@ export function renderTitle(menuIndex, handlers) {
   app().querySelector('[data-action="modes"]').onclick = handlers.modes;
   app().querySelector('[data-action="profile"]').onclick = handlers.profile;
   app().querySelector('[data-action="settings"]').onclick = handlers.settings;
+  app().querySelector(".menu-list .arcade-button.selected")?.focus?.({ preventScroll: true });
 }
 
 export function renderModeSelect(modes, selectedIndex, handlers) {
   app().innerHTML = `
     <section class="screen mode-screen">
       <div class="mode-panel">
+        ${screenBackButton("mode-title")}
         <div class="eyebrow">Select simulation</div>
         <h1>MODE SELECT</h1>
         <div class="mode-grid">
@@ -148,17 +171,19 @@ export function renderModeSelect(modes, selectedIndex, handlers) {
     }
   });
   app().querySelector(".mode-card.available.selected")?.focus({ preventScroll: true });
-  const titleButton = app().querySelector('[data-action="mode-title"]');
-  if (titleButton) {
+  const titleButtons = [...app().querySelectorAll('[data-action="mode-title"]')];
+  if (!titleButtons.length) titleButtons.push(app().querySelector('[data-action="mode-title"]'));
+  titleButtons.filter(Boolean).forEach((titleButton) => {
     titleButton.onclick = handlers.back;
     titleButton.onmouseenter = () => handlers.select?.(modes.length);
-  }
+  });
 }
 
 export function renderEndlessReady(handlers = {}) {
   app().innerHTML = `
     <section class="screen endless-ready-screen">
       <div class="endless-ready-panel">
+        ${screenBackButton()}
         <div class="eyebrow">Standard survival protocol</div>
         <h1>ENDLESS MODE</h1>
         ${tutorialHelpButton("endless", "Endless")}
@@ -178,6 +203,7 @@ export function renderEndlessReady(handlers = {}) {
   });
   const endlessHelp = app().querySelector('[data-tutorial-help="endless"]');
   if (endlessHelp) endlessHelp.onclick = handlers.help;
+  app().querySelectorAll('[data-action="back"]').forEach((button) => { button.onclick = handlers.back; });
 }
 
 export function renderDailyReady({ dateKey, record, developer = false } = {}, handlers = {}) {
@@ -185,6 +211,7 @@ export function renderDailyReady({ dateKey, record, developer = false } = {}, ha
   app().innerHTML = `
     <section class="screen daily-ready-screen">
       <div class="daily-ready-panel">
+        ${screenBackButton()}
         <div class="eyebrow">${developer ? "Developer challenge preview" : "UTC daily challenge"}</div>
         <h1>DAILY STRIKE</h1>
         ${tutorialHelpButton("daily", "Daily Strike")}
@@ -207,12 +234,14 @@ export function renderDailyReady({ dateKey, record, developer = false } = {}, ha
   });
   const dailyHelp = app().querySelector('[data-tutorial-help="daily"]');
   if (dailyHelp) dailyHelp.onclick = handlers.help;
+  app().querySelector('[data-action="back"]').onclick = handlers.back;
 }
 
-export function renderDailyShell(game, devMode = false) {
+export function renderDailyShell(game, devMode = false, handlers = {}) {
   app().innerHTML = `
     <section class="screen game-screen daily-screen">
       <header class="daily-hud">
+        ${gameplayPauseButton()}
         <div><strong>WAVE <span id="daily-wave">${game.wave}</span> / 3</strong>
           <span id="daily-progress">${game.resolvedWordCount} / ${DAILY_TOTAL_WORDS}</span></div>
         <div>SCORE <strong id="daily-score">0</strong>
@@ -227,6 +256,7 @@ export function renderDailyShell(game, devMode = false) {
         <div class="daily-wave-banner" id="daily-wave-banner" hidden></div>
       </div>
     </section>`;
+  wireGameplayAction(app(), "pause", handlers.pause);
 }
 
 export function updateDailyHud(game) {
@@ -258,10 +288,11 @@ export function updateDailyHud(game) {
   if (diagnostics) diagnostics.textContent = getDailyDiagnosticText(game);
 }
 
-export function renderEndlessShell(game, devMode = false) {
+export function renderEndlessShell(game, devMode = false, handlers = {}) {
   app().innerHTML = `
     <section class="screen game-screen endless-screen">
       <header class="endless-hud">
+        ${gameplayPauseButton()}
         <div><strong>STAGE <span id="endless-stage">${game.stage}</span></strong>
           <span id="endless-progress">${game.stageWordsCompleted} / ${getEndlessWordsPerStage(game.stage)}</span></div>
         <div>SCORE <strong id="endless-score">0</strong></div>
@@ -273,6 +304,7 @@ export function renderEndlessShell(game, devMode = false) {
         <div class="endless-stage-banner" id="endless-stage-banner" hidden></div>
       </div>
     </section>`;
+  wireGameplayAction(app(), "pause", handlers.pause);
 }
 
 export function updateEndlessHud(game) {
@@ -351,26 +383,39 @@ function speedTestConfigMarkup(config, disabled) {
 export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
   disconnectSpeedTestLayoutObserver();
   const isTime = state.config.testType === SPEED_TEST_TYPES.TIME;
+  const configLabel = isTime ? `${state.config.durationSeconds} SECONDS` : `${state.config.wordCount} WORDS`;
   app().innerHTML = `
     <section class="screen speed-test-screen">
       <header class="speed-test-topbar">
-        <div class="speed-test-controls-wrap">
-          <span class="speed-test-word-set">ENGLISH 200</span>
-          ${speedTestConfigMarkup(state.config, state.phase === "ACTIVE")}
+        <div class="speed-test-topbar-primary">
+          ${gameplayPauseButton()}
+          <div class="speed-test-mode-title"><strong>TYPING TEST</strong><span>${configLabel}</span></div>
+          <div class="speed-test-top-actions">
+            <button type="button" class="gameplay-control-button" data-gameplay-action="restart" aria-label="Restart Typing Test">RESTART <kbd>TAB</kbd></button>
+            <button type="button" class="gameplay-control-button" data-gameplay-action="pause" aria-label="Pause Typing Test">PAUSE <kbd>ESC</kbd></button>
+          </div>
         </div>
-        <div class="speed-test-hud">
-          <strong id="speed-test-primary">${isTime
+        <div class="speed-test-topbar-secondary">
+          <div class="speed-test-controls-wrap">
+            <span class="speed-test-word-set">ENGLISH 200</span>
+            ${speedTestConfigMarkup(state.config, state.phase === "ACTIVE")}
+          </div>
+          <div class="speed-test-hud">
+            <strong id="speed-test-primary">${isTime
     ? state.config.durationSeconds.toFixed(1)
     : `0 / ${state.config.wordCount}`}</strong>
-          <span id="speed-test-elapsed">${isTime ? "" : "00:00"}</span>
-          <span>WPM <b id="speed-test-wpm">0</b></span>
-          <span>ACC <b id="speed-test-accuracy">100%</b></span>
-          <span>RAW <b id="speed-test-raw">0</b></span>
+            <span id="speed-test-elapsed">${isTime ? "" : "00:00"}</span>
+            <span>WPM <b id="speed-test-wpm">0</b></span>
+            <span>ACC <b id="speed-test-accuracy">100%</b></span>
+            <span>RAW <b id="speed-test-raw">0</b></span>
+          </div>
         </div>
       </header>
       <main class="speed-test-stage">
-        ${tutorialHelpButton("typing", "Typing Test")}
-        <div class="speed-test-status" id="speed-test-status">START TYPING</div>
+        <div class="speed-test-prompt-row">
+          <div class="speed-test-status" id="speed-test-status">START TYPING TO BEGIN</div>
+          ${tutorialHelpButton("typing", "Typing Test")}
+        </div>
         <div class="speed-test-word-viewport" id="speed-test-word-viewport">
           <div class="speed-test-word-flow" id="speed-test-word-flow">
             ${state.words.map((word, index) => `
@@ -379,7 +424,6 @@ export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
                     aria-current="${index === 0 ? "true" : "false"}">${speedWordMarkup(word, "", index === 0)}</span>`).join("")}
           </div>
         </div>
-        <p class="speed-test-hint">TAB — RETRY &nbsp;•&nbsp; ESC — PAUSE</p>
       </main>
       ${devMode ? `<aside class="speed-test-dev" id="speed-test-dev">${getSpeedTestDiagnosticText(state)}</aside>` : ""}
     </section>`;
@@ -388,6 +432,8 @@ export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
   });
   const typingHelp = app().querySelector('[data-tutorial-help="typing"]');
   if (typingHelp) typingHelp.onclick = handlers.help;
+  wireGameplayAction(app(), "restart", handlers.restart);
+  wireGameplayAction(app(), "pause", handlers.pause);
   app().querySelectorAll("[data-speed-category]").forEach((button) => {
     button.onclick = () => handlers.selectConfig?.(
       button.dataset.speedCategory === SPEED_TEST_TYPES.TIME ? "time-60" : "words-50",
@@ -468,14 +514,18 @@ export function updateSpeedTestRun(state, nowMs) {
     "#speed-test-raw": Math.round(live.rawWpm),
     "#speed-test-accuracy": `${live.accuracy.toFixed(1)}%`,
     "#speed-test-elapsed": `${Math.floor(activeDuration / 60000).toString().padStart(2, "0")}:${Math.floor((activeDuration % 60000) / 1000).toString().padStart(2, "0")}`,
-    "#speed-test-status": state.activeStartedAtMs == null
-      ? "START TYPING"
-      : `TIME ${Math.floor(activeDuration / 60000).toString().padStart(2, "0")}:${Math.floor((activeDuration % 60000) / 1000).toString().padStart(2, "0")}`,
+    "#speed-test-status": state.activeStartedAtMs == null ? "START TYPING TO BEGIN" : "",
   };
   for (const [selector, value] of Object.entries(values)) {
     const element = document.querySelector(selector);
     if (element) element.textContent = value;
   }
+  const status = document.querySelector("#speed-test-status");
+  if (status) status.hidden = state.activeStartedAtMs != null;
+  document.querySelector(".speed-test-screen")?.classList.toggle(
+    "typing-active",
+    state.activeStartedAtMs != null,
+  );
 
   const flow = document.querySelector("#speed-test-word-flow");
   if (flow) {
@@ -549,6 +599,7 @@ export function renderSpeedTestResults(result, recordFlags, selectedIndex, handl
   app().innerHTML = `
     <section class="screen speed-results-screen">
       <div class="speed-results-panel">
+        ${screenBackButton("modes", true)}
         <div class="eyebrow">ENGLISH 200 // ${configLabel}</div>
         <h1>TEST COMPLETE</h1>
         <div class="speed-result-headline">
@@ -582,6 +633,8 @@ export function renderSpeedTestResults(result, recordFlags, selectedIndex, handl
       </div>
     </section>`;
   wireMenuActions(app(), ".speed-results-panel .arcade-button", handlers);
+  const speedBack = app().querySelector?.('[data-screen-back="modes"]');
+  if (speedBack) speedBack.onclick = handlers.modes;
 }
 
 function renderDevPanel(selectedLevel, bossWordBank, developerSeed) {
@@ -760,15 +813,19 @@ export function renderGameplayShell(
   config,
   devMode = false,
   attempt = {},
+  handlers = {},
 ) {
   app().innerHTML = `
     <section class="screen game-screen">
       <header class="hud">
-        <div>
+        <div class="hud-leading">
+          ${gameplayPauseButton()}
+          <div>
           <span class="micro-label">Level</span>
           <span class="hud-value" id="hud-level">${String(levelNumber).padStart(2, "0")}</span><br>
           <span>WPM <span class="hud-value" id="hud-wpm">0</span></span>
           <span>&nbsp; ACC <span class="hud-value" id="hud-accuracy">100%</span></span>
+          </div>
         </div>
         <div class="hud-center">
           <span class="micro-label">Core integrity</span><br>
@@ -797,6 +854,7 @@ export function renderGameplayShell(
         <div class="core" aria-label="Central core"></div>
       </div>
     </section>`;
+  wireGameplayAction(app(), "pause", handlers.pause);
 }
 
 export function updateHud(game) {
@@ -895,14 +953,17 @@ function bossDiagnosticText(config, attempt) {
   ].join(" // ");
 }
 
-export function renderBossShell(levelNumber, config, devMode = false, attempt = {}) {
+export function renderBossShell(levelNumber, config, devMode = false, attempt = {}, handlers = {}) {
   app().innerHTML = `
     <section class="screen boss-screen">
       <header class="boss-hud">
-        <div>
+        <div class="boss-hud-leading">
+          ${gameplayPauseButton()}
+          <div>
           <span class="boss-hud-value">BOSS ${config.bossIndex} / 10</span><br>
           <span id="boss-phrase-count">SEQUENCE 1 / ${config.segmentCount}</span>
           <span>&nbsp; WORDS <span class="boss-hud-value" id="boss-word-count">0 / ${config.totalWordCount}</span></span>
+          </div>
         </div>
         <div class="boss-timer-wrap">
           <span class="micro-label">Time</span>
@@ -933,6 +994,7 @@ export function renderBossShell(levelNumber, config, devMode = false, attempt = 
         </div>
       </div>
     </section>`;
+  wireGameplayAction(app(), "pause", handlers.pause);
 }
 
 export function updateBossHud(game) {
@@ -1022,7 +1084,7 @@ export function showPauseOverlay(selectedIndex, handlers) {
       <div class="menu-list">
         ${menuButton("RESUME", "resume", selectedIndex === 0)}
         ${menuButton("RETRY", "retry", selectedIndex === 1)}
-        ${menuButton("LEVEL SELECT", "levels", selectedIndex === 2)}
+        ${menuButton("MODE SELECT", "modes", selectedIndex === 2)}
         ${menuButton("MAIN MENU", "title", selectedIndex === 3)}
       </div>
       <p class="footer-hint">ESC RESUME</p>
@@ -1030,7 +1092,7 @@ export function showPauseOverlay(selectedIndex, handlers) {
   document.querySelector(".game-screen, .boss-screen")?.append(overlay);
   overlay.querySelector('[data-action="resume"]').onclick = handlers.resume;
   overlay.querySelector('[data-action="retry"]').onclick = handlers.retry;
-  overlay.querySelector('[data-action="levels"]').onclick = handlers.levels;
+  overlay.querySelector('[data-action="modes"]').onclick = handlers.modes;
   overlay.querySelector('[data-action="title"]').onclick = handlers.title;
   overlay.querySelectorAll(".arcade-button").forEach((button, index) => {
     button.onmouseenter = () => {
@@ -1089,15 +1151,17 @@ export function showDailyPauseOverlay(selectedIndex, handlers) {
   wireMenuActions(overlay, ".arcade-button", handlers);
 }
 
+export const SPEED_TEST_PAUSE_ACTIONS = Object.freeze([
+  Object.freeze(["RESUME", "resume"]),
+  Object.freeze(["RESTART TEST", "restart"]),
+  Object.freeze(["MODE SELECT", "modes"]),
+  Object.freeze(["MAIN MENU", "title"]),
+]);
+
 export function showSpeedTestPauseOverlay(selectedIndex, handlers) {
   document.querySelector(".pause-overlay")?.remove();
   document.querySelector(".speed-test-screen")?.classList.add("paused");
-  const actions = [
-    ["RESUME", "resume"],
-    ["RETRY", "retry"],
-    ["QUIT TEST", "quit"],
-    ["MAIN MENU", "title"],
-  ];
+  const actions = SPEED_TEST_PAUSE_ACTIONS;
   const overlay = document.createElement("div");
   overlay.className = "pause-overlay";
   overlay.innerHTML = `
@@ -1195,6 +1259,7 @@ export function renderEndlessResults(result, selectedIndex, handlers, submission
   app().innerHTML = `
     <section class="screen endless-results-screen">
       <div class="endless-results-panel">
+        ${screenBackButton("modes", true)}
         <div class="eyebrow">Endless mode</div>
         <h1>RUN OVER</h1>
         <div class="endless-result-headline">
@@ -1229,6 +1294,8 @@ export function renderEndlessResults(result, selectedIndex, handlers, submission
       </div>
     </section>`;
   wireMenuSelection(app(), ".endless-results-panel > .menu-list .arcade-button", handlers.select);
+  const endlessBack = app().querySelector?.('[data-screen-back="modes"]');
+  if (endlessBack) endlessBack.onclick = handlers.modes;
 }
 
 export function renderDailyResults(result, recordFlags, selectedIndex, handlers, submissionState = {}) {
@@ -1241,6 +1308,7 @@ export function renderDailyResults(result, recordFlags, selectedIndex, handlers,
   app().innerHTML = `
     <section class="screen daily-results-screen">
       <div class="daily-results-panel">
+        ${screenBackButton("modes", true)}
         <div class="eyebrow">${data.dateKey} // DAILY STRIKE</div>
         <h1>${result.success ? "CHALLENGE CLEARED" : "STRIKE FAILED"}</h1>
         ${recordFlags?.newBest ? '<div class="daily-record">NEW DAILY BEST</div>' : ""}
@@ -1269,6 +1337,8 @@ export function renderDailyResults(result, recordFlags, selectedIndex, handlers,
       </div>
     </section>`;
   wireMenuSelection(app(), ".daily-results-panel > .menu-list .arcade-button", handlers.select);
+  const dailyBack = app().querySelector?.('[data-screen-back="modes"]');
+  if (dailyBack) dailyBack.onclick = handlers.modes;
 }
 
 export function hidePauseOverlay() {
@@ -1288,6 +1358,7 @@ export function renderResults(result, selectedIndex, handlers, submissionState =
   app().innerHTML = `
     <section class="screen results-screen">
       <div class="results-panel">
+        ${screenBackButton("levels", true)}
         <div class="eyebrow">${result.isBoss
       ? `BOSS ${result.levelNumber} ${cleared ? "CLEARED" : "FAILED"}`
       : `Level ${String(result.levelNumber).padStart(2, "0")} // ${cleared ? "Core secured" : "Core breached"}`}</div>
@@ -1316,6 +1387,8 @@ export function renderResults(result, selectedIndex, handlers, submissionState =
       </div>
     </section>`;
   wireMenuActions(app(), ".results-panel .arcade-button", handlers);
+  const campaignBack = app().querySelector?.('[data-screen-back="levels"]');
+  if (campaignBack) campaignBack.onclick = handlers.levels;
 }
 
 export function renderSettings(save, selectedIndex, handlers, accountMarkup = "") {
@@ -1328,6 +1401,7 @@ export function renderSettings(save, selectedIndex, handlers, accountMarkup = ""
   app().innerHTML = `
     <section class="screen settings-screen">
       <div class="settings-panel">
+        ${screenBackButton()}
         <div class="eyebrow">Local configuration</div>
         <h1>SETTINGS</h1>
         ${accountMarkup}
@@ -1364,7 +1438,7 @@ export function renderSettings(save, selectedIndex, handlers, accountMarkup = ""
     button.onclick = () => handlers.toggle(button.dataset.setting);
   });
   app().querySelector('[data-action="reset"]').onclick = handlers.reset;
-  app().querySelector('[data-action="back"]').onclick = handlers.back;
+  app().querySelectorAll('[data-action="back"]').forEach((button) => { button.onclick = handlers.back; });
   app().querySelectorAll("[data-tutorial-id]").forEach((button) => {
     button.onclick = () => handlers.tutorial?.(button.dataset.tutorialId);
   });

@@ -17,11 +17,17 @@ export const ONBOARDING_TUTORIALS = Object.freeze({
     id: "general", version: 1, title: "WORDSTRIKE INTRODUCTION",
     steps: Object.freeze([
       step("TYPE BEFORE THEY STRIKE", "Words move toward the center. Type them correctly before they reach it.", "approaching-word"),
-      step("JUST START TYPING", "Type the word shown on screen. Use Backspace to correct it. On phones and tablets, tap the game area to open the keyboard.", "typing-highlight"),
+      step("JUST START TYPING", "Type the word shown on screen. On phones and tablets, tap the game area to open the keyboard.", "typing-highlight", "NEXT", {
+        helper: "Use mouse, touch, or keyboard.",
+        controls: Object.freeze([
+          Object.freeze({ key: "ARROW KEYS", label: "Move between menus and options." }),
+          Object.freeze({ key: "ENTER", label: "Select or confirm." }),
+          Object.freeze({ key: "ESC", label: "Go back or pause." }),
+        ]),
+      }),
       step("CHOOSE HOW YOU PLAY", "Campaign builds skill. Typing Test measures speed. Endless tests survival. Daily Strike gives everyone the same challenge.", "mode-cards"),
-      step("PLAY YOUR WAY", "Progress and records stay on this device. Signing in is optional and only needed for global leaderboards.", "local-first", "START CAMPAIGN", {
-        secondaryLabel: "EXPLORE MODES", secondaryChoice: "explore",
-        helper: "You can replay this guide later in Settings.",
+      step("PLAY YOUR WAY", "Progress and records stay on this device. Signing in is optional and only needed for global leaderboards.", "local-first", "START", {
+        helper: "Use the main menu to explore modes, settings, statistics, and leaderboards.",
       }),
     ]),
   }),
@@ -37,7 +43,15 @@ export const ONBOARDING_TUTORIALS = Object.freeze({
     id: "typing", version: 1, title: "TYPING TEST GUIDE",
     steps: Object.freeze([
       step("PURE TYPING", "No words attack the center here. Type the displayed text as quickly and accurately as possible.", "word-stream"),
-      step("THE TIMER STARTS WITH YOUR FIRST KEY", "Type the current word, then press Space to advance. Use Backspace to correct mistakes.", "typing-highlight"),
+      step("THE TIMER STARTS WITH YOUR FIRST KEY", "Type the current word, then press Space to advance. Use Backspace to correct mistakes.", "typing-highlight", "NEXT", {
+        controls: Object.freeze([
+          Object.freeze({ key: "TYPE", label: "Start and enter the current word." }),
+          Object.freeze({ key: "SPACE", label: "Submit and move to the next word." }),
+          Object.freeze({ key: "BACKSPACE", label: "Correct the current word." }),
+          Object.freeze({ key: "TAB", label: "Restart the current test." }),
+          Object.freeze({ key: "ESC", label: "Pause the test." }),
+        ]),
+      }),
       step("CHOOSE YOUR TEST", "Timed tests end when time runs out. Word tests end after the selected number of words. 15s and 60s tests can join global rankings.", "typing-options", "CHOOSE A TEST"),
     ]),
   }),

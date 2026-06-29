@@ -28,6 +28,12 @@ function visualMarkup(type) {
   return `<div class="onboarding-approach"><span class="demo-word">strike</span><span class="demo-arrow">→</span><span class="demo-core">◆</span></div>`;
 }
 
+function controlCardsMarkup(controls) {
+  if (!Array.isArray(controls) || controls.length === 0) return "";
+  return `<div class="onboarding-control-cards">${controls.map((control) => `
+    <div><kbd>${escapeHtml(control.key)}</kbd><span>${escapeHtml(control.label)}</span></div>`).join("")}</div>`;
+}
+
 export function onboardingMarkup(state) {
   if (!state) return "";
   const current = state.steps[state.currentStep];
@@ -40,6 +46,7 @@ export function onboardingMarkup(state) {
         <span class="eyebrow">${escapeHtml(state.title)}</span>
         <h2 id="onboarding-step-title">${escapeHtml(current.title)}</h2>
         <p>${escapeHtml(current.body)}</p>
+        ${controlCardsMarkup(current.controls)}
         ${current.helper ? `<small class="onboarding-helper">${escapeHtml(current.helper)}</small>` : ""}
         <div class="onboarding-progress" aria-label="Step ${state.currentStep + 1} of ${state.steps.length}">
           ${state.steps.map((_, index) => `<span class="${index === state.currentStep ? "active" : ""}"></span>`).join("")}

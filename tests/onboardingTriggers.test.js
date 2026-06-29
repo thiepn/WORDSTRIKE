@@ -16,7 +16,8 @@ assert.match(main, /openAutomaticTutorial\("leaderboards"/);
 assert.match(main, /safeLevel % 10 === 0[\s\S]*openAutomaticTutorial\("boss"[\s\S]*return;/);
 assert.match(main, /typedBuffer === getSpeedTestCurrentWord\(speedState\)/);
 assert.match(main, /window\.wordstrikeOnboarding = Object\.freeze/);
-assert.match(main, /startAtLevelOne \? "START LEVEL 1" : "CONTINUE"/);
+assert.match(main, /openAutomaticTutorial\("general", \(\) => renderCurrentScreen\(\)\)/);
+assert.doesNotMatch(main, /openAutomaticTutorial\("general"[\s\S]{0,300}openLevelSelect/);
 assert.doesNotMatch(onboardingModules.join("\n"), /beginSession|startSpeedTest|prepareResultSubmission|submitCurrentResult|recordCompletedSession/);
 
 console.log("First-title, mode, boss, and leaderboard triggers are one-shot and tutorial modules cannot start or submit gameplay.");

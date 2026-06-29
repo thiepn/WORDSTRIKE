@@ -252,11 +252,15 @@ function stopActiveLoops() {
   stopDailyLoop();
 }
 
+function unmountGameplayInput() {
+  deactivateGameplayInput();
+  deactivateGameplayInput = () => {};
+}
+
 function discardActiveAttempt() {
   dismissContextualHint();
   tutorialHintMode = null;
-  deactivateGameplayInput();
-  deactivateGameplayInput = () => {};
+  unmountGameplayInput();
   clearAttemptRuntime(appState.game);
   clearSpeedTestLayout();
   clearSpeedTestRuntime();
@@ -507,6 +511,7 @@ function startLevel(levelNumber, source = "level-select") {
     config,
     appState.devMode,
     { attemptSeed, ...attempt },
+    { pause: pauseGame },
   );
   mountGameplayInput();
   const game = startLevelLoop(
@@ -538,6 +543,7 @@ function startLevel(levelNumber, source = "level-select") {
 
 function finishSpeedTest(state, result) {
   if (!result || appState.screen === Screens.SPEED_TEST_RESULTS) return;
+  unmountGameplayInput();
   appState.speedTestResult = result;
   appState.speedTestRecordFlags = { ...state.recordFlags };
   appState.speedTestResultsIndex = 1;
@@ -575,6 +581,8 @@ function resetSpeedTestAttempt(source = "mode-select") {
   changeScreen(Screens.SPEED_TEST_RUN);
   renderSpeedTestRun(state, appState.devMode, {
     selectConfig: changeSpeedTestConfig,
+    restart: () => resetSpeedTestAttempt("topbar-restart"),
+    pause: pauseTypingTest,
     help: () => {
       if (getCurrentSpeedTest()?.phase === "PREPARING") openTutorial("typing");
     },
@@ -588,6 +596,7 @@ function resetSpeedTestAttempt(source = "mode-select") {
 
 function finishEndless(game, result) {
   if (!result || appState.screen === Screens.ENDLESS_RESULTS) return;
+  unmountGameplayInput();
   appState.endlessResult = result;
   appState.endlessResultsIndex = 0;
   appState.endlessResultsReadyAt = currentTimeMs() + 200;
@@ -599,6 +608,7 @@ function finishEndless(game, result) {
 
 function finishDaily(game, result) {
   if (!result || appState.screen === Screens.DAILY_RESULTS) return;
+  unmountGameplayInput();
   appState.dailyResult = result;
   appState.dailyRecordFlags = { ...game.recordFlags };
   appState.dailyResultsIndex = 0;
@@ -631,7 +641,7 @@ function startDaily(source = "daily-ready", dateKey = appState.dailyDateKey) {
   }
   appState.dailyDateKey = challengeDateKey;
   changeScreen(Screens.PLAYING);
-  renderDailyShell(game, appState.devMode);
+  renderDailyShell(game, appState.devMode, { pause: pauseGame });
   mountGameplayInput();
   updateDailyHud(game);
   if (!appState.devMode) beginContextualHints("daily", "COMPLETE ALL WAVES TO FINISH TODAY’S CHALLENGE");
@@ -658,7 +668,7 @@ function startEndless(source = "mode-select") {
     return;
   }
   changeScreen(Screens.PLAYING);
-  renderEndlessShell(game, appState.devMode);
+  renderEndlessShell(game, appState.devMode, { pause: pauseGame });
   mountGameplayInput();
   updateEndlessHud(game);
   if (!appState.devMode) beginContextualHints("endless", "DIFFICULTY INCREASES AS YOU SURVIVE");
@@ -676,6 +686,9 @@ function changeSpeedTestConfig(configId) {
 function pauseTypingTest() {
   if (appState.screen !== Screens.SPEED_TEST_RUN) return;
   if (!pauseSpeedTest(currentTimeMs())) return;
+  deactivateGameplayInput.blur?.();
+  dismissContextualHint();
+  tutorialHintMode = null;
   changeScreen(Screens.PAUSED);
   appState.pauseIndex = 0;
   renderPauseOverlay();
@@ -716,7 +729,7 @@ function startBossLevel(levelNumber, legitimatelyUnlocked, source) {
   renderBossShell(levelNumber, config, appState.devMode, {
     attemptSeed,
     encounter,
-  });
+  }, { pause: pauseGame });
   mountGameplayInput();
   const game = startBossLoop(levelNumber, config, phrases, {
     onUpdate: (currentGame) => {
@@ -730,6 +743,7 @@ function startBossLevel(levelNumber, legitimatelyUnlocked, source) {
 }
 
 function finishLevel(game, success) {
+  unmountGameplayInput();
   const wpm = calculateSessionWpm({
     characterCount: game.correctCharacters,
     activeDurationMs: game.elapsedMs,
@@ -772,6 +786,9 @@ function finishLevel(game, success) {
 
 function pauseGame() {
   if (appState.screen !== Screens.PLAYING) return;
+  deactivateGameplayInput.blur?.();
+  dismissContextualHint();
+  tutorialHintMode = null;
   changeScreen(Screens.PAUSED);
   pauseSession();
   if (appState.game?.mode === "endless") stopEndlessLoop();
@@ -788,8 +805,8 @@ function renderPauseOverlay() {
   if (getCurrentSpeedTest()?.phase === "PAUSED") {
     showSpeedTestPauseOverlay(appState.pauseIndex, {
       resume: resumeGame,
-      retry: () => resetSpeedTestAttempt("retry"),
-      quit: () => resetSpeedTestAttempt("quit-test"),
+      restart: () => resetSpeedTestAttempt("pause-restart"),
+      modes: openModeSelect,
       title: openTitle,
       select: (index) => { appState.pauseIndex = index; },
     });
@@ -818,7 +835,7 @@ function renderPauseOverlay() {
   showPauseOverlay(appState.pauseIndex, {
     resume: resumeGame,
     retry: retryCurrentLevel,
-    levels: openLevelSelect,
+    modes: openModeSelect,
     title: openTitle,
     select: (index) => { appState.pauseIndex = index; },
   });
@@ -967,6 +984,7 @@ function renderCurrentScreen() {
     renderEndlessReady({
       start: () => startEndless("mode-select"),
       help: () => openTutorial("endless"),
+      back: openModeSelect,
     });
   } else if (appState.screen === Screens.ENDLESS_RESULTS) {
     renderEndlessResults(
@@ -992,6 +1010,7 @@ function renderCurrentScreen() {
     }, {
       start: () => startDaily("daily-ready", appState.dailyDateKey),
       help: () => openTutorial("daily"),
+      back: openModeSelect,
     });
   } else if (appState.screen === Screens.DAILY_RESULTS) {
     renderDailyResults(
@@ -1015,6 +1034,8 @@ function renderCurrentScreen() {
     if (state) {
       renderSpeedTestRun(state, appState.devMode, {
         selectConfig: changeSpeedTestConfig,
+        restart: () => resetSpeedTestAttempt("topbar-restart"),
+        pause: pauseTypingTest,
         help: () => {
           if (getCurrentSpeedTest()?.phase === "PREPARING") openTutorial("typing");
         },
@@ -1305,8 +1326,8 @@ function handleGlobalKeydown(event) {
       if (getCurrentSpeedTest()?.phase === "PAUSED") {
         [
           resumeGame,
-          () => resetSpeedTestAttempt("retry"),
-          () => resetSpeedTestAttempt("quit-test"),
+          () => resetSpeedTestAttempt("pause-restart"),
+          openModeSelect,
           openTitle,
         ][appState.pauseIndex]();
       } else if (appState.game?.mode === "endless") {
@@ -1314,7 +1335,7 @@ function handleGlobalKeydown(event) {
       } else if (appState.game?.mode === "daily") {
         [resumeGame, () => startDaily("retry", appState.game.config.dateKey), openModeSelect, openTitle][appState.pauseIndex]();
       } else {
-        [resumeGame, retryCurrentLevel, openLevelSelect, openTitle][appState.pauseIndex]();
+        [resumeGame, retryCurrentLevel, openModeSelect, openTitle][appState.pauseIndex]();
       }
     }
     return;
@@ -1601,15 +1622,7 @@ async function bootstrap() {
     openLeaderboardReturn(returnState);
   } else {
     renderCurrentScreen();
-    openAutomaticTutorial("general", (choice) => {
-      if (choice === "primary") {
-        openLevelSelect("mode-select");
-        const startAtLevelOne = appState.save.currentFurthestLevel === 1;
-        openAutomaticTutorial("campaign", (campaignChoice) => {
-          if (campaignChoice === "primary" && startAtLevelOne) startLevel(1, "level-select");
-        }, { primaryLabel: startAtLevelOne ? "START LEVEL 1" : "CONTINUE" });
-      } else if (choice === "explore") openModeSelect();
-    });
+    openAutomaticTutorial("general", () => renderCurrentScreen());
   }
 }
 
