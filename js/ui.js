@@ -429,12 +429,14 @@ export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
           <strong id="speed-test-primary">${primaryValue}</strong>
           ${isTime ? "" : '<span id="speed-test-elapsed">00:00</span>'}
         </div>` : ""}
-        <div class="speed-test-word-viewport" id="speed-test-word-viewport">
-          <div class="speed-test-word-flow" id="speed-test-word-flow">
-            ${state.words.map((word, index) => `
-              <span class="speed-test-word ${index === 0 ? "speed-test-word-current" : ""}"
-                    data-speed-word-index="${index}"
-                    aria-current="${index === 0 ? "true" : "false"}">${speedWordMarkup(word, "", index === 0)}</span>`).join("")}
+        <div class="speed-test-word-region">
+          <div class="speed-test-word-viewport" id="speed-test-word-viewport">
+            <div class="speed-test-word-flow" id="speed-test-word-flow">
+              ${state.words.map((word, index) => `
+                <span class="speed-test-word ${index === 0 ? "speed-test-word-current" : ""}"
+                      data-speed-word-index="${index}"
+                      aria-current="${index === 0 ? "true" : "false"}">${speedWordMarkup(word, "", index === 0)}</span>`).join("")}
+            </div>
           </div>
         </div>
       </main>

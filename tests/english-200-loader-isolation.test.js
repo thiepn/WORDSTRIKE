@@ -49,7 +49,7 @@ assert.deepEqual(commonBank.words, common.words.map(({ word }) => word));
 
 for (const configId of [
   "time-15", "time-30", "time-60", "time-120",
-  "words-25", "words-50", "words-100",
+  "words-10", "words-25", "words-50", "words-100",
 ]) {
   const first = createSpeedTestWordStream(speedBank.words, 12345, configId);
   const repeat = createSpeedTestWordStream(speedBank.words, 12345, configId);

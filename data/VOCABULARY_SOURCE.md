@@ -12,7 +12,16 @@ a frequency-ranked list derived from Google's Trillion Word Corpus.
 
 The generator accepts lowercase ASCII words of 2–12 characters, removes duplicates,
 uses the upstream swear-filtered edition, and applies an additional reviewed exclusion
-set for proper names, brands, abbreviations, technical/browser terms, and niche words.
+set for brands, abbreviations, technical/browser terms, and niche words. Personal names
+come from the U.S. Social Security Administration national baby-name dataset (CC0),
+using the checked-in `personalNameExclusions.json` generated from names that reached at
+least 1,000 births in one year. Ambiguous ordinary words and a small geographic allowlist
+are documented in `scripts/buildWordPools.mjs`.
+
+Regular `-s`, `-es`, `-ies`, `-ed`, and `-ing` forms are removed when an earlier-ranked
+base form exists. Explicit exception lists preserve common irregular forms, independent
+words, and legitimate singular words ending in `s`. Two- and three-letter words use an
+explicit everyday-function-word allowlist, excluding initialisms such as UTC and DSL.
 It keeps the first 3,000 accepted words in source frequency order.
 
 Difficulty is primarily frequency-based (72%), with a smaller typing-complexity factor

@@ -343,7 +343,7 @@ export function renderSettingsAccountManagement({
   nameError = "",
   authState,
   leaderboardProfileState,
-  pendingResult = null,
+  pendingResultState = null,
 } = {}) {
   const displayName = escapeHtml(localProfile?.displayName || "PLAYER");
   const localEditor = editing
@@ -357,17 +357,66 @@ export function renderSettingsAccountManagement({
        <button type="button" class="text-action" data-action="settings-edit-name">EDIT NAME</button>`;
   return `<section class="settings-account-management" id="settings-account-management" tabindex="-1" aria-labelledby="settings-account-heading">
     <h2 id="settings-account-heading">ACCOUNT &amp; LEADERBOARDS</h2>
-    ${pendingResult ? `<aside class="pending-result-notice" aria-live="polite">
-      <strong>YOUR LAST RESULT IS READY TO SUBMIT</strong>
-      <span>SET A PUBLIC USERNAME TO CONTINUE</span>
-      <div class="global-account-actions">
-        <button class="arcade-button account-primary" data-action="retry-pending-result">RETRY SUBMISSION</button>
-        <button class="arcade-button secondary" data-action="discard-pending-result">DISCARD</button>
-      </div>
-    </aside>` : ""}
+    ${renderPendingResultNotice(pendingResultState, leaderboardProfileState)}
     <div class="settings-local-profile"><span>LOCAL DISPLAY NAME</span>${localEditor}</div>
     ${renderGlobalAccount(authState, leaderboardProfileState)}
   </section>`;
+}
+
+const PENDING_RESULT_COPY = Object.freeze({
+  restoring: ["RESTORING YOUR LAST RESULT", "CHECKING THE SAVED RESULT ON THIS DEVICE"],
+  "waiting-for-auth": ["YOUR LAST RESULT IS SAVED", "FINISH SIGNING IN TO CONTINUE"],
+  "waiting-for-profile": ["YOUR LAST RESULT IS SAVED", "CHECKING YOUR PUBLIC PROFILE"],
+  "username-required": ["YOUR LAST RESULT IS READY TO SUBMIT", "SET A PUBLIC USERNAME TO CONTINUE"],
+  ready: ["YOUR LAST RESULT IS READY TO SUBMIT", "SUBMIT IT TO THE MATCHING LEADERBOARD"],
+  submitting: ["SUBMITTING YOUR LAST RESULT", "KEEP THIS PAGE OPEN FOR A MOMENT"],
+  submitted: ["LAST RESULT SUBMITTED", "THE LEADERBOARD IS NOW REFRESHING"],
+  duplicate: ["LAST RESULT ALREADY SUBMITTED", "THE SAVED COPY HAS BEEN CLEARED"],
+  expired: ["SAVED RESULT EXPIRED", "THE RESULT REMAINS IN LOCAL HISTORY"],
+  failed: ["SUBMISSION FAILED - RETRY", "YOUR RESULT IS STILL SAVED ON THIS DEVICE"],
+});
+
+const PENDING_RESULT_ERRORS = Object.freeze({
+  AUTH_UNAVAILABLE: "ONLINE ACCOUNT SERVICES ARE CURRENTLY UNAVAILABLE",
+  PROFILE_UNAVAILABLE: "THE PUBLIC PROFILE COULD NOT BE VERIFIED",
+  HYDRATION_FAILED: "THE SAVED RESULT COULD NOT BE PREPARED",
+  MALFORMED_INTENT: "THE SAVED SUBMISSION DATA IS INVALID",
+  USER_MISMATCH: "THIS RESULT IS BOUND TO A DIFFERENT ACCOUNT",
+  INTENT_UNAVAILABLE: "THE SAVED RESULT IS NO LONGER AVAILABLE",
+  STORAGE_ERROR: "THE SAVED RESULT COULD NOT BE UPDATED",
+  OFFLINE: "YOU APPEAR TO BE OFFLINE",
+  SUBMISSION_FAILED: "THE NETWORK REQUEST DID NOT COMPLETE",
+});
+
+export function renderPendingResultNotice(pendingResultState, profileState = {}) {
+  if (!pendingResultState || ["idle", "discarded"].includes(pendingResultState.status)) return "";
+  const hasUsername = Boolean(profileState?.profile?.username);
+  const status = pendingResultState.status === "username-required" && hasUsername
+    ? "ready"
+    : pendingResultState.status;
+  const copy = PENDING_RESULT_COPY[status];
+  if (!copy) return "";
+  const canSubmit = status === "ready";
+  const canRetry = status === "failed" && !["MALFORMED_INTENT", "USER_MISMATCH", "INTENT_UNAVAILABLE"].includes(pendingResultState.errorCode);
+  const isSubmitting = status === "submitting";
+  const detail = status === "failed"
+    ? PENDING_RESULT_ERRORS[pendingResultState.errorCode] || copy[1]
+    : copy[1];
+  const primary = canSubmit
+    ? '<button class="arcade-button account-primary" data-action="retry-pending-result">SUBMIT LAST RESULT</button>'
+    : canRetry
+      ? '<button class="arcade-button account-primary" data-action="retry-pending-result">RETRY SUBMISSION</button>'
+      : isSubmitting
+        ? '<button class="arcade-button account-primary" disabled>SUBMITTING...</button>'
+        : "";
+  return `<aside class="pending-result-notice" data-pending-result-status="${status}" aria-live="polite">
+    <strong>${copy[0]}</strong>
+    <span>${detail}</span>
+    <div class="global-account-actions">
+      ${primary}
+      <button class="arcade-button secondary" data-action="discard-pending-result">DISCARD</button>
+    </div>
+  </aside>`;
 }
 
 export function updateProfileAuthSection(authState, profileState) {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  bindPendingResultSubmission,
   clearPendingResultSubmission,
   loadPendingResultSubmission,
   PENDING_RESULT_MAX_AGE_MS,
@@ -37,8 +38,14 @@ const result = {
 const intent = savePendingResultSubmission("campaign", result, { storage, now: 1000 });
 assert.equal(intent.sessionId, result.sessionId);
 assert.equal(intent.source, "result-google-sign-in");
+assert.equal(intent.boundUserId, null);
 assert.equal(intent.expiresAt, 1000 + PENDING_RESULT_MAX_AGE_MS);
 assert.equal(loadPendingResultSubmission({ storage, now: 2000 }).sessionId, result.sessionId);
+assert.equal(bindPendingResultSubmission("user-1", { storage, now: 2000 }).intent.boundUserId, "user-1");
+assert.equal(bindPendingResultSubmission("user-2", { storage, now: 2000 }).error, "USER_MISMATCH");
+assert.equal(loadPendingResultSubmission({ storage, now: 2000 }), null);
+
+const reboundIntent = savePendingResultSubmission("campaign", result, { storage, now: 1000 });
 
 let requests = 0;
 const service = createLeaderboardSubmissionService({
@@ -50,7 +57,7 @@ const service = createLeaderboardSubmissionService({
 });
 const auth = { status: "signed-in", user: { id: "user-1" } };
 const profile = { status: "ready", profile: { username: "Player_1" } };
-const restored = service.restorePreparedSubmission("campaign", intent.immutablePayload, auth, profile);
+const restored = service.restorePreparedSubmission("campaign", reboundIntent.immutablePayload, auth, profile);
 assert.equal(restored.status, "ready");
 assert.equal(restored.sessionId, result.sessionId);
 const firstRequest = service.submitCurrentResult();

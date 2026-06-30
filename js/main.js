@@ -201,16 +201,14 @@ import {
   clearSubmissionState,
   getSubmissionState,
   prepareResultSubmission,
-  restorePreparedSubmission,
   retryCurrentSubmission,
   submitCurrentResult,
   subscribeToSubmissions,
 } from "./leaderboardSubmissionService.js";
 import {
-  clearPendingResultSubmission,
-  loadPendingResultSubmission,
   savePendingResultSubmission,
 } from "./pendingResultSubmission.js";
+import { createPendingResultCoordinator } from "./pendingResultCoordinator.js";
 import {
   armPreparedResult,
   clearAutomaticSubmission,
@@ -227,13 +225,22 @@ const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
 let lastAuthUiKey = "";
 let bootstrapReady = false;
 let pendingLeaderboardReturn = null;
-let pendingResultAttempted = false;
-let pendingResultRoutedToSettings = false;
 let leaderboardNotice = "";
 let deactivateGameplayInput = () => {};
 const onboardingController = createOnboardingController();
 let onboardingView = null;
 let tutorialHintMode = null;
+const pendingResultCoordinator = createPendingResultCoordinator({
+  onUsernameRequired: () => {
+    if (bootstrapReady && appState.screen !== Screens.SETTINGS) openAccountSettings();
+  },
+  onFailure: () => {
+    if (bootstrapReady && appState.screen !== Screens.SETTINGS) openAccountSettings();
+  },
+  onSuccess: (_state, intent) => {
+    if (bootstrapReady) openLeaderboardBoard(intent.boardKey, { notice: "LAST RESULT SUBMITTED" });
+  },
+});
 
 function ensureOnboardingView() {
   onboardingView ||= createOnboardingView(onboardingController);
@@ -493,31 +500,6 @@ function openSettings() {
   changeScreen(Screens.SETTINGS);
   appState.settingsIndex = 0;
   renderCurrentScreen();
-}
-
-async function resumePendingResultSubmission(authState, profileState) {
-  if (!bootstrapReady) return null;
-  const intent = loadPendingResultSubmission();
-  if (!intent || pendingResultAttempted) return null;
-  if (authState?.status !== "signed-in" || !authState.user?.id) return null;
-  if (["idle", "loading"].includes(profileState?.status)) return null;
-  if (!profileState?.profile?.username) {
-    if (!pendingResultRoutedToSettings) {
-      pendingResultRoutedToSettings = true;
-      openAccountSettings();
-    }
-    return null;
-  }
-  pendingResultRoutedToSettings = false;
-  const restored = restorePreparedSubmission(
-    intent.mode,
-    intent.immutablePayload,
-    authState,
-    profileState,
-  );
-  if (restored.status !== "ready") return restored;
-  pendingResultAttempted = true;
-  return submitCurrentResult();
 }
 
 function openAccountSettings() {
@@ -1177,7 +1159,7 @@ function renderCurrentScreen() {
       nameError: appState.profileNameError,
       authState: getAuthState(),
       leaderboardProfileState: getLeaderboardProfileState(),
-      pendingResult: loadPendingResultSubmission(),
+      pendingResultState: pendingResultCoordinator.getState(),
     }));
   } else if (appState.screen === Screens.PROFILE_STATS) {
     const storage = loadModeData();
@@ -1237,13 +1219,16 @@ function handleAppClick(event) {
   const startResultGoogleSignIn = (boardKey, mode, result) => {
     const intent = savePendingResultSubmission(mode, result);
     if (!intent || intent.boardKey !== boardKey) return;
-    pendingResultAttempted = false;
+    pendingResultCoordinator.resetLifecycle();
     saveLeaderboardReturnState(leaderboardReturnStateForBoard(boardKey));
     void signInWithGoogle();
   };
   const handleAccountAction = () => {
     if (action === "auth-google-sign-in") void signInWithGoogle();
-    else if (action === "auth-sign-out") void signOut();
+    else if (action === "auth-sign-out") {
+      pendingResultCoordinator.discard();
+      void signOut();
+    }
     else if (action === "leaderboard-username-start-change") startUsernameChange();
     else if (action === "leaderboard-username-cancel-change") cancelUsernameChange();
     else {
@@ -1293,12 +1278,10 @@ function handleAppClick(event) {
     handleAccountAction();
   } else if (appState.screen === Screens.SETTINGS) {
     if (action === "retry-pending-result") {
-      pendingResultAttempted = false;
-      void resumePendingResultSubmission(getAuthState(), getLeaderboardProfileState());
+      void pendingResultCoordinator.resume(getAuthState(), getLeaderboardProfileState());
     }
     else if (action === "discard-pending-result") {
-      clearPendingResultSubmission();
-      pendingResultAttempted = false;
+      pendingResultCoordinator.discard();
       renderCurrentScreen();
     }
     else if (action === "settings-edit-name") beginProfileNameEdit();
@@ -1619,14 +1602,11 @@ async function bootstrap() {
         }
       }
     }
-    else {
-      resetLeaderboardProfile();
-      if (authState.status === "signed-out") clearPendingResultSubmission();
-    }
+    else resetLeaderboardProfile();
     if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS, Screens.SPEED_TEST_RESULTS, Screens.RESULTS].includes(appState.screen)) {
       void handleAutomaticSubmissionStateChange(authState, getLeaderboardProfileState());
     }
-    void resumePendingResultSubmission(authState, getLeaderboardProfileState());
+    if (bootstrapReady) void pendingResultCoordinator.evaluate(authState, getLeaderboardProfileState());
     if (authUiChanged && (
       appState.screen === Screens.SETTINGS ||
       (appState.screen === Screens.PROFILE_STATS && appState.statisticsTabIndex === 6)
@@ -1639,32 +1619,22 @@ async function bootstrap() {
       appState.screen === Screens.SETTINGS ||
       (appState.screen === Screens.PROFILE_STATS && appState.statisticsTabIndex === 6)
     ) {
-      updateProfileAuthSection(getAuthState(), profileState);
+      if (appState.screen === Screens.SETTINGS) renderCurrentScreen();
+      else updateProfileAuthSection(getAuthState(), profileState);
     }
     if (appState.screen === Screens.LEADERBOARDS) renderCurrentScreen();
     if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS, Screens.SPEED_TEST_RESULTS, Screens.RESULTS].includes(appState.screen)) {
       void handleAutomaticSubmissionStateChange(getAuthState(), profileState);
     }
-    void resumePendingResultSubmission(getAuthState(), profileState);
+    if (bootstrapReady) void pendingResultCoordinator.evaluate(getAuthState(), profileState);
   });
   subscribeToSubmissions((submissionState) => {
     if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS, Screens.SPEED_TEST_RESULTS, Screens.RESULTS].includes(appState.screen)) {
       updateGlobalSubmissionRegion(submissionState);
     }
-    if (["submitted", "already-submitted"].includes(submissionState.status)) {
-      const intent = loadPendingResultSubmission();
-      if (intent?.sessionId === submissionState.sessionId) {
-        clearPendingResultSubmission();
-        pendingResultAttempted = false;
-        openLeaderboardBoard(intent.boardKey, { notice: "LAST RESULT SUBMITTED" });
-      }
-    }
-    if (["error", "offline"].includes(submissionState.status)) {
-      const intent = loadPendingResultSubmission();
-      if (intent?.sessionId === submissionState.sessionId && appState.screen !== Screens.SETTINGS) {
-        openAccountSettings();
-      }
-    }
+  });
+  pendingResultCoordinator.subscribe(() => {
+    if (bootstrapReady && appState.screen === Screens.SETTINGS) renderCurrentScreen();
   });
   subscribeToLeaderboards(() => {
     if (appState.screen === Screens.LEADERBOARDS) renderCurrentScreen();
@@ -1732,7 +1702,7 @@ async function bootstrap() {
       }
     });
   }
-  void resumePendingResultSubmission(getAuthState(), getLeaderboardProfileState());
+  void pendingResultCoordinator.evaluate(getAuthState(), getLeaderboardProfileState());
 }
 
 bootstrap();

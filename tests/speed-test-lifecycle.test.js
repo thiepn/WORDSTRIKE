@@ -76,14 +76,14 @@ assert.equal(completed, 1);
 
 const firstSessionId = getCurrentSession().id;
 state = startSpeedTest({
-  config: getSpeedTestConfig("words-25"),
+  config: getSpeedTestConfig("words-10"),
   wordPool: pool,
   attemptSeed: 456,
 });
 assert.notEqual(getCurrentSession().id, firstSessionId);
-assert.equal(state.words.length, 25);
-state.words.splice(0, state.words.length, ...Array(24).fill("cat"), "word");
-state.currentWordIndex = 24;
+assert.equal(state.words.length, 10);
+state.words.splice(0, state.words.length, ...Array(9).fill("cat"), "word");
+state.currentWordIndex = 9;
 for (const [index, key] of [..."word"].entries()) {
   handleCurrentSpeedTestKey(event(key, 900000 + index), 200 + index);
 }

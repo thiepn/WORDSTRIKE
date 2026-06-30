@@ -38,6 +38,11 @@ const typingPayload = buildSubmissionPayload("typing", {
   },
 });
 assert.equal(typingPayload.boardKey, "typing-15s-english200-v1");
+assert.equal(buildSubmissionPayload("typing", {
+  ...typingPayload,
+  sessionId: "123e4567-e89b-42d3-a456-426614174099",
+  modeData: { configId: "words-10", durationSeconds: null, wordCount: 10 },
+}), null);
 const main = await readFile(new URL("../js/main.js", import.meta.url), "utf8");
 const speed = await readFile(new URL("../js/speedTest.js", import.meta.url), "utf8");
 const campaignFinish = main.slice(main.indexOf("function finishLevel"), main.indexOf("function pauseGame"));

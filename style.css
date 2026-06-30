@@ -1862,13 +1862,19 @@ button {
 
 .speed-test-stage {
   z-index: 1;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  position: relative;
+  display: block;
   min-height: 0;
   padding: clamp(16px, 3vh, 34px) clamp(20px, 7vw, 110px) max(54px, env(safe-area-inset-bottom));
+  overflow: hidden;
 }
 
 .speed-test-prompt-row {
+  position: absolute;
+  z-index: 3;
+  top: clamp(10px, 2vh, 24px);
+  right: clamp(20px, 7vw, 110px);
+  left: clamp(20px, 7vw, 110px);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -2153,7 +2159,20 @@ button {
   transition: 120ms ease;
 }
 
+.speed-test-word-region {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  right: clamp(20px, 7vw, 110px);
+  left: clamp(20px, 7vw, 110px);
+  transform: translateY(-50%);
+}
+
 .speed-test-center-timer {
+  position: absolute;
+  z-index: 2;
+  top: calc(50% - clamp(76px, 11vh, 118px));
+  left: 50%;
   display: grid;
   min-height: clamp(62px, 10vh, 96px);
   place-items: center;
@@ -2161,6 +2180,8 @@ button {
   color: var(--primary);
   font-variant-numeric: tabular-nums;
   text-align: center;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
 }
 
 .speed-test-center-timer strong {
@@ -3358,6 +3379,12 @@ button {
     padding: 10px max(12px, env(safe-area-inset-right)) max(52px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   }
 
+  .speed-test-prompt-row,
+  .speed-test-word-region {
+    right: max(12px, env(safe-area-inset-right));
+    left: max(12px, env(safe-area-inset-left));
+  }
+
   .speed-test-prompt-row {
     min-height: 42px;
     margin-bottom: 4px;
@@ -3542,6 +3569,12 @@ body.gameplay-viewport-short .speed-test-controls-wrap {
 
 body.gameplay-viewport-short .speed-test-stage {
   padding: 4px 14px max(46px, env(safe-area-inset-bottom));
+}
+
+body.gameplay-viewport-short .speed-test-prompt-row,
+body.gameplay-viewport-short .speed-test-word-region {
+  right: 14px;
+  left: 14px;
 }
 
 body.gameplay-viewport-short .speed-test-prompt-row {

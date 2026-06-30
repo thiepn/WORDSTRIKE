@@ -13,15 +13,17 @@ assert.deepEqual(
   getAllSpeedTestConfigs().map(({ configId }) => configId),
   [
     "time-15", "time-30", "time-60", "time-120",
-    "words-25", "words-50", "words-100",
+    "words-10", "words-25", "words-50", "words-100",
   ],
 );
 assert.equal(getSpeedTestConfig("time-60").durationSeconds, 60);
+assert.equal(getSpeedTestConfig("words-10").wordCount, 10);
 assert.equal(getSpeedTestConfig("words-50").wordCount, 50);
 assert.equal(isValidSpeedTestConfigId("words-100"), true);
 assert.equal(isValidSpeedTestConfigId("bad"), false);
 assert.equal(getSpeedTestConfig("bad"), null);
 assert.equal(normalizeSpeedTestConfigId("bad"), "time-60");
 assert.equal(parseDeveloperSpeedTestConfig("?test=words-25"), "words-25");
+assert.equal(parseDeveloperSpeedTestConfig("?test=words-10"), "words-10");
 assert.equal(parseDeveloperSpeedTestConfig("?test=bad"), "time-60");
 console.log("Typing Test configuration validation, defaults, and query parsing tests passed.");
