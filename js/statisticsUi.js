@@ -424,7 +424,7 @@ export function renderProfileStatistics({
       <main class="profile-stats-shell">
         <header class="profile-stats-topbar">
           <div><span class="eyebrow">Local player data</span><h1>PROFILE &amp; STATS</h1></div>
-          <button class="screen-back-button" data-stats-action="back" aria-label="Go back">â† BACK</button>
+          <button class="screen-back-button" data-stats-action="back" aria-label="Go back">BACK</button>
         </header>
         <nav class="profile-tabs" aria-label="Profile statistics tabs">
           ${STATISTICS_TABS.map((label, index) => `
