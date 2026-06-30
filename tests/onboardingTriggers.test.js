@@ -16,7 +16,7 @@ assert.match(main, /openAutomaticTutorial\("leaderboards"/);
 assert.match(main, /safeLevel % 10 === 0[\s\S]*openAutomaticTutorial\("boss"[\s\S]*return;/);
 assert.match(main, /typedBuffer === getSpeedTestCurrentWord\(speedState\)/);
 assert.match(main, /window\.wordstrikeOnboarding = Object\.freeze/);
-assert.match(main, /openAutomaticTutorial\("general", \(\) => renderCurrentScreen\(\)\)/);
+assert.match(main, /openAutomaticTutorial\("general", \(choice\) =>/);
 assert.doesNotMatch(main, /openAutomaticTutorial\("general"[\s\S]{0,300}openLevelSelect/);
 assert.doesNotMatch(onboardingModules.join("\n"), /beginSession|startSpeedTest|prepareResultSubmission|submitCurrentResult|recordCompletedSession/);
 

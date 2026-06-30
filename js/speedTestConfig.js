@@ -8,6 +8,7 @@ export const SPEED_TEST_CONFIG_IDS = Object.freeze([
   "time-30",
   "time-60",
   "time-120",
+  "words-10",
   "words-25",
   "words-50",
   "words-100",
@@ -43,6 +44,13 @@ const CONFIGURATIONS = Object.freeze([
     durationSeconds: 120,
     wordCount: null,
     label: "120 Seconds",
+  }),
+  Object.freeze({
+    configId: "words-10",
+    testType: SPEED_TEST_TYPES.WORDS,
+    durationSeconds: null,
+    wordCount: 10,
+    label: "10 Words",
   }),
   Object.freeze({
     configId: "words-25",

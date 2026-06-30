@@ -17,7 +17,13 @@ import {
   generateLevel,
 } from "./levelGenerator.js";
 import { generateBossEncounter } from "./bossGenerator.js";
-import { loadSave, resetProgress, updateLevelResult, updateSetting } from "./storage.js";
+import {
+  loadSave,
+  resetProgress,
+  updateLevelResult,
+  updateSetting,
+  updateSpeedTestTimerPosition,
+} from "./storage.js";
 import {
   loadBossWordBank,
   loadCommonWordBank,
@@ -200,6 +206,10 @@ import {
   subscribeToSubmissions,
 } from "./leaderboardSubmissionService.js";
 import {
+  savePendingResultSubmission,
+} from "./pendingResultSubmission.js";
+import { createPendingResultCoordinator } from "./pendingResultCoordinator.js";
+import {
   armPreparedResult,
   clearAutomaticSubmission,
   handleAutomaticSubmissionStateChange,
@@ -215,10 +225,22 @@ const currentTimeMs = () => globalThis.performance?.now?.() ?? Date.now();
 let lastAuthUiKey = "";
 let bootstrapReady = false;
 let pendingLeaderboardReturn = null;
+let leaderboardNotice = "";
 let deactivateGameplayInput = () => {};
 const onboardingController = createOnboardingController();
 let onboardingView = null;
 let tutorialHintMode = null;
+const pendingResultCoordinator = createPendingResultCoordinator({
+  onUsernameRequired: () => {
+    if (bootstrapReady && appState.screen !== Screens.SETTINGS) openAccountSettings();
+  },
+  onFailure: () => {
+    if (bootstrapReady && appState.screen !== Screens.SETTINGS) openAccountSettings();
+  },
+  onSuccess: (_state, intent) => {
+    if (bootstrapReady) openLeaderboardBoard(intent.boardKey, { notice: "LAST RESULT SUBMITTED" });
+  },
+});
 
 function ensureOnboardingView() {
   onboardingView ||= createOnboardingView(onboardingController);
@@ -227,7 +249,12 @@ function ensureOnboardingView() {
 
 function openTutorial(id, { source = "help", onComplete = null, primaryLabel = null } = {}) {
   ensureOnboardingView();
-  return onboardingController.open(id, { source, onComplete, primaryLabel });
+  return onboardingController.open(id, {
+    source,
+    onComplete,
+    primaryLabel,
+    signedIn: getAuthState().status === "signed-in",
+  });
 }
 
 function openAutomaticTutorial(id, onComplete = null, options = {}) {
@@ -271,6 +298,7 @@ function discardActiveAttempt() {
 function routeActiveGameplayKey(event) {
   if (appState.screen === Screens.SPEED_TEST_RUN) {
     const speedState = getCurrentSpeedTest();
+    if (event.target?.dataset?.speedTimerPosition) return true;
     if (speedState?.phase === "PREPARING" && [
       "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End",
     ].includes(event.key)) {
@@ -393,12 +421,8 @@ function openProfileStatistics() {
   renderCurrentScreen();
 }
 
-function openGlobalProfile() {
-  openProfileStatistics();
-  selectStatisticsTab(STATISTICS_TABS.length - 1);
-}
-
-function openLeaderboardBoard(boardKey) {
+function openLeaderboardBoard(boardKey, { notice = "" } = {}) {
+  leaderboardNotice = notice;
   cleanupCampaignAttempt("leaderboards");
   changeScreen(Screens.LEADERBOARDS);
   renderCurrentScreen();
@@ -416,6 +440,10 @@ function openLeaderboards() {
 }
 
 function openLeaderboardReturn(returnState) {
+  if (returnState?.screen === "title") {
+    openTitle();
+    return;
+  }
   const boardKey = returnState?.selectedCategory === LEADERBOARD_CATEGORIES.TYPING
     ? returnState.typingDuration === 15 ? LEADERBOARD_BOARDS.TYPING_15 : LEADERBOARD_BOARDS.TYPING_60
     : returnState?.selectedCategory === LEADERBOARD_CATEGORIES.ENDLESS
@@ -472,6 +500,16 @@ function openSettings() {
   changeScreen(Screens.SETTINGS);
   appState.settingsIndex = 0;
   renderCurrentScreen();
+}
+
+function openAccountSettings() {
+  cleanupCampaignAttempt("account-settings");
+  openSettings();
+  globalThis.requestAnimationFrame?.(() => {
+    const account = document.querySelector("#settings-account-management");
+    account?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+    account?.focus?.({ preventScroll: true });
+  });
 }
 
 function backFromSettings() {
@@ -578,6 +616,7 @@ function resetSpeedTestAttempt(source = "mode-select") {
     openModeSelect();
     return;
   }
+  state.timerPosition = appState.save.settings.speedTestTimerPosition;
   changeScreen(Screens.SPEED_TEST_RUN);
   renderSpeedTestRun(state, appState.devMode, {
     selectConfig: changeSpeedTestConfig,
@@ -586,11 +625,22 @@ function resetSpeedTestAttempt(source = "mode-select") {
     help: () => {
       if (getCurrentSpeedTest()?.phase === "PREPARING") openTutorial("typing");
     },
+    setTimerPosition: changeSpeedTestTimerPosition,
   });
   mountGameplayInput();
   updateSpeedTestRun(state, currentTimeMs());
   if (!appState.devMode && source === "mode-select") {
     beginContextualHints("typing", "START TYPING TO BEGIN", 0);
+  }
+}
+
+function changeSpeedTestTimerPosition(position) {
+  const state = getCurrentSpeedTest();
+  if (!state) return;
+  state.timerPosition = updateSpeedTestTimerPosition(appState.save, position);
+  if (appState.screen === Screens.SPEED_TEST_RUN) {
+    renderCurrentScreen();
+    updateSpeedTestRun(state, currentTimeMs());
   }
 }
 
@@ -969,6 +1019,7 @@ function renderCurrentScreen() {
       getLeaderboardState(),
       getAuthState(),
       getLeaderboardProfileState(),
+      leaderboardNotice,
     );
   } else if (appState.screen === Screens.MODE_SELECT) {
     renderModeSelect(getAllModes(), appState.modeSelection, {
@@ -1039,6 +1090,7 @@ function renderCurrentScreen() {
         help: () => {
           if (getCurrentSpeedTest()?.phase === "PREPARING") openTutorial("typing");
         },
+        setTimerPosition: changeSpeedTestTimerPosition,
       });
       updateSpeedTestRun(state, currentTimeMs());
     }
@@ -1107,6 +1159,7 @@ function renderCurrentScreen() {
       nameError: appState.profileNameError,
       authState: getAuthState(),
       leaderboardProfileState: getLeaderboardProfileState(),
+      pendingResultState: pendingResultCoordinator.getState(),
     }));
   } else if (appState.screen === Screens.PROFILE_STATS) {
     const storage = loadModeData();
@@ -1163,13 +1216,19 @@ function handleAppClick(event) {
   });
   if (!action) return;
   event.preventDefault();
-  const startResultGoogleSignIn = (boardKey) => {
+  const startResultGoogleSignIn = (boardKey, mode, result) => {
+    const intent = savePendingResultSubmission(mode, result);
+    if (!intent || intent.boardKey !== boardKey) return;
+    pendingResultCoordinator.resetLifecycle();
     saveLeaderboardReturnState(leaderboardReturnStateForBoard(boardKey));
     void signInWithGoogle();
   };
   const handleAccountAction = () => {
     if (action === "auth-google-sign-in") void signInWithGoogle();
-    else if (action === "auth-sign-out") void signOut();
+    else if (action === "auth-sign-out") {
+      pendingResultCoordinator.discard();
+      void signOut();
+    }
     else if (action === "leaderboard-username-start-change") startUsernameChange();
     else if (action === "leaderboard-username-cancel-change") cancelUsernameChange();
     else {
@@ -1185,8 +1244,8 @@ function handleAppClick(event) {
     if (action === "submit-global-score") void submitCurrentResult();
     else if (action === "retry-global-score") void retryCurrentSubmission();
     else if (action === "view-endless-leaderboard") openLeaderboardBoard(LEADERBOARD_BOARDS.ENDLESS);
-    else if (action === "open-global-profile") openGlobalProfile();
-    else if (action === "result-google-sign-in") startResultGoogleSignIn(LEADERBOARD_BOARDS.ENDLESS);
+    else if (action === "open-account-settings") openAccountSettings();
+    else if (action === "result-google-sign-in") startResultGoogleSignIn(LEADERBOARD_BOARDS.ENDLESS, "endless", appState.endlessResult);
     else if (action === "retry") startEndless("retry");
     else if (action === "modes") openModeSelect();
     else if (action === "title") openTitle();
@@ -1194,8 +1253,8 @@ function handleAppClick(event) {
     if (action === "submit-global-score") void submitCurrentResult();
     else if (action === "retry-global-score") void retryCurrentSubmission();
     else if (action === "view-daily-leaderboard") openLeaderboardBoard(LEADERBOARD_BOARDS.DAILY);
-    else if (action === "open-global-profile") openGlobalProfile();
-    else if (action === "result-google-sign-in") startResultGoogleSignIn(LEADERBOARD_BOARDS.DAILY);
+    else if (action === "open-account-settings") openAccountSettings();
+    else if (action === "result-google-sign-in") startResultGoogleSignIn(LEADERBOARD_BOARDS.DAILY, "daily", appState.dailyResult);
     else if (action === "retry") startDaily("retry", appState.dailyResult.modeData.dateKey);
     else if (action === "modes") openModeSelect();
     else if (action === "title") openTitle();
@@ -1205,20 +1264,27 @@ function handleAppClick(event) {
       : LEADERBOARD_BOARDS.TYPING_60;
     if (action === "submit-global-score") void submitCurrentResult();
     else if (action === "retry-global-score") void retryCurrentSubmission();
-    else if (action === "result-google-sign-in") startResultGoogleSignIn(boardKey);
-    else if (action === "open-global-profile") openGlobalProfile();
+    else if (action === "result-google-sign-in") startResultGoogleSignIn(boardKey, "typing", appState.speedTestResult);
+    else if (action === "open-account-settings") openAccountSettings();
     else if (action === "view-typing-15-leaderboard") openLeaderboardBoard(LEADERBOARD_BOARDS.TYPING_15);
     else if (action === "view-typing-60-leaderboard") openLeaderboardBoard(LEADERBOARD_BOARDS.TYPING_60);
   } else if (appState.screen === Screens.RESULTS) {
     if (action === "submit-global-score") void submitCurrentResult();
     else if (action === "retry-global-score") void retryCurrentSubmission();
-    else if (action === "result-google-sign-in") startResultGoogleSignIn(LEADERBOARD_BOARDS.CAMPAIGN);
-    else if (action === "open-global-profile") openGlobalProfile();
+    else if (action === "result-google-sign-in") startResultGoogleSignIn(LEADERBOARD_BOARDS.CAMPAIGN, "campaign", appState.results);
+    else if (action === "open-account-settings") openAccountSettings();
     else if (action === "view-campaign-leaderboard") openLeaderboardBoard(LEADERBOARD_BOARDS.CAMPAIGN);
   } else if (appState.screen === Screens.PROFILE_STATS) {
     handleAccountAction();
   } else if (appState.screen === Screens.SETTINGS) {
-    if (action === "settings-edit-name") beginProfileNameEdit();
+    if (action === "retry-pending-result") {
+      void pendingResultCoordinator.resume(getAuthState(), getLeaderboardProfileState());
+    }
+    else if (action === "discard-pending-result") {
+      pendingResultCoordinator.discard();
+      renderCurrentScreen();
+    }
+    else if (action === "settings-edit-name") beginProfileNameEdit();
     else if (action === "settings-save-name") saveProfileName();
     else if (action === "settings-cancel-name") cancelProfileNameEdit();
     else handleAccountAction();
@@ -1248,7 +1314,7 @@ function handleAppClick(event) {
       });
       void signInWithGoogle();
     } else if (action === "leaderboard-open-username") {
-      openGlobalProfile();
+      openAccountSettings();
     } else if (action === "leaderboard-main-menu") {
       openTitle();
     } else if (action === "leaderboard-help") {
@@ -1540,6 +1606,7 @@ async function bootstrap() {
     if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS, Screens.SPEED_TEST_RESULTS, Screens.RESULTS].includes(appState.screen)) {
       void handleAutomaticSubmissionStateChange(authState, getLeaderboardProfileState());
     }
+    if (bootstrapReady) void pendingResultCoordinator.evaluate(authState, getLeaderboardProfileState());
     if (authUiChanged && (
       appState.screen === Screens.SETTINGS ||
       (appState.screen === Screens.PROFILE_STATS && appState.statisticsTabIndex === 6)
@@ -1552,17 +1619,22 @@ async function bootstrap() {
       appState.screen === Screens.SETTINGS ||
       (appState.screen === Screens.PROFILE_STATS && appState.statisticsTabIndex === 6)
     ) {
-      updateProfileAuthSection(getAuthState(), profileState);
+      if (appState.screen === Screens.SETTINGS) renderCurrentScreen();
+      else updateProfileAuthSection(getAuthState(), profileState);
     }
     if (appState.screen === Screens.LEADERBOARDS) renderCurrentScreen();
     if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS, Screens.SPEED_TEST_RESULTS, Screens.RESULTS].includes(appState.screen)) {
       void handleAutomaticSubmissionStateChange(getAuthState(), profileState);
     }
+    if (bootstrapReady) void pendingResultCoordinator.evaluate(getAuthState(), profileState);
   });
   subscribeToSubmissions((submissionState) => {
     if ([Screens.DAILY_RESULTS, Screens.ENDLESS_RESULTS, Screens.SPEED_TEST_RESULTS, Screens.RESULTS].includes(appState.screen)) {
       updateGlobalSubmissionRegion(submissionState);
     }
+  });
+  pendingResultCoordinator.subscribe(() => {
+    if (bootstrapReady && appState.screen === Screens.SETTINGS) renderCurrentScreen();
   });
   subscribeToLeaderboards(() => {
     if (appState.screen === Screens.LEADERBOARDS) renderCurrentScreen();
@@ -1622,8 +1694,15 @@ async function bootstrap() {
     openLeaderboardReturn(returnState);
   } else {
     renderCurrentScreen();
-    openAutomaticTutorial("general", () => renderCurrentScreen());
+    openAutomaticTutorial("general", (choice) => {
+      renderCurrentScreen();
+      if (choice === "google") {
+        saveLeaderboardReturnState({ screen: "title" });
+        void signInWithGoogle();
+      }
+    });
   }
+  void pendingResultCoordinator.evaluate(getAuthState(), getLeaderboardProfileState());
 }
 
 bootstrap();

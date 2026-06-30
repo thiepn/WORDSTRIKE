@@ -101,7 +101,6 @@ export function createEndlessRuntime({
     wordGenerator: createEndlessWordGenerator(vocabulary, seed),
     difficulty: getEndlessDifficulty(safeStage),
     phase: "ACTIVE",
-    transitionSpawnUntilMs: 0,
     bannerUntilMs: 0,
     bannerText: "",
     lastSpawnAtMs: -ENDLESS_CONFIG.initialSpawnIntervalMs,
@@ -201,10 +200,7 @@ function updateRollingWpm(game) {
 }
 
 function advanceEndlessStage(game) {
-  if (
-    game.stageWordsCompleted < getEndlessWordsPerStage(game.stage) ||
-    game.elapsedMs < game.transitionSpawnUntilMs
-  ) {
+  if (game.stageWordsCompleted < getEndlessWordsPerStage(game.stage)) {
     return false;
   }
   const completedStage = game.stage;
@@ -215,7 +211,6 @@ function advanceEndlessStage(game) {
   game.stageWordsCompleted = 0;
   game.wordGenerator.resetStage(game.stage);
   game.difficulty = getEndlessDifficulty(game.stage);
-  game.transitionSpawnUntilMs = game.elapsedMs + ENDLESS_CONFIG.spawnPauseMs;
   game.bannerUntilMs = game.elapsedMs + ENDLESS_CONFIG.stageBannerMs;
   game.bannerText = `STAGE ${game.stage}`;
   return true;
@@ -400,10 +395,7 @@ function tick(timestamp) {
   const deltaMs = Math.min(100, Math.max(0, timestamp - game.lastTimestamp));
   game.lastTimestamp = timestamp;
   game.elapsedMs += deltaMs;
-  if (
-    game.stageWordsCompleted >= getEndlessWordsPerStage(game.stage) &&
-    game.elapsedMs >= game.transitionSpawnUntilMs
-  ) {
+  if (game.stageWordsCompleted >= getEndlessWordsPerStage(game.stage)) {
     advanceEndlessStage(game);
   }
   game.survivalPoints = calculateEndlessSurvivalPoints(game.elapsedMs);
@@ -417,10 +409,7 @@ function tick(timestamp) {
     animationFrameId = requestAnimationFrame(tick);
     return;
   }
-  if (
-    game.elapsedMs >= game.transitionSpawnUntilMs &&
-    game.elapsedMs - game.lastSpawnAtMs >= game.difficulty.spawnIntervalMs
-  ) {
+  if (game.elapsedMs - game.lastSpawnAtMs >= game.difficulty.spawnIntervalMs) {
     spawnWord(game, size);
     game.lastSpawnAtMs = game.elapsedMs;
   }

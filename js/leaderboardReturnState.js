@@ -9,6 +9,9 @@ const CATEGORIES = new Set(Object.values(LEADERBOARD_CATEGORIES));
 export function validateLeaderboardReturnState(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   if (Object.keys(value).some((key) => !["screen", "selectedCategory", "typingDuration"].includes(key))) return null;
+  if (value.screen === "title" && Object.keys(value).length === 1) {
+    return Object.freeze({ screen: "title" });
+  }
   if (value.screen !== "leaderboards" || !CATEGORIES.has(value.selectedCategory)) return null;
   const typingDuration = value.selectedCategory === LEADERBOARD_CATEGORIES.TYPING
     ? value.typingDuration === 15 ? 15 : value.typingDuration === 60 ? 60 : null

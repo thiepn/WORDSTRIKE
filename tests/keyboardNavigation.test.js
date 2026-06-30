@@ -11,6 +11,6 @@ assert.equal(moveSpeedTestConfiguration("time-60", "ArrowLeft"), "time-30");
 assert.equal(moveSpeedTestConfiguration("time-60", "ArrowRight"), "time-120");
 assert.equal(moveSpeedTestConfiguration("time-60", "ArrowDown"), "words-50");
 assert.equal(moveSpeedTestConfiguration("words-50", "ArrowUp"), "time-60");
-assert.equal(moveSpeedTestConfiguration("words-50", "Home"), "words-25");
+assert.equal(moveSpeedTestConfiguration("words-50", "Home"), "words-10");
 
 console.log("Leaderboard categories, nested durations, and every Typing configuration support deterministic arrow navigation.");

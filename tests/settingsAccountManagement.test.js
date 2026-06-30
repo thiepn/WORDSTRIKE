@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { renderSettingsAccountManagement } from "../js/statisticsUi.js";
+import { renderPendingResultNotice, renderSettingsAccountManagement } from "../js/statisticsUi.js";
 import { resolveAppClickAction } from "../js/appClickRouting.js";
 import { Screens } from "../js/state.js";
 
@@ -24,6 +24,26 @@ assert.match(signedIn, /profile-name-input/);
 assert.match(signedIn, /PUBLIC USERNAME/);
 assert.match(signedIn, /CHANGE USERNAME/);
 assert.match(signedIn, /SIGN OUT/);
+
+const usernameRequired = renderPendingResultNotice(
+  { status: "username-required" },
+  { status: "needs-username", profile: null },
+);
+assert.match(usernameRequired, /SET A PUBLIC USERNAME TO CONTINUE/);
+assert.doesNotMatch(usernameRequired, /RETRY SUBMISSION/);
+const existingProfile = renderPendingResultNotice(
+  { status: "username-required" },
+  { status: "ready", profile: { username: "Player_1" } },
+);
+assert.doesNotMatch(existingProfile, /SET A PUBLIC USERNAME/);
+assert.match(existingProfile, /SUBMIT LAST RESULT/);
+assert.match(renderPendingResultNotice({ status: "failed" }), /RETRY SUBMISSION/);
+assert.match(renderPendingResultNotice({ status: "failed", errorCode: "OFFLINE" }), /APPEAR TO BE OFFLINE/);
+assert.doesNotMatch(renderPendingResultNotice({ status: "failed", errorCode: "MALFORMED_INTENT" }), /RETRY SUBMISSION/);
+assert.match(renderPendingResultNotice({ status: "expired", errorCode: "EXPIRED" }), /SAVED RESULT EXPIRED/);
+assert.doesNotMatch(renderPendingResultNotice({ status: "waiting-for-profile" }), /RETRY SUBMISSION/);
+assert.match(renderPendingResultNotice({ status: "submitting" }), /SUBMITTING\.\.\./);
+assert.equal(renderPendingResultNotice({ status: "idle" }), "");
 
 const root = { contains: () => true };
 const screen = { className: "settings-screen", parent: null };

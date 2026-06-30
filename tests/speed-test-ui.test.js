@@ -84,6 +84,19 @@ assert.doesNotMatch(app.html, /LIVES|COMBO|MODIFIER/);
 app.buttons.find((button) => button.dataset.speedCategory === "words").onclick();
 assert.equal(configCalls.at(-1), "words-50");
 
+renderSpeedTestRun({
+  config: getSpeedTestConfig("words-10"),
+  phase: "PREPARING",
+  words: Array(10).fill("word"),
+  currentWordIndex: 0,
+  typedBuffer: "",
+}, false, {
+  selectConfig: (configId) => configCalls.push(configId),
+});
+assert.match(app.html, /data-speed-config="words-10"[\s\S]*data-speed-config="words-25"[\s\S]*data-speed-config="words-50"[\s\S]*data-speed-config="words-100"/);
+app.buttons.find((button) => button.dataset.speedConfig === "words-10").onclick();
+assert.equal(configCalls.at(-1), "words-10");
+
 const wordNodes = [0, 0, 50, 50, 100, 100, 150].map((offsetTop, index) => ({
   offsetTop,
   dataset: { speedWordIndex: String(index) },
@@ -173,6 +186,25 @@ assert.doesNotMatch(app.html, /GRADE|LIVES|BOSS|CAMPAIGN SCORE|speed-test-caret/
 app.querySelector('[data-action="retry"]').onclick();
 assert.equal(calls.at(-1), "retry");
 
+renderSpeedTestResults({
+  variantId: "words",
+  wpm: 72,
+  accuracy: 100,
+  activeDurationMs: 10000,
+  characters: { correct: 50, incorrect: 0, missed: 0 },
+  modeData: {
+    targetWordCount: 10,
+    rawWpm: 72,
+    extraCharacters: 0,
+    backspaces: 0,
+    wordDeletes: 0,
+    exactWords: 10,
+    incorrectWords: 0,
+  },
+}, { newWpmRecord: false, newAccuracyRecord: false }, 0, {});
+assert.match(app.html, /10 WORD TEST/);
+assert.match(app.html, /10 exact \/ 0 incorrect/);
+
 const css = await readFile(new URL("../style.css", import.meta.url), "utf8");
 assert.match(css, /\.speed-test-caret[^}]*width:\s*0/s);
 assert.match(css, /\.speed-test-caret::after[^}]*width:\s*2px/s);
@@ -182,6 +214,7 @@ assert.match(css, /\.speed-test-word-flow[^}]*font-variant-ligatures:\s*none/s);
 assert.match(css, /\.speed-test-word-flow[^}]*padding:\s*0 10px/s);
 assert.doesNotMatch(css, /\.speed-test-word-current::before/);
 assert.doesNotMatch(css, /\.speed-setup-/);
+assert.match(css, /\.speed-test-config,\s*\.speed-test-controls-wrap,\s*\.speed-test-hud\s*\{[^}]*flex-wrap:\s*wrap/s);
 
 const mainSource = await readFile(new URL("../js/main.js", import.meta.url), "utf8");
 const uiSource = await readFile(new URL("../js/ui.js", import.meta.url), "utf8");

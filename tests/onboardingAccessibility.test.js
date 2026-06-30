@@ -4,16 +4,18 @@ import { onboardingMarkup } from "../js/onboardingView.js";
 import { ONBOARDING_TUTORIALS } from "../js/onboardingContent.js";
 
 const state = {
-  tutorialId: "general", version: 1, title: ONBOARDING_TUTORIALS.general.title,
+  tutorialId: "general", version: 2, title: ONBOARDING_TUTORIALS.general.title,
   steps: ONBOARDING_TUTORIALS.general.steps, currentStep: 0, source: "automatic",
 };
 const markup = onboardingMarkup(state);
 assert.match(markup, /role="dialog"/);
 assert.match(markup, /aria-modal="true"/);
 assert.match(markup, /data-onboarding-action="skip"/);
-assert.match(markup, /data-onboarding-action="previous"[^>]*disabled/);
+assert.doesNotMatch(markup, /data-onboarding-action="previous"/);
 assert.match(markup, /data-onboarding-action="primary"/);
 assert.match(markup, /Step 1 of 4/);
+assert.ok(markup.indexOf("onboarding-copy") < markup.indexOf("onboarding-visual"));
+assert.match(markup, /onboarding-action-dock/);
 
 const view = await readFile(new URL("../js/onboardingView.js", import.meta.url), "utf8");
 const css = await readFile(new URL("../style.css", import.meta.url), "utf8");

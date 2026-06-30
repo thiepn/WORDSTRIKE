@@ -1,6 +1,5 @@
 export const ENDLESS_CONFIG = Object.freeze({
   startingIntegrity: 3,
-  spawnPauseMs: 1000,
   stageBannerMs: 1250,
   collisionImmunityMs: 650,
   initialSpawnIntervalMs: 1700,

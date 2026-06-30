@@ -3,9 +3,8 @@ const escapeHtml = (value) => String(value ?? "")
   .replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
 function visualMarkup(type) {
-  if (type === "mode-cards") return `<div class="onboarding-mode-cards">
-    <span>CAMPAIGN<small>LEVELS</small></span><span>TYPING<small>SPEED</small></span>
-    <span>ENDLESS<small>SURVIVE</small></span><span>DAILY<small>SHARED</small></span></div>`;
+  if (type === "navigation-controls") return `<div class="onboarding-navigation-visual">
+    <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd><strong>ENTER</strong><strong>ESC</strong></div>`;
   if (type === "word-stream" || type === "typing-highlight" || type === "typing-options") {
     return `<div class="onboarding-word-stream"><span class="done">type</span>
       <strong><i>str</i>ike</strong><span>precision</span></div>`;
@@ -38,27 +37,31 @@ export function onboardingMarkup(state) {
   if (!state) return "";
   const current = state.steps[state.currentStep];
   const final = state.currentStep === state.steps.length - 1;
+  const showBack = state.steps.length > 1 && state.currentStep > 0;
+  const showSecondary = final && current.secondaryLabel && !(current.secondarySignedOutOnly && state.signedIn);
   return `<div class="onboarding-backdrop">
-    <section class="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-step-title" tabindex="-1">
+    <section class="onboarding-dialog onboarding-tutorial-${escapeHtml(state.tutorialId)}" data-tutorial-id="${escapeHtml(state.tutorialId)}" role="dialog" aria-modal="true" aria-labelledby="onboarding-step-title" tabindex="-1">
       <button class="onboarding-close" data-onboarding-action="close" aria-label="Close tutorial">×</button>
-      <div class="onboarding-visual" aria-hidden="true">${visualMarkup(current.visualType)}</div>
       <div class="onboarding-copy">
         <span class="eyebrow">${escapeHtml(state.title)}</span>
         <h2 id="onboarding-step-title">${escapeHtml(current.title)}</h2>
         <p>${escapeHtml(current.body)}</p>
         ${controlCardsMarkup(current.controls)}
         ${current.helper ? `<small class="onboarding-helper">${escapeHtml(current.helper)}</small>` : ""}
+      </div>
+      <div class="onboarding-visual" aria-hidden="true">${visualMarkup(current.visualType)}</div>
+      <footer class="onboarding-action-dock">
         <div class="onboarding-progress" aria-label="Step ${state.currentStep + 1} of ${state.steps.length}">
           ${state.steps.map((_, index) => `<span class="${index === state.currentStep ? "active" : ""}"></span>`).join("")}
         </div>
         <div class="onboarding-actions">
           <button class="text-action" data-onboarding-action="skip">SKIP</button>
-          <button class="arcade-button" data-onboarding-action="previous" ${state.currentStep === 0 ? "disabled" : ""}>BACK</button>
-          <button class="arcade-button selected" data-onboarding-action="primary">${escapeHtml(final && state.primaryLabel ? state.primaryLabel : current.primaryLabel)}</button>
+          ${showBack ? '<button class="arcade-button secondary" data-onboarding-action="previous">BACK</button>' : ""}
+          <button class="arcade-button primary selected" data-onboarding-action="primary">${escapeHtml(final && state.primaryLabel ? state.primaryLabel : current.primaryLabel)}</button>
         </div>
-        ${final && current.secondaryLabel ? `<button class="onboarding-secondary" data-onboarding-choice="${escapeHtml(current.secondaryChoice)}">${escapeHtml(current.secondaryLabel)}</button>` : ""}
+        ${showSecondary ? `<button class="onboarding-secondary" data-onboarding-choice="${escapeHtml(current.secondaryChoice)}">${escapeHtml(current.secondaryLabel)}</button>` : ""}
         ${final && current.tertiaryLabel ? `<button class="onboarding-tertiary" data-onboarding-choice="${escapeHtml(current.tertiaryChoice)}">${escapeHtml(current.tertiaryLabel)}</button>` : ""}
-      </div>
+      </footer>
     </section>
   </div>`;
 }
@@ -111,7 +114,7 @@ export function createOnboardingView(controller, { root = globalThis.document } 
         return;
       }
       if (event.target?.matches?.("input, textarea")) return;
-      if (event.key === "ArrowLeft") { event.preventDefault(); controller.previous(); }
+      if (event.key === "ArrowLeft" && controller.getState()?.currentStep > 0) { event.preventDefault(); controller.previous(); }
       else if (event.key === "ArrowRight") { event.preventDefault(); controller.next(); }
       else if (event.key === "Home") { event.preventDefault(); controller.first(); }
       else if (event.key === "End") { event.preventDefault(); controller.last(); }

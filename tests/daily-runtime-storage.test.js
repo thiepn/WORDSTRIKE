@@ -72,7 +72,7 @@ const entries = Array.from({ length: DAILY_TOTAL_WORDS }, (_, index) => ({
 }));
 const plan = {
   dateKey,
-  challengeVersion: 1,
+  challengeVersion: 2,
   seed: getDailyChallengeSeed(dateKey),
   totalWords: DAILY_TOTAL_WORDS,
   entries,

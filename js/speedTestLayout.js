@@ -37,3 +37,7 @@ export function isConstrainedSpeedTestLayout({
   if (body?.classList?.contains?.("gameplay-viewport-short")) return true;
   return matchMedia?.("(max-width: 760px), (pointer: coarse) and (max-height: 700px)")?.matches === true;
 }
+
+export function getSpeedTestWordBodyAnchor({ stageHeight } = {}) {
+  return Math.max(0, Number(stageHeight) || 0) / 2;
+}
