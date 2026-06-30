@@ -17,6 +17,10 @@ import {
   getSpeedTestDiagnosticText,
   getSpeedTestLiveMetrics,
 } from "./speedTest.js";
+import {
+  getSpeedTestLineWindow,
+  isConstrainedSpeedTestLayout,
+} from "./speedTestLayout.js";
 import { ENDLESS_CONFIG, getEndlessWordsPerStage } from "./endlessConfig.js";
 import { getEndlessDiagnosticText } from "./endlessMode.js";
 import {
@@ -68,11 +72,11 @@ function tutorialHelpButton(id, label) {
 
 function screenBackButton(action = "back", direct = false) {
   const attribute = direct ? `data-screen-back="${action}"` : `data-action="${action}"`;
-  return `<button type="button" class="screen-back-button" ${attribute} aria-label="Go back">â† BACK</button>`;
+  return `<button type="button" class="screen-back-button" ${attribute} aria-label="Go back">BACK</button>`;
 }
 
 function gameplayPauseButton(label = "BACK") {
-  return `<button type="button" class="gameplay-pause-button" data-gameplay-action="pause" aria-label="Pause and go back">â† ${label}</button>`;
+  return `<button type="button" class="gameplay-pause-button" data-gameplay-action="pause" aria-label="Pause and go back">${label}</button>`;
 }
 
 function wireGameplayAction(root, action, handler) {
@@ -451,7 +455,7 @@ export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
   scheduleSpeedTestLayout(state);
 }
 
-export function measureSpeedTestLayout(state) {
+export function measureSpeedTestLayout(state, { constrained = isConstrainedSpeedTestLayout() } = {}) {
   const viewport = document.querySelector("#speed-test-word-viewport");
   const flow = document.querySelector("#speed-test-word-flow");
   if (!state || !viewport || !flow) return null;
@@ -468,7 +472,12 @@ export function measureSpeedTestLayout(state) {
     wordLines.set(Number(word.dataset.speedWordIndex), lineIndex);
   }
   const currentLineIndex = wordLines.get(state.currentWordIndex) ?? 0;
-  const topLineIndex = currentLineIndex >= 2 ? currentLineIndex - 1 : 0;
+  const lineWindow = getSpeedTestLineWindow({
+    currentLineIndex,
+    lineCount: lineTops.length,
+    constrained,
+  });
+  const { topLineIndex } = lineWindow;
   const desiredTranslation = topLineIndex > 0 ? lineTops[topLineIndex] : 0;
   const maximumTranslation = Math.max(
     0,
@@ -482,7 +491,12 @@ export function measureSpeedTestLayout(state) {
   state.layoutDirty = false;
   viewport.scrollTop = 0;
   flow.style.transform = `translateY(-${state.verticalTranslation}px)`;
-  return { currentLineIndex, lineTops, verticalTranslation: state.verticalTranslation };
+  return {
+    currentLineIndex,
+    lineTops,
+    lineWindow,
+    verticalTranslation: state.verticalTranslation,
+  };
 }
 
 export function scheduleSpeedTestLayout(state) {
