@@ -17,6 +17,7 @@ assert.ok(compareCampaignLeaderboardRows(row("a", { accuracy: 97 }), row("b", { 
 const ranked = rankLeaderboardRows([
   row("a", { level: 10 }), row("a", { level: 15, grade: "B" }),
   row("b", { level: 15, grade: "A" }), row("failed", { level: 100, completed: false }),
+  row("version-two", { level: 100, rulesVersion: 2 }),
 ], { boardKey: "campaign-highest-level-v1", viewerUserId: "a" });
 assert.deepEqual(ranked.entries.map(({ username }) => username), ["Player_b", "Player_a"]);
 assert.equal(ranked.viewer.rank, 2);

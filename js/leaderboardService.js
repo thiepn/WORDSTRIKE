@@ -20,6 +20,21 @@ const VALID_BOARDS = Object.freeze(Object.values(LEADERBOARD_BOARDS));
 const VALID_CATEGORIES = Object.freeze(Object.values(LEADERBOARD_CATEGORIES));
 const CACHE_TTL_MS = 30000;
 
+export const EXPECTED_LEADERBOARD_RULES_VERSIONS = Object.freeze({
+  [LEADERBOARD_BOARDS.CAMPAIGN]: 1,
+  [LEADERBOARD_BOARDS.TYPING_60]: 1,
+  [LEADERBOARD_BOARDS.TYPING_15]: 1,
+  [LEADERBOARD_BOARDS.ENDLESS]: 1,
+  [LEADERBOARD_BOARDS.DAILY]: 1,
+});
+
+export function isLeaderboardCacheStateCurrent(boardKey, cachedState) {
+  return (
+    cachedState?.board?.boardKey === boardKey &&
+    Number(cachedState.board.rulesVersion) === EXPECTED_LEADERBOARD_RULES_VERSIONS[boardKey]
+  );
+}
+
 export function getLeaderboardSelection(boardKey) {
   if (boardKey === LEADERBOARD_BOARDS.TYPING_15) {
     return { selectedCategory: LEADERBOARD_CATEGORIES.TYPING, selectedTypingDuration: 15 };
@@ -165,7 +180,9 @@ export function createLeaderboardService({
     if (inFlight.has(key)) return inFlight.get(key);
     const selection = getLeaderboardSelection(boardKey);
     const cached = cache.get(key);
-    if (!force && cached && now() - cached.cachedAt < CACHE_TTL_MS) {
+    const currentCache = cached && isLeaderboardCacheStateCurrent(boardKey, cached.state);
+    if (cached && !currentCache) cache.delete(key);
+    if (!force && currentCache && now() - cached.cachedAt < CACHE_TTL_MS) {
       return Promise.resolve(publish({ ...cached.state, ...selection, selectedBoardKey: boardKey }));
     }
     const client = getClient();

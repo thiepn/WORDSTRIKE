@@ -110,7 +110,7 @@ export function renderLeaderboards(state, authState, profileState, notice = "") 
       ? "HIGHEST SUCCESSFULLY COMPLETED LEVEL"
       : typing
         ? `ENGLISH 200 // ${typingDuration} SECONDS`
-        : "STANDARD ENDLESS // RULES VERSION 1";
+        : "STANDARD ENDLESS";
   const tabs = [
     [LEADERBOARD_CATEGORIES.CAMPAIGN, "CAMPAIGN", "leaderboard-select-campaign"],
     [LEADERBOARD_CATEGORIES.TYPING, "TYPING TEST", "leaderboard-select-typing"],

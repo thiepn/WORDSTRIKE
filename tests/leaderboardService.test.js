@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import {
   createLeaderboardService,
+  EXPECTED_LEADERBOARD_RULES_VERSIONS,
+  isLeaderboardCacheStateCurrent,
   LEADERBOARD_BOARDS,
 } from "../js/leaderboardService.js";
 
@@ -59,4 +61,51 @@ const localData = { bestScore: 123 };
 offline.resetLeaderboardState();
 assert.deepEqual(localData, { bestScore: 123 });
 
-console.log("Leaderboard service is lazy, canonical-date aware, deduplicated, stale-safe, refreshable, and offline-safe.");
+assert.deepEqual(EXPECTED_LEADERBOARD_RULES_VERSIONS, {
+  "campaign-highest-level-v1": 1,
+  "typing-60s-english200-v1": 1,
+  "typing-15s-english200-v1": 1,
+  "endless-v1": 1,
+  "daily-strike-v1": 1,
+});
+
+for (const boardKey of [
+  LEADERBOARD_BOARDS.CAMPAIGN,
+  LEADERBOARD_BOARDS.ENDLESS,
+  LEADERBOARD_BOARDS.DAILY,
+]) {
+  assert.equal(isLeaderboardCacheStateCurrent(boardKey, {
+    board: { boardKey, rulesVersion: 2 },
+  }), false);
+  let fetches = 0;
+  const rollbackService = createLeaderboardService({
+    getDateKey: () => "2026-06-27",
+    getClient: () => ({ functions: { invoke: async () => {
+      fetches += 1;
+      return { data: { ok: true, data: {
+        board: { boardKey, displayName: "Board", rulesVersion: fetches === 1 ? 2 : 1 },
+        entries: fetches === 1 ? [] : [{ rank: 1, username: "Restored", score: 1 }],
+        viewer: null,
+      } } };
+    } } }),
+  });
+  assert.equal((await rollbackService.initializeLeaderboards(boardKey)).status, "empty");
+  assert.equal((await rollbackService.initializeLeaderboards(boardKey)).status, "ready");
+  assert.equal(fetches, 2, `${boardKey} must refetch a cached version-2 response`);
+}
+
+let typingFetches = 0;
+const typingCacheService = createLeaderboardService({
+  getClient: () => ({ functions: { invoke: async () => {
+    typingFetches += 1;
+    return { data: { ok: true, data: {
+      board: { boardKey: LEADERBOARD_BOARDS.TYPING_60, displayName: "Typing", rulesVersion: 1 },
+      entries: [], viewer: null,
+    } } };
+  } } }),
+});
+await typingCacheService.initializeLeaderboards(LEADERBOARD_BOARDS.TYPING_60);
+await typingCacheService.initializeLeaderboards(LEADERBOARD_BOARDS.TYPING_60);
+assert.equal(typingFetches, 1, "valid Typing version-1 cache remains reusable");
+
+console.log("Leaderboard service is lazy, stale-safe, and invalidates only mismatched rules-version caches after rollback.");

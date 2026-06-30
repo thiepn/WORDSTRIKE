@@ -71,7 +71,7 @@ function dailyResult(overrides = {}) {
     failureReason: null, score: 25000, accuracy: 95, activeDurationMs: 90000,
     words: { completed: 59, missed: 1, total: 60 },
     modeData: {
-      integrityRemaining: 2, dateKey: "2026-06-28", challengeVersion: 2,
+      integrityRemaining: 2, dateKey: "2026-06-28", challengeVersion: 1,
       wordsCompleted: 59, wordsResolved: 60, wordsSpawned: 60, totalWords: 60, dateOverride: false,
       recordEligible: true, wordPoints: 6600, completionBonus: 10000,
       integrityBonus: 4000, accuracyBonus: 1900, timeBonus: 2500,

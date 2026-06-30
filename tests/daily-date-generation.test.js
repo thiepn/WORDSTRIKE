@@ -17,6 +17,8 @@ import {
   getDailyChallengeSeed,
 } from "../js/dailyGenerator.js";
 
+assert.equal(DAILY_CHALLENGE_VERSION, 1);
+
 assert.equal(getUtcDateKey("2026-06-21T23:59:59-07:00"), "2026-06-22");
 assert.equal(isValidDailyDateKey("2024-02-29"), true);
 assert.equal(isValidDailyDateKey("2025-02-29"), false);
@@ -38,6 +40,7 @@ const first = generateDailyPlan({ dateKey: "2026-06-21", vocabulary });
 const same = generateDailyPlan({ dateKey: "2026-06-21", vocabulary });
 const different = generateDailyPlan({ dateKey: "2026-06-22", vocabulary });
 assert.deepEqual(first, same);
+assert.equal(first.challengeVersion, 1);
 assert.notDeepEqual(first.entries.map(({ word }) => word), different.entries.map(({ word }) => word));
 assert.equal(first.entries.length, DAILY_TOTAL_WORDS);
 assert.equal(new Set(first.entries.map(({ word }) => word)).size, DAILY_TOTAL_WORDS);
