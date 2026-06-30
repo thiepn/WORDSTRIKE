@@ -15,6 +15,7 @@ assert.ok(compareTypingLeaderboardRows(row("a", sixty, { rawWpm: 91 }), row("b",
 const ranked60 = rankLeaderboardRows([
   row("a", sixty, { wpm: 80 }), row("a", sixty, { wpm: 90 }),
   row("b", fifteen, { wpm: 200 }), row("failed", sixty, { completed: false, wpm: 999 }),
+  row("version-two", sixty, { rulesVersion: 2, wpm: 999 }),
 ], { boardKey: sixty });
 assert.equal(ranked60.entries.length, 1);
 assert.equal(ranked60.entries[0].wpm, 90);

@@ -31,6 +31,8 @@ renderLeaderboards({
 }, authOut, profileNone);
 assert.match(app.html, /No ranked Endless results yet/);
 assert.match(app.html, /No ranked Endless results yet/);
+assert.match(app.html, /STANDARD ENDLESS/);
+assert.doesNotMatch(app.html, /RULES VERSION|SEASON|LEGACY|PREVIOUS RULES/);
 
 renderLeaderboards({ status: "offline", selectedBoard: "daily-strike-v1", entries: [] }, authOut, profileNone);
 assert.match(app.html, /unavailable while offline/);

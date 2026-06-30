@@ -4,6 +4,7 @@ export const ENDLESS_BOARD_KEY = "endless-v1";
 export const CAMPAIGN_BOARD_KEY = "campaign-highest-level-v1";
 export const TYPING_60_BOARD_KEY = "typing-60s-english200-v1";
 export const TYPING_15_BOARD_KEY = "typing-15s-english200-v1";
+export const DAILY_CHALLENGE_VERSION = 1;
 export const SUPPORTED_BOARD_KEYS = Object.freeze([
   CAMPAIGN_BOARD_KEY, TYPING_60_BOARD_KEY, TYPING_15_BOARD_KEY,
   ENDLESS_BOARD_KEY, DAILY_BOARD_KEY,
@@ -106,7 +107,7 @@ function validateDaily(body, now) {
   }
   const ineligible = validateEligibility(result, body.boardKey);
   if (ineligible) return ineligible;
-  if (result.challengeDate !== canonicalDate(now) || result.challengeVersion !== 2) {
+  if (result.challengeDate !== canonicalDate(now) || result.challengeVersion !== DAILY_CHALLENGE_VERSION) {
     return failure("CHALLENGE_MISMATCH");
   }
   if (result.dateOverride !== false) return failure("RECORD_NOT_ELIGIBLE");

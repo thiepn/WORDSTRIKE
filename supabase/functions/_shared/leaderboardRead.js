@@ -7,7 +7,7 @@ export const PUBLIC_BOARD_KEYS = Object.freeze([
 ]);
 export const LEADERBOARD_LIMIT = 100;
 export const LEADERBOARD_RULES_VERSION = 1;
-export const DAILY_CHALLENGE_VERSION = 2;
+export const DAILY_CHALLENGE_VERSION = 1;
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 

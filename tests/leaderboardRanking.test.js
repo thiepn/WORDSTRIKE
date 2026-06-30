@@ -33,7 +33,7 @@ assert.equal("userId" in endless.viewer.entry, false);
 assert.ok(compareEndlessLeaderboardRows(row("a", { stage: 11 }), row("b", { stage: 10 })) < 0);
 
 const dailyBase = row("daily", {
-  boardKey: "daily-strike-v1", challengeDate: "2026-06-27", challengeVersion: 2,
+  boardKey: "daily-strike-v1", challengeDate: "2026-06-27", challengeVersion: 1,
   completed: true, score: 1000, durationMs: 5000, accuracy: 90, wordsCompleted: 60,
 });
 assert.ok(compareDailyLeaderboardRows(dailyBase, { ...dailyBase, completed: false, score: 99999 }) < 0);
@@ -42,7 +42,7 @@ assert.ok(compareDailyLeaderboardRows(dailyBase, { ...dailyBase, durationMs: 600
 const daily = rankLeaderboardRows([
   dailyBase,
   { ...dailyBase, id: "date-wrong", userId: "x", challengeDate: "2026-06-26", score: 99999 },
-  { ...dailyBase, id: "version-wrong", userId: "y", challengeVersion: 1, score: 99999 },
+  { ...dailyBase, id: "version-wrong", userId: "y", challengeVersion: 2, score: 99999 },
 ], { boardKey: "daily-strike-v1", challengeDate: "2026-06-27" });
 assert.equal(daily.entries.length, 1);
 

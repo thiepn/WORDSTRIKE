@@ -17,7 +17,7 @@ const result = {
   words: { completed: 60, missed: 0, total: 60 },
   modeData: {
     wordsCompleted: 60, wordsResolved: 60, wordsSpawned: 60, totalWords: 60,
-    integrityRemaining: 3, dateKey: "2026-06-29", challengeVersion: 2,
+    integrityRemaining: 3, dateKey: "2026-06-29", challengeVersion: 1,
     dateOverride: false, recordEligible: true, coreHits: 0, coreBreaches: 0,
     finalWave: 3, wordPoints: 100, completionBonus: 0, integrityBonus: 0,
     accuracyBonus: 0, timeBonus: 0,
