@@ -27,28 +27,28 @@ const RESULT_ACTIONS = Object.freeze({
     selector: ".endless-results-screen",
     actions: Object.freeze([
       "retry", "modes", "title", "submit-global-score", "retry-global-score",
-      "view-endless-leaderboard", "open-global-profile", "result-google-sign-in",
+      "view-endless-leaderboard", "open-account-settings", "result-google-sign-in",
     ]),
   }),
   [Screens.DAILY_RESULTS]: Object.freeze({
     selector: ".daily-results-screen",
     actions: Object.freeze([
       "retry", "modes", "title", "submit-global-score", "retry-global-score",
-      "view-daily-leaderboard", "open-global-profile", "result-google-sign-in",
+      "view-daily-leaderboard", "open-account-settings", "result-google-sign-in",
     ]),
   }),
   [Screens.SPEED_TEST_RESULTS]: Object.freeze({
     selector: ".speed-results-screen",
     actions: Object.freeze([
       "submit-global-score", "retry-global-score", "result-google-sign-in",
-      "open-global-profile", "view-typing-60-leaderboard", "view-typing-15-leaderboard",
+      "open-account-settings", "view-typing-60-leaderboard", "view-typing-15-leaderboard",
     ]),
   }),
   [Screens.RESULTS]: Object.freeze({
     selector: ".results-screen",
     actions: Object.freeze([
       "submit-global-score", "retry-global-score", "result-google-sign-in",
-      "open-global-profile", "view-campaign-leaderboard",
+      "open-account-settings", "view-campaign-leaderboard",
     ]),
   }),
   [Screens.PROFILE_STATS]: Object.freeze({
@@ -77,6 +77,8 @@ const RESULT_ACTIONS = Object.freeze({
       "leaderboard-username-start-change",
       "leaderboard-username-save-change",
       "leaderboard-username-cancel-change",
+      "retry-pending-result",
+      "discard-pending-result",
     ]),
     guardReadyAt: false,
   }),

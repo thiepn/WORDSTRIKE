@@ -1,7 +1,7 @@
 import { getOnboardingTutorial } from "./onboardingContent.js";
 import { isTutorialSeen, markTutorialSeen } from "./onboardingStorage.js";
 
-const freezeState = (tutorial, currentStep, source, primaryLabel = null) => Object.freeze({
+const freezeState = (tutorial, currentStep, source, primaryLabel = null, signedIn = false) => Object.freeze({
   tutorialId: tutorial.id,
   version: tutorial.version,
   title: tutorial.title,
@@ -9,6 +9,7 @@ const freezeState = (tutorial, currentStep, source, primaryLabel = null) => Obje
   currentStep,
   source,
   primaryLabel,
+  signedIn,
 });
 
 export function createOnboardingController() {
@@ -32,33 +33,33 @@ export function createOnboardingController() {
   return Object.freeze({
     getState: () => state,
     shouldOpenAutomatically: (id) => Boolean(getOnboardingTutorial(id)) && !isTutorialSeen(id),
-    open(id, { source = "help", onComplete = null, primaryLabel = null } = {}) {
+    open(id, { source = "help", onComplete = null, primaryLabel = null, signedIn = false } = {}) {
       const tutorial = getOnboardingTutorial(id);
       if (!tutorial || state) return false;
       completionCallback = typeof onComplete === "function" ? onComplete : null;
-      state = freezeState(tutorial, 0, source, primaryLabel);
+      state = freezeState(tutorial, 0, source, primaryLabel, signedIn);
       publish();
       return true;
     },
     next() {
       if (!state) return null;
       if (state.currentStep >= state.steps.length - 1) return finish("primary", true);
-      state = freezeState(getOnboardingTutorial(state.tutorialId), state.currentStep + 1, state.source, state.primaryLabel);
+      state = freezeState(getOnboardingTutorial(state.tutorialId), state.currentStep + 1, state.source, state.primaryLabel, state.signedIn);
       return publish();
     },
     previous() {
       if (!state) return null;
-      state = freezeState(getOnboardingTutorial(state.tutorialId), Math.max(0, state.currentStep - 1), state.source, state.primaryLabel);
+      state = freezeState(getOnboardingTutorial(state.tutorialId), Math.max(0, state.currentStep - 1), state.source, state.primaryLabel, state.signedIn);
       return publish();
     },
     first() {
       if (!state) return null;
-      state = freezeState(getOnboardingTutorial(state.tutorialId), 0, state.source, state.primaryLabel);
+      state = freezeState(getOnboardingTutorial(state.tutorialId), 0, state.source, state.primaryLabel, state.signedIn);
       return publish();
     },
     last() {
       if (!state) return null;
-      state = freezeState(getOnboardingTutorial(state.tutorialId), state.steps.length - 1, state.source, state.primaryLabel);
+      state = freezeState(getOnboardingTutorial(state.tutorialId), state.steps.length - 1, state.source, state.primaryLabel, state.signedIn);
       return publish();
     },
     choose(choice) { return finish(choice, true); },

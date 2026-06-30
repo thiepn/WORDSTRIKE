@@ -65,12 +65,12 @@ function authenticationPanel(authState, profileState) {
   if (authState?.status !== "signed-in") {
     return `<section class="leaderboard-auth-prompt"><h2>SIGN IN FOR GLOBAL RANKS</h2>
       <p>View your personal rank and submit eligible scores.</p>
-      <button class="arcade-button" data-action="leaderboard-google-sign-in">CONTINUE WITH GOOGLE</button></section>`;
+      <button class="arcade-button account-primary" data-action="leaderboard-google-sign-in">CONTINUE WITH GOOGLE</button></section>`;
   }
   if (!["idle", "loading"].includes(profileState?.status) && !profileState?.profile) {
     return `<section class="leaderboard-auth-prompt"><h2>PUBLIC USERNAME REQUIRED</h2>
       <p>Choose a public username to submit scores.</p>
-      <button class="arcade-button" data-action="leaderboard-open-username">SET USERNAME</button></section>`;
+      <button class="arcade-button account-primary" data-action="leaderboard-open-username">SET USERNAME</button></section>`;
   }
   return "";
 }
@@ -97,7 +97,7 @@ function boardContent(state, authState, profileState) {
     ${viewerPanel(authState, profileState, state.viewer, state.entries, kind)}`;
 }
 
-export function renderLeaderboards(state, authState, profileState) {
+export function renderLeaderboards(state, authState, profileState, notice = "") {
   const boardKey = state.selectedBoardKey || state.selectedBoard || LEADERBOARD_BOARDS.CAMPAIGN;
   const inferredSelection = getLeaderboardSelection(boardKey);
   const category = state.selectedCategory || inferredSelection.selectedCategory;
@@ -120,6 +120,7 @@ export function renderLeaderboards(state, authState, profileState) {
   app().innerHTML = `<section class="screen leaderboards-screen"><main class="leaderboards-panel">
     <button type="button" class="screen-back-button" data-action="leaderboard-main-menu" aria-label="Go back">BACK</button>
     <div class="eyebrow">Public rankings</div><h1>GLOBAL LEADERBOARDS</h1>
+    ${notice ? `<div class="leaderboard-notice" role="status">${escapeHtml(notice)}</div>` : ""}
     <button type="button" class="tutorial-help-button" data-action="leaderboard-help">? HOW TO PLAY</button>
     <nav class="leaderboard-tabs" aria-label="Leaderboard categories" role="tablist">${tabs.map(([value, label, action]) => (
     `<button role="tab" class="${category === value ? "selected" : ""}" data-action="${action}" aria-selected="${category === value}" tabindex="${category === value ? "0" : "-1"}">${label}</button>`

@@ -10,6 +10,7 @@ export function createDefaultSave() {
       screenShake: true,
       particles: true,
       strictMode: false,
+      speedTestTimerPosition: "center",
     },
   };
 }
@@ -34,6 +35,7 @@ function validateSave(value) {
       screenShake: value.settings?.screenShake !== false,
       particles: value.settings?.particles !== false,
       strictMode: value.settings?.strictMode === true,
+      speedTestTimerPosition: value.settings?.speedTestTimerPosition === "top" ? "top" : "center",
     },
   };
 }
@@ -77,6 +79,12 @@ export function updateLevelResult(save, levelNumber, result) {
 export function updateSetting(save, setting, value) {
   save.settings[setting] = Boolean(value);
   saveGame(save);
+}
+
+export function updateSpeedTestTimerPosition(save, position) {
+  save.settings.speedTestTimerPosition = position === "top" ? "top" : "center";
+  saveGame(save);
+  return save.settings.speedTestTimerPosition;
 }
 
 export function resetProgress(save) {

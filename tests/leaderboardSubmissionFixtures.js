@@ -14,7 +14,7 @@ export function dailySubmission(overrides = {}) {
       failureReason: null,
       integrityRemaining: 2,
       challengeDate: "2026-06-28",
-      challengeVersion: 1,
+      challengeVersion: 2,
       wordsResolved: 60,
       wordsSpawned: 60,
       totalWords: 60,

@@ -78,7 +78,8 @@ assert.equal(game.stage, 2);
 assert.equal(game.stageWordsCompleted, 0);
 assert.equal(game.completedStages, 1);
 assert.equal(game.accumulatedStageBonusPoints, 250);
-assert.equal(game.transitionSpawnUntilMs, 1000);
+assert.equal("transitionSpawnUntilMs" in game, false);
+assert.equal(game.bannerText, "STAGE 2");
 
 for (const [stage, target] of [[5, 10], [6, 15], [11, 20]]) {
   const transition = createEndlessRuntime({ seed: stage, vocabulary, startStage: stage });
@@ -90,7 +91,7 @@ for (const [stage, target] of [[5, 10], [6, 15], [11, 20]]) {
   registerEndlessWordCompletion(transition, { text: "word" });
   assert.equal(transition.stage, stage + 1);
   assert.equal(transition.stageWordsCompleted, 0);
-  assert.equal(transition.transitionSpawnUntilMs, 1000);
+  assert.equal("transitionSpawnUntilMs" in transition, false);
 }
 
 const breach = (id) => ({

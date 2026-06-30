@@ -19,7 +19,7 @@ assert.equal(validateScoreSubmission(dailySubmission({
 }), options).valid, true);
 assert.equal(validateScoreSubmission(dailySubmission({ score: 24999 }), options).code, "SCORE_MISMATCH");
 assert.equal(validateScoreSubmission(dailySubmission({ challengeDate: "2026-06-27" }), options).code, "CHALLENGE_MISMATCH");
-assert.equal(validateScoreSubmission(dailySubmission({ challengeVersion: 2 }), options).code, "CHALLENGE_MISMATCH");
+assert.equal(validateScoreSubmission(dailySubmission({ challengeVersion: 1 }), options).code, "CHALLENGE_MISMATCH");
 assert.equal(validateScoreSubmission(dailySubmission({ accuracy: 101 }), options).code, "INVALID_RESULT");
 assert.equal(validateScoreSubmission(dailySubmission({ wordsResolved: 58 }), options).code, "INVALID_WORD_COUNTERS");
 assert.equal(validateScoreSubmission(dailySubmission({ developerMode: true }), options).code, "DEVELOPER_RESULT");

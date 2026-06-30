@@ -106,7 +106,7 @@ function validateDaily(body, now) {
   }
   const ineligible = validateEligibility(result, body.boardKey);
   if (ineligible) return ineligible;
-  if (result.challengeDate !== canonicalDate(now) || result.challengeVersion !== 1) {
+  if (result.challengeDate !== canonicalDate(now) || result.challengeVersion !== 2) {
     return failure("CHALLENGE_MISMATCH");
   }
   if (result.dateOverride !== false) return failure("RECORD_NOT_ELIGIBLE");

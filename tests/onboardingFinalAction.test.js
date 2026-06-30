@@ -11,8 +11,8 @@ globalThis.localStorage = {
 
 const finalStep = ONBOARDING_TUTORIALS.general.steps.at(-1);
 assert.equal(finalStep.primaryLabel, "START");
-assert.equal(finalStep.secondaryLabel, undefined);
-assert.match(finalStep.helper, /main menu/i);
+assert.equal(finalStep.secondaryLabel, "SIGN IN WITH GOOGLE");
+assert.match(finalStep.body, /stay on this device/i);
 
 const controlKeys = ONBOARDING_TUTORIALS.general.steps
   .flatMap((step) => step.controls || [])
@@ -28,7 +28,8 @@ assert.equal(controller.getState(), null);
 assert.equal(completed, true);
 
 const main = await readFile(new URL("../js/main.js", import.meta.url), "utf8");
-assert.match(main, /openAutomaticTutorial\("general", \(\) => renderCurrentScreen\(\)\)/);
+assert.match(main, /openAutomaticTutorial\("general", \(choice\) =>/);
+assert.match(main, /choice === "google"[\s\S]*screen: "title"[\s\S]*signInWithGoogle/);
 assert.doesNotMatch(main, /openAutomaticTutorial\("general"[\s\S]{0,300}(?:openLevelSelect|openModeSelect|startLevel)/);
 
 console.log("General onboarding finishes with START on the title screen and includes concise keyboard navigation guidance.");

@@ -1,5 +1,5 @@
 export const ONBOARDING_VERSIONS = Object.freeze({
-  general: 1,
+  general: 2,
   campaign: 1,
   typing: 1,
   endless: 1,
@@ -14,20 +14,20 @@ const step = (title, body, visualType, primaryLabel = "NEXT", extra = {}) => Obj
 
 export const ONBOARDING_TUTORIALS = Object.freeze({
   general: Object.freeze({
-    id: "general", version: 1, title: "WORDSTRIKE INTRODUCTION",
+    id: "general", version: 2, title: "WORDSTRIKE INTRODUCTION",
     steps: Object.freeze([
-      step("TYPE BEFORE THEY STRIKE", "Words move toward the center. Type them correctly before they reach it.", "approaching-word"),
-      step("JUST START TYPING", "Type the word shown on screen. On phones and tablets, tap the game area to open the keyboard.", "typing-highlight", "NEXT", {
-        helper: "Use mouse, touch, or keyboard.",
+      step("TYPE BEFORE THEY STRIKE", "Words move toward the center.\n\nType them correctly before they reach it.", "approaching-word"),
+      step("JUST START TYPING", "Use Backspace to correct mistakes.\n\nOn phones and tablets, tap the game area to open the keyboard.", "typing-highlight"),
+      step("NAVIGATE YOUR WAY", "Use mouse, touch, or keyboard.", "navigation-controls", "NEXT", {
         controls: Object.freeze([
-          Object.freeze({ key: "ARROW KEYS", label: "Move between menus and options." }),
-          Object.freeze({ key: "ENTER", label: "Select or confirm." }),
-          Object.freeze({ key: "ESC", label: "Go back or pause." }),
+          Object.freeze({ key: "ARROW KEYS", label: "Move between menus and options" }),
+          Object.freeze({ key: "ENTER", label: "Select or confirm" }),
+          Object.freeze({ key: "ESC", label: "Go back or pause" }),
         ]),
       }),
-      step("CHOOSE HOW YOU PLAY", "Campaign builds skill. Typing Test measures speed. Endless tests survival. Daily Strike gives everyone the same challenge.", "mode-cards"),
-      step("PLAY YOUR WAY", "Progress and records stay on this device. Signing in is optional and only needed for global leaderboards.", "local-first", "START", {
-        helper: "Use the main menu to explore modes, settings, statistics, and leaderboards.",
+      step("PLAY YOUR WAY", "Progress and records stay on this device.\n\nSigning in is optional and enables global score submission.", "local-first", "START", {
+        secondaryLabel: "SIGN IN WITH GOOGLE", secondaryChoice: "google",
+        secondarySignedOutOnly: true,
       }),
     ]),
   }),

@@ -285,6 +285,30 @@ export function createLeaderboardSubmissionService({
     });
   };
 
+  const restorePayload = (mode, restoredPayload, authState, profileState) => {
+    requestSequence += 1;
+    activeMode = (MODE_BOARDS[mode] || mode === "typing") ? mode : null;
+    const expectedBoards = mode === "typing"
+      ? [LEADERBOARD_BOARDS.TYPING_15, LEADERBOARD_BOARDS.TYPING_60]
+      : [MODE_BOARDS[mode]];
+    const valid = Boolean(
+      activeMode &&
+      restoredPayload &&
+      typeof restoredPayload === "object" &&
+      !Array.isArray(restoredPayload) &&
+      expectedBoards.includes(restoredPayload.boardKey) &&
+      validSessionId(restoredPayload.sessionId) &&
+      restoredPayload.result &&
+      hasCompleteMetrics(restoredPayload)
+    );
+    payload = valid
+      ? freezePayload(JSON.parse(JSON.stringify(restoredPayload)))
+      : null;
+    const boardKey = payload?.boardKey ?? null;
+    const sessionId = payload?.sessionId ?? null;
+    return publish({ mode: activeMode, boardKey, sessionId, ...eligibility(authState, profileState) });
+  };
+
   const submit = async () => {
     if (!payload || state.status === "submitting") return state;
     if (!isOnline()) return publish({ ...state, status: "offline", error: null });
@@ -340,6 +364,7 @@ export function createLeaderboardSubmissionService({
       const sessionId = payload?.sessionId || result?.sessionId || null;
       return publish({ mode, boardKey, sessionId, ...eligibility(authState, profileState) });
     },
+    restorePreparedSubmission: restorePayload,
     markAutomaticSubmissionPending(sessionId) {
       if (state.sessionId !== sessionId || !["checking", "ready"].includes(state.status)) return state;
       return publish({ ...state, automatic: true });
@@ -371,6 +396,7 @@ const submissionService = createLeaderboardSubmissionService();
 export const getSubmissionState = submissionService.getSubmissionState;
 export const subscribeToSubmissions = submissionService.subscribeToSubmissions;
 export const prepareResultSubmission = submissionService.prepareResultSubmission;
+export const restorePreparedSubmission = submissionService.restorePreparedSubmission;
 export const markAutomaticSubmissionPending = submissionService.markAutomaticSubmissionPending;
 export const expireAutomaticSubmissionCheck = submissionService.expireAutomaticSubmissionCheck;
 export const refreshSubmissionEligibility = submissionService.refreshSubmissionEligibility;

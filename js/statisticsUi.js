@@ -250,7 +250,7 @@ function usernameForm(profileState, changeMode = false) {
     <div class="leaderboard-username-feedback" id="leaderboard-username-feedback" aria-live="polite">${feedback}</div>
     <div class="global-account-actions">
       <button class="arcade-button" data-action="leaderboard-username-check" ${running ? "disabled aria-disabled=\"true\"" : ""}>CHECK AVAILABILITY</button>
-      <button class="arcade-button" data-action="${changeMode ? "leaderboard-username-save-change" : "leaderboard-username-claim"}" ${running ? "disabled aria-disabled=\"true\"" : ""}>${changeMode ? "SAVE USERNAME" : "CLAIM USERNAME"}</button>
+      <button class="arcade-button account-primary" data-action="${changeMode ? "leaderboard-username-save-change" : "leaderboard-username-claim"}" ${running ? "disabled aria-disabled=\"true\"" : ""}>${changeMode ? "SAVE USERNAME" : "CLAIM USERNAME"}</button>
       ${changeMode ? `<button class="arcade-button" data-action="leaderboard-username-cancel-change" ${running ? 'disabled aria-disabled="true"' : ""}>CANCEL</button>` : ""}
     </div>
   </div>`;
@@ -307,11 +307,11 @@ function globalAccountContent(authState = { status: "loading" }, profileState) {
   if (authState.status === "signed-out") {
     return `<strong>Not signed in</strong>
       <p>Sign in with Google to create a persistent<br>leaderboard account later.</p>
-      <button class="arcade-button" data-action="auth-google-sign-in">CONTINUE WITH GOOGLE</button>`;
+      <button class="arcade-button account-primary" data-action="auth-google-sign-in">CONTINUE WITH GOOGLE</button>`;
   }
   if (authState.status === "signing-in") {
     return `<p>Redirecting to Google&hellip;</p>
-      <button class="arcade-button" data-action="auth-google-sign-in" disabled aria-disabled="true">CONTINUE WITH GOOGLE</button>`;
+      <button class="arcade-button account-primary" data-action="auth-google-sign-in" disabled aria-disabled="true">CONTINUE WITH GOOGLE</button>`;
   }
   if (authState.status === "signed-in") {
     return signedInProfileContent(profileState);
@@ -323,7 +323,7 @@ function globalAccountContent(authState = { status: "loading" }, profileState) {
   if (authState.status === "error") {
     return `<strong>Account connection failed</strong>
       <p>Please try again. Local gameplay and records are unaffected.</p>
-      <button class="arcade-button" data-action="auth-google-sign-in">TRY GOOGLE SIGN-IN AGAIN</button>`;
+      <button class="arcade-button account-primary" data-action="auth-google-sign-in">TRY GOOGLE SIGN-IN AGAIN</button>`;
   }
   return `<strong>Online account services are unavailable.</strong>
     <p>Local gameplay and records are unaffected.</p>`;
@@ -343,6 +343,7 @@ export function renderSettingsAccountManagement({
   nameError = "",
   authState,
   leaderboardProfileState,
+  pendingResult = null,
 } = {}) {
   const displayName = escapeHtml(localProfile?.displayName || "PLAYER");
   const localEditor = editing
@@ -354,8 +355,16 @@ export function renderSettingsAccountManagement({
       </div>`
     : `<strong class="profile-display-name">${displayName}</strong>
        <button type="button" class="text-action" data-action="settings-edit-name">EDIT NAME</button>`;
-  return `<section class="settings-account-management" aria-labelledby="settings-account-heading">
+  return `<section class="settings-account-management" id="settings-account-management" tabindex="-1" aria-labelledby="settings-account-heading">
     <h2 id="settings-account-heading">ACCOUNT &amp; LEADERBOARDS</h2>
+    ${pendingResult ? `<aside class="pending-result-notice" aria-live="polite">
+      <strong>YOUR LAST RESULT IS READY TO SUBMIT</strong>
+      <span>SET A PUBLIC USERNAME TO CONTINUE</span>
+      <div class="global-account-actions">
+        <button class="arcade-button account-primary" data-action="retry-pending-result">RETRY SUBMISSION</button>
+        <button class="arcade-button secondary" data-action="discard-pending-result">DISCARD</button>
+      </div>
+    </aside>` : ""}
     <div class="settings-local-profile"><span>LOCAL DISPLAY NAME</span>${localEditor}</div>
     ${renderGlobalAccount(authState, leaderboardProfileState)}
   </section>`;

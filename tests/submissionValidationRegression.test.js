@@ -19,7 +19,7 @@ const dailyResult = {
   activeDurationMs: 102487.2,
   words: { completed: 60, missed: 0, total: 60 },
   modeData: {
-    dateKey: "2026-06-28", challengeVersion: 1, dateOverride: false,
+    dateKey: "2026-06-28", challengeVersion: 2, dateOverride: false,
     totalWords: 60, recordEligible: true, wordsSpawned: 60,
     wordsResolved: 60, wordsCompleted: 60, integrityRemaining: 3,
     coreHits: 0, coreBreaches: 0, finalWave: 3, wordPoints: 11900,

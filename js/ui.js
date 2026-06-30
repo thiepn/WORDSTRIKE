@@ -388,6 +388,8 @@ export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
   disconnectSpeedTestLayoutObserver();
   const isTime = state.config.testType === SPEED_TEST_TYPES.TIME;
   const configLabel = isTime ? `${state.config.durationSeconds} SECONDS` : `${state.config.wordCount} WORDS`;
+  const timerPosition = state.timerPosition === "top" ? "top" : "center";
+  const primaryValue = isTime ? state.config.durationSeconds.toFixed(1) : `0 / ${state.config.wordCount}`;
   app().innerHTML = `
     <section class="screen speed-test-screen">
       <header class="speed-test-topbar">
@@ -403,12 +405,15 @@ export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
           <div class="speed-test-controls-wrap">
             <span class="speed-test-word-set">ENGLISH 200</span>
             ${speedTestConfigMarkup(state.config, state.phase === "ACTIVE")}
+            <nav class="speed-timer-position" aria-label="Timer position">
+              <span>TIMER POSITION</span>
+              <button type="button" data-speed-timer-position="center" aria-pressed="${timerPosition === "center"}" class="${timerPosition === "center" ? "active" : ""}">CENTER</button>
+              <button type="button" data-speed-timer-position="top" aria-pressed="${timerPosition === "top"}" class="${timerPosition === "top" ? "active" : ""}">TOP</button>
+            </nav>
           </div>
           <div class="speed-test-hud">
-            <strong id="speed-test-primary">${isTime
-    ? state.config.durationSeconds.toFixed(1)
-    : `0 / ${state.config.wordCount}`}</strong>
-            <span id="speed-test-elapsed">${isTime ? "" : "00:00"}</span>
+            ${timerPosition === "top" ? `<strong id="speed-test-primary">${primaryValue}</strong>` : ""}
+            ${timerPosition === "top" && !isTime ? '<span id="speed-test-elapsed">00:00</span>' : ""}
             <span>WPM <b id="speed-test-wpm">0</b></span>
             <span>ACC <b id="speed-test-accuracy">100%</b></span>
             <span>RAW <b id="speed-test-raw">0</b></span>
@@ -420,6 +425,10 @@ export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
           <div class="speed-test-status" id="speed-test-status">START TYPING TO BEGIN</div>
           ${tutorialHelpButton("typing", "Typing Test")}
         </div>
+        ${timerPosition === "center" ? `<div class="speed-test-center-timer" aria-live="off">
+          <strong id="speed-test-primary">${primaryValue}</strong>
+          ${isTime ? "" : '<span id="speed-test-elapsed">00:00</span>'}
+        </div>` : ""}
         <div class="speed-test-word-viewport" id="speed-test-word-viewport">
           <div class="speed-test-word-flow" id="speed-test-word-flow">
             ${state.words.map((word, index) => `
@@ -442,6 +451,15 @@ export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
     button.onclick = () => handlers.selectConfig?.(
       button.dataset.speedCategory === SPEED_TEST_TYPES.TIME ? "time-60" : "words-50",
     );
+  });
+  app().querySelectorAll("[data-speed-timer-position]").forEach((button) => {
+    button.onclick = () => handlers.setTimerPosition?.(button.dataset.speedTimerPosition);
+    button.onkeydown = (event) => {
+      if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      event.preventDefault?.();
+      const next = button.dataset.speedTimerPosition === "center" ? "top" : "center";
+      handlers.setTimerPosition?.(next);
+    };
   });
   const viewport = document.querySelector("#speed-test-word-viewport");
   if (viewport && globalThis.ResizeObserver) {
@@ -1220,7 +1238,7 @@ export function renderGlobalSubmissionMarkup(state = {}) {
     buttons = submissionButton("CONTINUE WITH GOOGLE", "result-google-sign-in") + submissionButton(viewLabel, viewAction);
   } else if (state.status === "ineligible" && state.reason === "username-required") {
     message = "Choose a public username before submitting scores.";
-    buttons = submissionButton("SET USERNAME", "open-global-profile") + submissionButton(viewLabel, viewAction);
+    buttons = submissionButton("SET USERNAME", "open-account-settings") + submissionButton(viewLabel, viewAction);
   } else if (state.status === "ineligible" && state.reason === "campaign-failed") {
     message = "Only successfully completed levels are eligible for the Campaign leaderboard.";
   } else if (state.status === "ineligible" && state.reason === "unsupported-test") {

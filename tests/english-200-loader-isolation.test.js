@@ -10,6 +10,10 @@ const legacyRaw = await readFile(
   "utf8",
 );
 const legacy = JSON.parse(legacyRaw);
+const common = JSON.parse(await readFile(
+  new URL("../data/commonGameplayWords.json", import.meta.url),
+  "utf8",
+));
 const originalLegacyHashMaterial = legacyRaw;
 assert.equal(
   createHash("sha256").update(legacyRaw).digest("hex"),
@@ -24,6 +28,9 @@ globalThis.fetch = async (url) => {
   if (path.includes("typingTestWords.json")) {
     return { ok: true, async json() { return legacy; } };
   }
+  if (path.includes("commonGameplayWords.json")) {
+    return { ok: true, async json() { return common; } };
+  }
   return { ok: false, status: 404 };
 };
 
@@ -37,8 +44,8 @@ const commonBank = await loadCommonWordBank();
 assert.equal(speedBank.wordSet.id, "english-200");
 assert.equal(speedBank.words.length, 199);
 assert.deepEqual(speedBank.words, english.words);
-assert.equal(commonBank.words.length, 740);
-assert.deepEqual(commonBank.words, legacy.words);
+assert.equal(commonBank.words.length, 3000);
+assert.deepEqual(commonBank.words, common.words.map(({ word }) => word));
 
 for (const configId of [
   "time-15", "time-30", "time-60", "time-120",
@@ -67,4 +74,4 @@ assert.doesNotMatch(speedLoader, /data\/typingTestWords\.json/);
 assert.match(main, /commonWords:\s*appState\.commonWordBank\.words/g);
 assert.doesNotMatch(main, /commonWords:\s*appState\.speedTestWordBank\.words/);
 
-console.log("English 200 loader, deterministic extension, no duplicates, and cross-mode 740-word isolation passed.");
+console.log("English 200 loader, deterministic extension, no duplicates, and common-gameplay v2 isolation passed.");

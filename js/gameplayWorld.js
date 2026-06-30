@@ -5,6 +5,15 @@ export const GAMEPLAY_WORLD = Object.freeze({
   coreRadius: 42,
 });
 
+export const FULLY_VERTICAL_SPEED_SCALE = 0.55;
+
+export function getDirectionalSpeedScale(dx, dy) {
+  const distance = Math.hypot(Number(dx) || 0, Number(dy) || 0);
+  if (distance <= 0) return 1;
+  const verticality = Math.abs(Number(dy) || 0) / distance;
+  return 1 - verticality * (1 - FULLY_VERTICAL_SPEED_SCALE);
+}
+
 const clamp01 = (value) => Math.max(0, Math.min(1, Number(value) || 0));
 
 export function logicalSpawnPosition(edge, ratio) {
@@ -25,6 +34,9 @@ export function createWordTrajectory({ edge, ratio, speed }) {
   const distance = Math.max(1, Math.hypot(dx, dy));
   const travelDistance = Math.max(1, distance - GAMEPLAY_WORLD.coreRadius);
   const safeSpeed = Math.max(1, Number(speed) || 1);
+  const verticality = Math.abs(dy) / distance;
+  const directionalSpeedScale = getDirectionalSpeedScale(dx, dy);
+  const effectiveSpeed = safeSpeed * directionalSpeedScale;
   return {
     logicalSpawnX: spawn.x,
     logicalSpawnY: spawn.y,
@@ -34,7 +46,10 @@ export function createWordTrajectory({ edge, ratio, speed }) {
     logicalEndY: spawn.y + dy / distance * travelDistance,
     travelProgress: 0,
     travelDistance,
-    travelDurationMs: travelDistance / safeSpeed * 1000,
+    verticality,
+    directionalSpeedScale,
+    effectiveSpeed,
+    travelDurationMs: travelDistance / effectiveSpeed * 1000,
   };
 }
 

@@ -1,6 +1,6 @@
 import { getLegacyCampaignPressureProfile } from "./campaignDifficulty.js";
 
-export const DAILY_CHALLENGE_VERSION = 1;
+export const DAILY_CHALLENGE_VERSION = 2;
 export const DAILY_WORDS_PER_WAVE = 20;
 export const DAILY_TOTAL_WORDS = 60;
 export const DAILY_STARTING_INTEGRITY = 3;

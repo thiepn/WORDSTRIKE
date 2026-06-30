@@ -10,7 +10,7 @@ import {
 import { loadBossWordBank } from "../js/wordBank.js";
 
 const typingSource = JSON.parse(
-  await readFile(new URL("../data/typingTestWords.json", import.meta.url), "utf8"),
+  await readFile(new URL("../data/commonGameplayWords.json", import.meta.url), "utf8"),
 );
 const typingSnapshot = JSON.stringify(typingSource);
 const longSource = JSON.parse(
@@ -32,7 +32,7 @@ for (const invalid of ["at", "sixteencharacters", "Bad", "two-words", "", null])
 }
 
 const pools = buildBossWordPools({
-  typingWords: typingSource.words,
+  typingWords: typingSource.words.map(({ word }) => word),
   longWords: longValidation.words,
 });
 const poolValidation = validateBossWordPools(pools);
@@ -54,12 +54,12 @@ globalThis.fetch = async (url) => {
   return {
     ok: true,
     async json() {
-      return text.includes("typingTestWords") ? typingSource : longSource;
+      return text.includes("commonGameplayWords") ? typingSource : longSource;
     },
   };
 };
 const loaded = await loadBossWordBank();
-assert.equal(loaded.source, "typing-test+curated-long");
+assert.equal(loaded.source, "common-gameplay-v2+curated-long");
 assert.equal(validateBossWordPools(loaded.pools).valid, true);
 
 const realWarn = console.warn;

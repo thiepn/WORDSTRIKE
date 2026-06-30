@@ -8,12 +8,14 @@ const state = { status: "ready", selectedCategory: "campaign", selectedTypingDur
 renderLeaderboards(state, { status: "signed-out" }, { status: "idle" });
 assert.match(app.html, /SIGN IN FOR GLOBAL RANKS/);
 assert.match(app.html, /leaderboard-google-sign-in[^>]*>CONTINUE WITH GOOGLE/);
+assert.match(app.html, /account-primary[^>]*data-action="leaderboard-google-sign-in"/);
 assert.match(app.html, /PublicPlayer/);
 renderLeaderboards(state, { status: "signed-in", user: { email: "private@example.com" } }, { status: "needs-username", profile: null });
 assert.match(app.html, /leaderboard-open-username[^>]*>SET USERNAME/);
+assert.match(app.html, /account-primary[^>]*data-action="leaderboard-open-username"/);
 assert.doesNotMatch(app.html, /private@example\.com|CONTINUE WITH GOOGLE/);
 const main = await readFile(new URL("../js/main.js", import.meta.url), "utf8");
 assert.match(main, /action === "leaderboard-google-sign-in"[\s\S]*signInWithGoogle\(\)/);
-assert.match(main, /action === "leaderboard-open-username"[\s\S]*openGlobalProfile\(\)/);
+assert.match(main, /action === "leaderboard-open-username"[\s\S]*openAccountSettings\(\)/);
 
 console.log("Signed-out rankings remain public with direct Google sign-in, while username setup has a direct shortcut.");

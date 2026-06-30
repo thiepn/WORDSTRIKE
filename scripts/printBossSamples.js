@@ -7,14 +7,14 @@ import {
 
 const seed = Number(process.argv[2]) || 12345;
 const typing = JSON.parse(
-  await readFile(new URL("../data/typingTestWords.json", import.meta.url), "utf8"),
+  await readFile(new URL("../data/commonGameplayWords.json", import.meta.url), "utf8"),
 );
 const long = JSON.parse(
   await readFile(new URL("../data/bossCommonLongWords.json", import.meta.url), "utf8"),
 );
 const source = {
   pools: buildBossWordPools({
-    typingWords: typing.words,
+  typingWords: typing.words.map((entry) => typeof entry === "string" ? entry : entry.word),
     longWords: long.words,
   }),
 };
