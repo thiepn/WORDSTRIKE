@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-07-01",
+  "policy": "Only manually approved, common, recognizable lowercase English words may enter the general gameplay pool.",
+  "shortWordAllowlist": [
+    "act", "add", "age", "ago", "aid", "aim", "air", "all", "am", "an", "and",
+    "ant", "any", "arm", "art", "as", "ask", "at", "bad", "bag", "ban", "bar",
+    "bat", "be", "bed", "bee", "big", "bit", "box", "boy", "bus", "buy", "by",
+    "can", "cap", "car", "cat", "cop", "cow", "cry", "cup", "cut", "dad", "day",
+    "did", "die", "dig", "do", "dog", "dry", "due", "ear", "eat", "egg", "end",
+    "eye", "fan", "far", "fat", "fee", "few", "fit", "fix", "fly", "for", "fox",
+    "fun", "gas", "get", "go", "got", "guy", "had", "has", "hat", "hay", "he",
+    "her", "hey", "hid", "him", "hip", "his", "hit", "hot", "how", "ice", "if",
+    "ill", "in", "ink", "is", "it", "its", "job", "joy", "key", "kid", "law",
+    "lay", "leg", "let", "lie", "lip", "lot", "low", "mad", "man", "map", "may",
+    "me", "men", "met", "mix", "mom", "mud", "my", "net", "new", "no", "nod",
+    "nor", "not", "now", "nut", "odd", "of", "off", "oh", "old", "on", "one",
+    "or", "our", "out", "owe", "own", "pay", "pen", "pet", "pie", "pig", "pin",
+    "pop", "pot", "put", "raw", "red", "rid", "rob", "rod", "run", "sad", "sat",
+    "saw", "say", "sea", "see", "set", "she", "shy", "sir", "sit", "six", "ski",
+    "sky", "so", "son", "sun", "tax", "tea", "ten", "the", "tie", "tip", "to",
+    "toe", "too", "top", "toy", "try", "two", "up", "us", "use", "van", "was",
+    "way", "we", "who", "why", "win", "won", "yes", "yet", "you"
+  ],
+  "supportingSources": [
+    {
+      "name": "U.S. Census Bureau 2025 National Places Gazetteer",
+      "url": "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2025_Gazetteer/2025_Gaz_place_national.zip",
+      "license": "U.S. federal government public-domain data",
+      "sha256": "49644173a453469d9bd77fb7a493b027f87567e209edaf2078aac7543ac2ee29"
+    },
+    {
+      "name": "U.S. Census Bureau 2025 National States Gazetteer",
+      "url": "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2025_Gazetteer/2025_Gaz_state_national.zip",
+      "license": "U.S. federal government public-domain data",
+      "sha256": "5c0bb56f4824af366538d73bffd229e790d301356624302eeca24d09cf27ba30"
+    }
+  ],
+  "allowedGeographicNames": [
+    "berlin", "china", "england", "france", "germany", "india",
+    "japan", "korea", "london", "paris", "rome"
+  ],
+  "ambiguousOrdinaryWords": [
+    "apple", "april", "art", "august", "baker", "bank", "bear", "bill", "blue",
+    "bush", "cook", "faith", "fisher", "foster", "gap", "grace", "hope",
+    "hunter", "independence", "joy", "king", "liberty", "mark", "mason",
+    "may", "mobile", "normal", "orange", "porter", "potter", "python",
+    "reading", "rob", "rose", "shell", "singer", "square", "summer", "target",
+    "turkey", "union", "will", "winter"
+  ],
+  "exclusions": {
+    "company-or-brand": [
+      "adidas", "adobe", "amazon", "amd", "android", "apache", "asus", "bbc",
+      "canon", "cbs", "cisco", "cnet", "craigslist", "debian", "dell", "disney",
+      "ebay", "epinions", "epson", "ericsson", "firefox", "ford", "github",
+      "google", "hewlett", "hilton", "honda", "huawei", "ibm", "intel", "ipod",
+      "lenovo", "linkedin", "linux", "microsoft", "motorola", "mozilla", "mysql",
+      "nasa", "netflix", "nginx", "nike", "nintendo", "nokia", "oracle",
+      "panasonic", "paypal", "pinterest", "playstation", "reddit", "samsung",
+      "siemens", "sony", "spotify", "toshiba", "toyota", "tripadvisor", "twitter",
+      "ubuntu", "vbulletin", "verizon", "windows", "wordpress", "xbox", "xerox",
+      "yahoo", "youtube"
+    ],
+    "technical-term": [
+      "adapter", "admin", "affiliate", "algorithm", "annotation", "array", "backend",
+      "bandwidth", "bioconductor", "blogger", "broadband", "browser", "buffer",
+      "bytes", "cache", "char", "chipset", "codec", "const", "converter",
+      "cryptocurrency", "debugging", "desktop", "devel", "diff", "dns", "domain",
+      "dsl", "ethernet", "firmware", "font", "framework", "frontend", "ftp",
+      "gateway", "hardware", "header", "homepage", "hosting", "html", "http",
+      "https", "interface", "javascript", "jquery", "kernel", "keyword", "keywords",
+      "localhost", "login", "malware", "modem", "module", "multimedia", "node",
+      "notification", "null", "optimization", "packet", "parameter", "parameters",
+      "permalink", "php", "pixel", "processor", "protocol", "registry", "renderer",
+      "router", "runtime", "server", "servlet", "shader", "site", "sitemap", "software",
+      "spyware", "syntax", "tech", "technical", "template", "trackback", "unix",
+      "unsubscribe", "upload", "username", "vector", "voip", "vpn", "weblog",
+      "webmaster", "website", "websocket", "wiki", "wikipedia", "wireless", "xml",
+      "developer", "download", "podcast"
+    ],
+    "scientific-term": [
+      "biological", "cognitive", "genbank", "genetic", "genome", "genomic", "medline",
+      "molecular", "pmid", "proteome", "pubmed", "radiation", "syndrome", "uniprot",
+      "uniprotkb"
+    ],
+    "abbreviation": [
+      "ajax", "api", "cpu", "css", "dsl", "ftp", "gps", "hist", "info", "isbn",
+      "corp", "misc", "pdf", "pmid", "prev", "ram", "sept", "sql", "tcp", "usb",
+      "auto", "beta", "radar", "utc", "voip", "vpn", "www", "xml"
+    ],
+    "malformed-token": [
+      "anti", "cant", "devel", "dont", "gonna", "inter", "livecam", "multi",
+      "gotta", "postposted", "tion", "trans", "ultra", "uniprotkb", "verzeichnis", "wanna"
+    ],
+    "us-state": [
+      "alabama", "alaska", "arizona", "arkansas", "california", "colorado",
+      "connecticut", "delaware", "florida", "georgia", "hawaii", "idaho", "illinois",
+      "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine", "maryland",
+      "massachusetts", "michigan", "minnesota", "mississippi", "missouri", "montana",
+      "nebraska", "nevada", "ohio", "oklahoma", "oregon", "pennsylvania",
+      "tennessee", "texas", "utah", "vermont", "virginia", "washington", "wisconsin",
+      "wyoming"
+    ],
+    "us-city": [
+      "albuquerque", "anaheim", "angeles", "atlanta", "austin", "baltimore",
+      "birmingham", "boston", "brooklyn", "cambridge", "charlotte", "chicago", "cincinnati",
+      "cleveland", "columbia", "columbus", "dallas", "denver", "detroit", "houston",
+      "hollywood", "jacksonville", "lasvegas", "manhattan", "miami", "milwaukee",
+      "minneapolis", "nashville",
+      "newark", "oakland", "omaha", "orlando", "philadelphia", "phoenix", "pittsburgh",
+      "portland", "raleigh", "richmond", "sacramento", "seattle", "tampa", "tucson",
+      "tulsa", "vegas", "wichita", "york"
+    ],
+    "personal-name": [
+      "adams", "alexander", "allen", "anderson", "andrew", "anthony", "arthur",
+      "barry", "bruce", "campbell", "carter", "clark", "clinton", "collins", "craig",
+      "davidson", "davis", "donald", "douglas", "edwards", "evans", "franklin",
+      "george", "gordon", "graham", "hamilton", "harris", "harrison", "howard",
+      "jackson", "james", "jan", "john", "johnson", "jones", "josh", "kennedy", "lewis",
+      "marshall", "matt", "michael", "miller", "mitchell", "moore", "morgan", "morris", "murray",
+      "murphy", "nelson", "parker", "peterson", "phillips", "powell", "richards",
+      "richardson", "roberts", "robinson", "rogers", "russell", "scott", "siemens",
+      "simpson", "smith", "stevens", "stewart", "sullivan", "taylor", "thompson",
+      "pete", "phil", "turner", "walker", "warner", "watson", "williams", "wilson", "wright"
+    ],
+    "other-proper-noun": [
+      "afghanistan", "africa", "african", "america", "american", "angeles", "arab",
+      "arabia", "argentina", "asia", "asian", "atlantic", "australia", "australian",
+      "austria", "barcelona", "beijing", "belgium", "brazil", "brazilian", "britain",
+      "british", "canada", "canadian", "caribbean", "catholic", "chinese", "christ",
+      "christianity", "christmas", "cuba", "czech", "delhi", "democratic", "denmark", "dublin", "dutch", "easter",
+      "edinburgh", "egypt", "english", "euro", "europe", "european", "finland", "french",
+      "glasgow", "greece", "greek", "halloween", "hampshire", "holland", "hong", "indian", "indonesia", "iran",
+      "iraq", "ireland", "irish", "islam", "islamic", "israeli", "italian", "italy",
+      "japanese", "jersey", "jerusalem", "jewish", "jews", "kenya", "kong", "korean",
+      "latin", "latina", "liverpool", "madrid", "malaysia", "manchester", "melbourne",
+      "mexican", "mexico", "moscow", "muslim", "netherlands", "nigeria", "norway",
+      "ontario", "orleans", "oxford", "pacific", "pakistan", "palestinian", "philippines",
+      "poland", "portugal", "puerto", "queensland", "rhode", "russia", "russian", "santa", "saudi",
+      "scotland", "scottish", "singapore", "spain", "spanish", "sweden", "swedish",
+      "swiss", "switzerland", "taiwan", "thai", "thailand", "tokyo", "toronto", "turkish",
+      "egyptian", "syria", "ukraine", "vancouver", "victorian", "vietnam", "wales", "welsh", "zealand"
+    ],
+    "organization-or-institution": [
+      "harvard", "stanford", "university"
+    ],
+    "offensive-or-unsuitable": [
+      "abortion", "babe", "babes", "betting", "blackjack", "bomb", "casino", "cheats",
+      "cialis", "fetish", "gambling", "holdem", "lesbian", "lingerie", "murder", "naked",
+      "nasty", "phentermine", "poker", "racial", "roulette", "shaved", "slave", "stupid",
+      "suicide", "sexual", "terrorism", "terrorist", "thongs", "tobacco", "torture", "ugly"
+    ],
+    "obscure-word": [
+      "collectables", "collectibles", "commonwealth", "costa", "gratis", "memorabilia",
+      "olympic", "para", "pursuant", "soviet", "thou"
+    ],
+    "inflected-form": [
+      "accompanied", "accused", "alleged", "appointed", "authorized", "certified",
+      "classified", "composed", "confused", "deemed", "derived", "designated", "devoted",
+      "entitled", "equipped", "exposed", "governing", "illustrated", "infected", "injured",
+      "inspired", "isolated", "occupied", "opposed", "oriented", "proceed", "revised",
+      "situated", "emerging", "healing", "lying", "underlying", "warning", "wrestling",
+      "buried", "suspended", "threatened", "critics", "expectations", "guidelines",
+      "implications", "ingredients", "pupils", "supporters", "symptoms", "troops", "voters",
+      "athletes", "competitors", "emotions", "gods", "politicians", "sustained"
+    ],
+    "duplicate-variant": [
+      "amongst", "bigger", "biggest", "cheaper", "closer", "closest", "deeper", "defence",
+      "earlier", "easier", "faster", "fastest", "fewer", "finest", "greater", "greatest",
+      "grey", "harder", "higher", "highest", "larger", "largest", "longer", "lowest",
+      "nearest", "older", "oldest", "organisation", "programme", "smaller", "stronger",
+      "theatre", "towards", "whilst", "wider", "younger"
+    ]
+  }
+}

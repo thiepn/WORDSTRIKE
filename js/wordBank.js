@@ -4,34 +4,51 @@ import {
   validateBossLongVocabulary,
   validateBossWordPools,
 } from "./bossGenerator.js";
+import { AUDITED_FALLBACK_WORDS } from "./auditedFallbackWords.js";
 import { createSeededRandom, mixSeed, shuffleSeeded } from "./random.js";
 
-const FALLBACK_WORDS = [
-  "arc", "bit", "code", "dash", "echo", "flux", "glow", "grid", "laser", "neon",
-  "pixel", "pulse", "quick", "react", "shift", "spark", "strike", "target", "vector",
-  "velocity", "keyboard", "midnight", "overdrive", "precision", "starlight",
-];
+function validateCommonGameplaySource(source) {
+  const words = source?.words;
+  const tiers = source?.tiers;
+  const tierKeys = Object.keys(tiers || {}).sort();
+  const normalizedWords = Array.isArray(words)
+    ? words.map((entry) => typeof entry === "string" ? entry : entry?.word)
+    : [];
+  const flattenedTiers = tierKeys.flatMap((key) => tiers[key] || []);
+  const approvedWords = new Set(normalizedWords);
+  if (
+    source?.schemaVersion !== 2 ||
+    source?.filtering?.manualReviewArtifact !== "data/commonGameplayWords.manual-review.json" ||
+    !Array.isArray(words) ||
+    words.length !== 3000 ||
+    !tiers ||
+    tierKeys.join(",") !== "1,2,3,4,5" ||
+    tierKeys.some((key) => !Array.isArray(tiers[key]) || tiers[key].length !== 600) ||
+    approvedWords.size !== 3000 ||
+    normalizedWords.some((word) => typeof word !== "string" || !/^[a-z]{2,12}$/.test(word)) ||
+    new Set(flattenedTiers).size !== 3000 ||
+    flattenedTiers.some((word) => !approvedWords.has(word))
+  ) {
+    throw new Error("Invalid manually audited common vocabulary");
+  }
+  return source;
+}
 
 export async function loadWordBank() {
   try {
     const response = await fetch(new URL("../data/commonGameplayWords.json", import.meta.url));
     if (!response.ok) throw new Error(`Word bank request failed: ${response.status}`);
-    const data = await response.json();
-    if (!data?.tiers) throw new Error("Invalid word bank");
-    return data;
+    return validateCommonGameplaySource(await response.json());
   } catch (error) {
     console.warn("Using fallback word bank.", error);
-    return { theme: "fallback", tiers: { 1: FALLBACK_WORDS } };
+    return { theme: "fallback", tiers: { 1: AUDITED_FALLBACK_WORDS } };
   }
 }
 
 export async function loadCommonWordBank() {
   const response = await fetch(new URL("../data/commonGameplayWords.json", import.meta.url));
   if (!response.ok) throw new Error(`Common vocabulary request failed: ${response.status}`);
-  const source = await response.json();
-  if (!Array.isArray(source?.words) || !source.words.length) {
-    throw new Error("Invalid common vocabulary");
-  }
+  const source = validateCommonGameplaySource(await response.json());
   return {
     schemaVersion: source.schemaVersion ?? 1,
     source: source.source,
@@ -48,10 +65,11 @@ export async function loadBossWordBank() {
     if (!typingResponse.ok || !longResponse.ok) {
       throw new Error("Boss vocabulary request failed");
     }
-    const [typingSource, longSource] = await Promise.all([
+    const [rawTypingSource, longSource] = await Promise.all([
       typingResponse.json(),
       longResponse.json(),
     ]);
+    const typingSource = validateCommonGameplaySource(rawTypingSource);
     const longValidation = validateBossLongVocabulary(longSource);
     if (!longValidation.valid) {
       throw new Error(`Invalid curated boss vocabulary: ${longValidation.errors.join("; ")}`);
@@ -129,7 +147,7 @@ export function createNormalWordAttempt(bank, config, attemptSeed) {
       if (pool.length >= config.wordCount) break;
     }
   }
-  if (!pool.length) addWords(FALLBACK_WORDS, config.wordTier, false);
+  if (!pool.length) addWords(AUDITED_FALLBACK_WORDS, config.wordTier, false);
 
   const targetLength = Number.isFinite(config.targetAverageWordLength)
     ? config.targetAverageWordLength

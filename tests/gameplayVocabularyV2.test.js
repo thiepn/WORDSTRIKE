@@ -1,76 +1,107 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
-  AMBIGUOUS_NAME_ALLOWLIST,
   buildDataset,
-  EXCLUDED_WORDS,
-  GEOGRAPHIC_ALLOWLIST,
-  INFLECTION_EXCEPTIONS,
+  SOURCE_SHA256,
+  validateManualReview,
 } from "../scripts/buildWordPools.mjs";
 
-const data = JSON.parse(await readFile(new URL("../data/commonGameplayWords.json", import.meta.url), "utf8"));
-const names = JSON.parse(await readFile(new URL("../data/personalNameExclusions.json", import.meta.url), "utf8"));
+const readJson = async (path) => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8"));
+const data = await readJson("../data/commonGameplayWords.json");
+const review = await readJson("../data/commonGameplayWords.manual-review.json");
+const qualityRules = await readJson("../data/vocabularyQualityRules.json");
+const names = await readJson("../data/personalNameExclusions.json");
+
+// Review entries are a contiguous row-level record of the source prefix. Rebuilding
+// this prefix verifies every recorded rank and every KEEP/REMOVE decision without
+// requiring the licensed upstream source file in the repository.
+const reviewedSourcePrefix = `${review.entries.map(({ word }) => word).join("\n")}\n`;
+const validation = validateManualReview(reviewedSourcePrefix, {
+  review,
+  qualityRules,
+  personalNames: names.names,
+});
+assert.equal(validation.valid, true, validation.errors.join("\n"));
+assert.equal(review.manualReviewCompleted, true);
+assert.equal(review.source.sourceSha256, SOURCE_SHA256);
+assert.equal(review.reviewedCandidateCount, 7406);
+assert.equal(review.approvedCount, 3000);
+assert.equal(review.entries.length, 7406);
+assert.ok(review.entries.every((entry) => (
+  typeof entry.word === "string"
+  && Number.isSafeInteger(entry.sourceFrequencyRank)
+  && ["KEEP", "REMOVE"].includes(entry.decision)
+  && typeof entry.category === "string"
+  && entry.category.length > 0
+  && typeof entry.reviewNote === "string"
+  && entry.reviewNote.length > 0
+)));
+
+const rebuilt = buildDataset(reviewedSourcePrefix, {
+  review,
+  qualityRules,
+  personalNames: names.names,
+  personalNameSource: names.source,
+});
+assert.deepEqual(rebuilt, data);
 assert.equal(data.schemaVersion, 2);
-assert.equal(data.source.license, "MIT");
-assert.match(data.source.url, /first20hours\/google-10000-english/);
 assert.equal(data.words.length, 3000);
-assert.equal(names.names.length, 1656);
-assert.equal(names.source.license, "CC0-1.0 / U.S. public-domain data");
-assert.match(names.source.datasetUrl, /catalog\.data\.gov/);
-assert.equal(names.source.sourceSha256, "f9aa39846ff5b724e8bc497d3c0d2d5d777ed483c93f5508f8a3bd25e3313018");
 assert.equal(new Set(data.words.map(({ word }) => word)).size, 3000);
 assert.ok(data.words.every(({ word }) => /^[a-z]{2,12}$/.test(word)));
-assert.ok(data.words.every((entry, index) => index === 0 || entry.frequencyRank > data.words[index - 1].frequencyRank));
-for (const term of ["viewport", "breakpoint", "renderer", "websocket", "debugging", "bandwidth", "prototype", "overdrive"]) {
-  assert.equal(data.words.some(({ word }) => word === term), false, `${term} must be excluded`);
-  assert.equal(EXCLUDED_WORDS.has(term), true);
-}
-for (const term of ["james", "jan", "john", "mary", "michael", "sarah", "api", "html", "utc", "dsl", "goes", "costs", "worked", "working"]) {
-  assert.equal(data.words.some(({ word }) => word === term), false, `${term} must be filtered`);
-}
-const allowedNameWords = new Set([...AMBIGUOUS_NAME_ALLOWLIST, ...GEOGRAPHIC_ALLOWLIST, ...INFLECTION_EXCEPTIONS]);
-const selectedWords = new Set(data.words.map(({ word }) => word));
-for (const name of names.names) {
-  if (!allowedNameWords.has(name)) assert.equal(selectedWords.has(name), false, `${name} is a blocked personal name`);
-}
-for (const term of ["address", "grass", "was", "does", "done", "gone", "england", "berlin"]) {
-  assert.equal(data.words.some(({ word }) => word === term), true, `${term} must be preserved`);
-}
+assert.deepEqual(Object.values(data.tiers).map((tier) => tier.length), [600, 600, 600, 600, 600]);
+assert.deepEqual(
+  new Set(Object.values(data.tiers).flat()),
+  new Set(data.words.map(({ word }) => word)),
+);
 assert.deepEqual(data.statistics, {
   totalWords: 3000,
   wordsPerTier: { 1: 600, 2: 600, 3: 600, 4: 600, 5: 600 },
-  sEndingTotal: 264,
+  manuallyReviewedCount: 7406,
+  manuallyApprovedCount: 3000,
+  sEndingTotal: 104,
   likelyPluralOrVerbSTotal: 0,
-  edEndingTotal: 91,
+  edEndingTotal: 12,
   likelyPastTenseTotal: 0,
-  ingEndingTotal: 59,
+  ingEndingTotal: 25,
   likelyContinuousTotal: 0,
-  personalNamesRemoved: 404,
-  abbreviationsRemoved: 1047,
-  regularInflectionsRemoved: 2062,
+  removedByCategory: {
+    "malformed-token": 145,
+    abbreviation: 613,
+    "technical-term": 77,
+    "inflected-form": 1890,
+    "organization-or-institution": 3,
+    "company-or-brand": 47,
+    "other-proper-noun": 123,
+    "obscure-word": 1055,
+    "personal-name": 300,
+    "us-city": 41,
+    "us-state": 39,
+    "offensive-or-unsuitable": 29,
+    "duplicate-variant": 33,
+    "scientific-term": 11,
+  },
+  companiesBrandsRemoved: 47,
+  usStatesRemoved: 39,
+  usCitiesRemoved: 41,
+  personalNamesRemoved: 300,
+  technicalTermsRemoved: 88,
+  abbreviationsRemoved: 613,
+  regularInflectionsRemoved: 1890,
+  ambiguousOrdinaryWordsRetained: [
+    "will", "may", "art", "april", "mobile", "august", "blue", "bill",
+    "mark", "bank", "king", "hope", "union", "bush", "summer", "normal",
+    "target", "winter", "apple", "square", "rose", "orange", "faith", "bear",
+    "hunter", "turkey", "cook", "potter", "shell", "grace", "rob", "liberty",
+    "joy", "foster", "baker", "independence", "singer", "mason",
+  ],
   geographicNamesIncluded: [
-    "canada", "america", "china", "london", "france", "europe", "germany", "india",
-    "japan", "africa", "england", "mexico", "italy", "ireland", "asia", "spain",
-    "paris", "scotland", "korea", "wales", "brazil", "rome", "egypt", "berlin",
+    "china", "london", "france", "germany", "india", "japan", "england",
+    "paris", "korea", "rome", "berlin",
   ],
 });
-assert.ok(data.statistics.geographicNamesIncluded.length / data.words.length < 0.02);
-const tierWords = Object.values(data.tiers).flat();
-assert.deepEqual(Object.values(data.tiers).map((tier) => tier.length), [600, 600, 600, 600, 600]);
-assert.equal(new Set(tierWords).size, 3000);
-assert.deepEqual(new Set(tierWords), new Set(data.words.map(({ word }) => word)));
 
-const alpha = (number) => {
-  let value = number;
-  let output = "";
-  do { output = String.fromCharCode(97 + value % 26) + output; value = Math.floor(value / 26); } while (value);
-  return `w${output}`;
-};
-const synthetic = Array.from({ length: 4000 }, (_, index) => alpha(index)).join("\n");
-assert.deepEqual(buildDataset(synthetic), buildDataset(synthetic));
-
-const english200 = JSON.parse(await readFile(new URL("../data/english200.json", import.meta.url), "utf8"));
+const english200 = await readJson("../data/english200.json");
 assert.equal(english200.wordSetVersion, 1);
 assert.equal(english200.wordSetId, "english-200");
 
-console.log("Gameplay vocabulary v2 has 3,000 sourced, filtered, deterministic, tiered words; English 200 v1 is unchanged.");
+console.log("Manual review ledger reproduces the 3,000-word, five-tier gameplay vocabulary exactly.");
