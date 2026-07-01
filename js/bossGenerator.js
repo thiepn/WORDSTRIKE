@@ -1,4 +1,5 @@
 import { mixSeed, shuffleSeeded } from "./random.js";
+import { AUDITED_FALLBACK_WORDS } from "./auditedFallbackWords.js";
 
 export const MAX_BOSS_GENERATION_ATTEMPTS = 32;
 
@@ -377,22 +378,7 @@ export function calculateBossTiming(profileOrLevel, selectedSegments) {
   };
 }
 
-const FALLBACK_TYPING_WORDS = Object.freeze([
-  "act", "air", "ask", "back", "ball", "bank", "best", "bird", "blue", "boat",
-  "book", "bring", "build", "care", "carry", "chair", "change", "check", "child",
-  "city", "clean", "clear", "close", "cloud", "color", "common", "complete",
-  "country", "course", "create", "decide", "develop", "different", "dinner",
-  "direct", "dream", "drive", "early", "earth", "effect", "energy", "enough",
-  "example", "family", "father", "field", "flower", "follow", "forest", "friend",
-  "future", "garden", "great", "ground", "group", "happen", "heart", "history",
-  "holiday", "important", "inside", "island", "language", "learn", "letter",
-  "light", "little", "market", "minute", "modern", "moment", "morning", "mother",
-  "mountain", "nature", "notice", "number", "people", "perhaps", "person",
-  "picture", "possible", "problem", "question", "reason", "remember", "school",
-  "second", "sentence", "several", "simple", "sister", "something", "special",
-  "station", "straight", "strong", "summer", "teacher", "thought", "together",
-  "tomorrow", "travel", "weather", "window", "winter", "without", "wonder",
-]);
+const FALLBACK_TYPING_WORDS = AUDITED_FALLBACK_WORDS;
 
 const FALLBACK_LONG_WORDS = Object.freeze([
   "adventure", "agreement", "attention", "beautiful", "breakfast", "challenge",

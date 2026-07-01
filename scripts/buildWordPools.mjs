@@ -3,53 +3,15 @@ import { readFile, writeFile } from "node:fs/promises";
 
 const SOURCE_URL = "https://github.com/first20hours/google-10000-english";
 const SOURCE_FILE = "google-10000-english-usa-no-swears.txt";
-const SOURCE_SHA256 = "ee2d83651fbb91642bbed2bd30ead404c2cfbdfece01dacf284af6ea47795811";
-const OUTPUT_COUNT = 3000;
-
-export const SHORT_WORD_ALLOWLIST = new Set(`
-an as at be by do go he if in is it me my no of on or so to up us we am did had has may
-can how man new now old one our out own put say see she too two use way who why you
-was
-`.trim().split(/\s+/));
+export const SOURCE_SHA256 = "ee2d83651fbb91642bbed2bd30ead404c2cfbdfece01dacf284af6ea47795811";
+export const OUTPUT_COUNT = 3000;
 
 export const INFLECTION_EXCEPTIONS = new Set(`
 address access across business class glass grass less loss mass pass press process success
 analysis basis crisis focus gas his its news series status virus canvas bonus campus minus
 was were been did done gone had has does means always perhaps towards clothes
-morning evening thing spring ring king ceiling during
+morning evening thing spring ring king bring sing wing ceiling during
 `.trim().split(/\s+/));
-
-export const REQUIRED_COMMON_FORMS = new Set(`
-address access across business class glass grass less loss mass pass press process success
-did done gone been was were had has does
-`.trim().split(/\s+/));
-
-export const AMBIGUOUS_NAME_ALLOWLIST = new Set(`
-will may mark rose hope grace faith joy summer autumn april june august bill bob rob
-`.trim().split(/\s+/));
-
-export const GEOGRAPHIC_ALLOWLIST = new Set(`
-england france germany korea japan china india paris berlin london rome canada mexico
-italy spain europe africa asia america brazil egypt ireland scotland wales
-`.trim().split(/\s+/));
-
-export const EXCLUDED_WORDS = new Set(`
-adobe ajax amazon amd android apache apple asus bbc bluetooth canon cbs craigslist dell
-disney ebay firefox github google hewlett hp ibm intel microsoft mozilla mysql nasa netflix
-nginx nike nokia oracle paypal pinterest reddit samsung sony spotify twitter ubuntu verizon
-windows wordpress yahoo youtube viewport breakpoint debugging bandwidth overdrive prototype
-renderer websocket cryptocurrency blockchain javascript jquery runtime backend frontend
-firmware malware spyware localhost pixel shader chipset codec servlet desktop gateway
-api css cpu dsl ftp gps html http https php ram sql tcp usb utc dns url xml vpn pdf
-`.trim().split(/\s+/));
-
-function complexity(word) {
-  const uncommon = (word.match(/[jqxz]/g) || []).length;
-  const clusters = (word.match(/[^aeiou]{3,}/g) || []).join("").length;
-  const repeats = /(.)\1/.test(word) ? 1 : 0;
-  const morphology = /(tion|ment|ness|able|ible|ally|ously|ative|istic)$/.test(word) ? 1 : 0;
-  return Math.min(1, Math.max(0, word.length - 4) / 10 + uncommon * 0.16 + clusters * 0.025 + repeats * 0.08 + morphology * 0.1);
-}
 
 function baseCandidates(word) {
   const candidates = [];
@@ -73,97 +35,168 @@ function baseCandidates(word) {
   return [...new Set(candidates)];
 }
 
-export function findInflectionBase(word, rankByWord) {
+export function findInflectionBase(word, sourceWords) {
   if (INFLECTION_EXCEPTIONS.has(word)) return null;
-  const formRank = rankByWord.get(word) ?? Infinity;
-  return baseCandidates(word).find((base) => {
-    const baseRank = rankByWord.get(base);
-    return Number.isFinite(baseRank) && baseRank < formRank;
-  }) || null;
+  const hasWord = sourceWords instanceof Map
+    ? (candidate) => sourceWords.has(candidate)
+    : sourceWords instanceof Set
+      ? (candidate) => sourceWords.has(candidate)
+      : (candidate) => Array.isArray(sourceWords) && sourceWords.includes(candidate);
+  return baseCandidates(word).find(hasWord) || null;
 }
 
-export function analyzeMorphology(words, rankByWord) {
+export function analyzeMorphology(words, sourceWords) {
   const values = words.map((entry) => typeof entry === "string" ? entry : entry.word);
   return {
     sEndingTotal: values.filter((word) => word.endsWith("s")).length,
-    likelyPluralOrVerbSTotal: values.filter((word) => word.endsWith("s") && Boolean(findInflectionBase(word, rankByWord))).length,
+    likelyPluralOrVerbSTotal: values.filter((word) => word.endsWith("s") && Boolean(findInflectionBase(word, sourceWords))).length,
     edEndingTotal: values.filter((word) => word.endsWith("ed")).length,
-    likelyPastTenseTotal: values.filter((word) => word.endsWith("ed") && Boolean(findInflectionBase(word, rankByWord))).length,
+    likelyPastTenseTotal: values.filter((word) => word.endsWith("ed") && Boolean(findInflectionBase(word, sourceWords))).length,
     ingEndingTotal: values.filter((word) => word.endsWith("ing")).length,
-    likelyContinuousTotal: values.filter((word) => word.endsWith("ing") && Boolean(findInflectionBase(word, rankByWord))).length,
+    likelyContinuousTotal: values.filter((word) => word.endsWith("ing") && Boolean(findInflectionBase(word, sourceWords))).length,
   };
 }
 
-export function buildDataset(sourceText, { personalNames = [], personalNameSource = null } = {}) {
-  const rawWords = sourceText.split(/\r?\n/).map((word) => word.trim());
-  const rankByWord = new Map();
-  rawWords.forEach((word, index) => { if (!rankByWord.has(word)) rankByWord.set(word, index + 1); });
-  const nameSet = new Set(personalNames);
-  const seen = new Set();
-  const eligible = [];
-  const removed = { personalNames: 0, abbreviations: 0, inflections: 0, invalid: 0 };
-  for (let sourceIndex = 0; sourceIndex < rawWords.length; sourceIndex += 1) {
-    const word = rawWords[sourceIndex];
-    if (!/^[a-z]{2,12}$/.test(word) || seen.has(word)) { removed.invalid += 1; continue; }
-    if ((word.length <= 3 && !SHORT_WORD_ALLOWLIST.has(word)) || EXCLUDED_WORDS.has(word)) {
-      removed.abbreviations += 1; continue;
-    }
-    if (nameSet.has(word) && !AMBIGUOUS_NAME_ALLOWLIST.has(word) && !GEOGRAPHIC_ALLOWLIST.has(word) && !INFLECTION_EXCEPTIONS.has(word)) {
-      removed.personalNames += 1; continue;
-    }
-    if (findInflectionBase(word, rankByWord)) { removed.inflections += 1; continue; }
-    seen.add(word);
-    eligible.push({ word, frequencyRank: sourceIndex + 1 });
+function exclusionMap(qualityRules) {
+  const blocked = new Map();
+  for (const [category, words] of Object.entries(qualityRules?.exclusions || {})) {
+    for (const word of words || []) if (!blocked.has(word)) blocked.set(word, category);
   }
-  const candidates = eligible.slice(0, OUTPUT_COUNT);
-  for (const required of REQUIRED_COMMON_FORMS) {
-    if (candidates.some(({ word }) => word === required)) continue;
-    const requiredEntry = eligible.find(({ word }) => word === required);
-    if (!requiredEntry) continue;
-    const replaceIndex = candidates.findLastIndex(({ word }) => !REQUIRED_COMMON_FORMS.has(word));
-    candidates.splice(replaceIndex, 1, requiredEntry);
-  }
-  candidates.sort((a, b) => a.frequencyRank - b.frequencyRank);
-  if (candidates.length !== OUTPUT_COUNT) throw new Error(`Expected ${OUTPUT_COUNT} words, found ${candidates.length}`);
+  return blocked;
+}
 
-  const scored = candidates.map((entry, index) => ({
-    ...entry,
-    difficultyScore: (index / (OUTPUT_COUNT - 1)) * 0.72 + complexity(entry.word) * 0.28,
-  })).sort((a, b) => a.difficultyScore - b.difficultyScore || a.frequencyRank - b.frequencyRank);
-  const tierByWord = new Map(scored.map((entry, index) => [entry.word, Math.min(5, Math.floor(index / 600) + 1)]));
-  const words = candidates.map((entry) => ({ ...entry, difficultyTier: tierByWord.get(entry.word) }));
+function countRemoved(entries) {
+  const counts = {};
+  for (const entry of entries) {
+    if (entry.decision !== "REMOVE") continue;
+    counts[entry.category] = (counts[entry.category] || 0) + 1;
+  }
+  return counts;
+}
+
+export function validateManualReview(sourceText, {
+  review,
+  qualityRules,
+  personalNames = [],
+} = {}) {
+  const errors = [];
+  const sourceWords = sourceText.split(/\r?\n/).map((word) => word.trim());
+  const sourceSet = new Set(sourceWords);
+  const entries = Array.isArray(review?.entries) ? review.entries : [];
+  const blocked = exclusionMap(qualityRules);
+  const ambiguous = new Set(qualityRules?.ambiguousOrdinaryWords || []);
+  const allowedGeography = new Set(qualityRules?.allowedGeographicNames || []);
+  const shortAllowlist = new Set(qualityRules?.shortWordAllowlist || []);
+  const names = new Set(personalNames);
+  const seen = new Set();
+
+  if (review?.manualReviewCompleted !== true) errors.push("Manual review is not marked complete");
+  if (review?.source?.sourceSha256 !== SOURCE_SHA256) errors.push("Review source checksum mismatch");
+  if (!entries.length || review?.reviewedCandidateCount !== entries.length) errors.push("Reviewed candidate count mismatch");
+
+  for (const entry of entries) {
+    const word = entry?.word;
+    if (typeof word !== "string" || seen.has(word)) {
+      errors.push(`Invalid or duplicate review word: ${String(word)}`);
+      continue;
+    }
+    seen.add(word);
+    if (!Number.isSafeInteger(entry.sourceFrequencyRank) || sourceWords[entry.sourceFrequencyRank - 1] !== word) {
+      errors.push(`Source rank mismatch: ${word}`);
+    }
+    if (!["KEEP", "REMOVE"].includes(entry.decision)) errors.push(`Invalid decision: ${word}`);
+    if (typeof entry.category !== "string" || !entry.category) errors.push(`Missing category: ${word}`);
+    if (typeof entry.reviewNote !== "string" || !entry.reviewNote) errors.push(`Missing review note: ${word}`);
+    if (entry.decision === "REMOVE" && entry.difficultyTier != null) errors.push(`Removed word has a tier: ${word}`);
+  }
+
+  const kept = entries.filter((entry) => entry.decision === "KEEP");
+  if (kept.length !== OUTPUT_COUNT) errors.push(`Expected ${OUTPUT_COUNT} approved words, found ${kept.length}`);
+  for (const entry of kept) {
+    const { word } = entry;
+    if (!/^[a-z]{2,12}$/.test(word)) errors.push(`Malformed approved word: ${word}`);
+    if (!Number.isInteger(entry.difficultyTier) || entry.difficultyTier < 1 || entry.difficultyTier > 5) {
+      errors.push(`Invalid difficulty tier: ${word}`);
+    }
+    if (word.length <= 3 && !shortAllowlist.has(word)) errors.push(`Unapproved short word: ${word}`);
+    if (blocked.has(word) && !ambiguous.has(word) && !allowedGeography.has(word)) {
+      errors.push(`Blocked ${blocked.get(word)} word was approved: ${word}`);
+    }
+    if (names.has(word) && !ambiguous.has(word) && !allowedGeography.has(word)) {
+      errors.push(`Blocked personal name was approved: ${word}`);
+    }
+    if (!sourceSet.has(word)) errors.push(`Approved word missing from source: ${word}`);
+  }
+  const tierCounts = Object.fromEntries(Array.from({ length: 5 }, (_, index) => {
+    const tier = index + 1;
+    return [String(tier), kept.filter((entry) => entry.difficultyTier === tier).length];
+  }));
+  if (Object.values(tierCounts).some((count) => count !== 600)) errors.push("Difficulty tiers must contain exactly 600 words each");
+  const morphology = analyzeMorphology(kept, sourceSet);
+  if (morphology.likelyPluralOrVerbSTotal || morphology.likelyPastTenseTotal || morphology.likelyContinuousTotal) {
+    errors.push("Approved review contains a removable regular inflection");
+  }
+  return Object.freeze({ valid: errors.length === 0, errors, entries, kept, tierCounts, morphology });
+}
+
+export function buildDataset(sourceText, options = {}) {
+  const validation = validateManualReview(sourceText, options);
+  if (!validation.valid) throw new Error(validation.errors.join("; "));
+  const { review, qualityRules, personalNameSource = null } = options;
+  const removedByCategory = countRemoved(validation.entries);
+  const allowedGeography = new Set(qualityRules.allowedGeographicNames);
+  const ambiguous = new Set(qualityRules.ambiguousOrdinaryWords);
+  const words = validation.kept
+    .map((entry) => ({
+      word: entry.word,
+      frequencyRank: entry.sourceFrequencyRank,
+      difficultyTier: entry.difficultyTier,
+    }))
+    .sort((a, b) => a.frequencyRank - b.frequencyRank);
   const tiers = Object.fromEntries(Array.from({ length: 5 }, (_, index) => {
     const tier = index + 1;
     return [String(tier), words.filter((entry) => entry.difficultyTier === tier).map(({ word }) => word)];
   }));
-  const geographicNames = words.filter(({ word }) => GEOGRAPHIC_ALLOWLIST.has(word)).map(({ word }) => word);
-  const morphology = analyzeMorphology(words, rankByWord);
+  const geographicNames = words.filter(({ word }) => allowedGeography.has(word)).map(({ word }) => word);
+  const ambiguousRetained = words.filter(({ word }) => ambiguous.has(word)).map(({ word }) => word);
   return {
     schemaVersion: 2,
     source: {
-      name: "google-10000-english (US no-swears)", url: SOURCE_URL, file: SOURCE_FILE,
-      license: "MIT", retrieved: "2026-06-30", sourceSha256: SOURCE_SHA256,
-      description: "Frequency-ranked from Google's Trillion Word Corpus; upstream swear-filtered list.",
+      name: "google-10000-english (US no-swears)",
+      url: SOURCE_URL,
+      file: SOURCE_FILE,
+      license: "MIT",
+      retrieved: "2026-06-30",
+      sourceSha256: SOURCE_SHA256,
+      description: "Frequency-ranked from Google's Trillion Word Corpus; every selected word is manually approved.",
     },
-    supportingSources: [{
-      ...(personalNameSource || {
-        name: "U.S. Social Security Administration national baby names",
-        license: "CC0-1.0 / U.S. public-domain data",
-      }),
-      purpose: "Deterministic personal-name exclusions",
-    }],
+    supportingSources: [
+      ...(personalNameSource ? [{ ...personalNameSource, purpose: "Personal-name review support" }] : []),
+      ...(qualityRules.supportingSources || []),
+    ],
     filtering: {
-      format: "lowercase ASCII letters, 2-12 characters", unique: true, outputCount: OUTPUT_COUNT,
-      exclusions: "Upstream swear filter, SSA-derived common personal names, short-token allowlist, technical abbreviations, and regular inflections when an earlier-ranked base exists.",
-      tiering: "72% frequency-rank position and 28% typing complexity.",
+      format: "lowercase ASCII letters, 2-12 characters",
+      unique: true,
+      outputCount: OUTPUT_COUNT,
+      manualReviewArtifact: "data/commonGameplayWords.manual-review.json",
+      qualityRules: "data/vocabularyQualityRules.json",
+      tiering: "72% source-frequency position and 28% typing complexity; manual recognizability approval is mandatory.",
     },
     statistics: {
       totalWords: words.length,
-      wordsPerTier: Object.fromEntries(Object.entries(tiers).map(([tier, values]) => [tier, values.length])),
-      ...morphology,
-      personalNamesRemoved: removed.personalNames,
-      abbreviationsRemoved: removed.abbreviations,
-      regularInflectionsRemoved: removed.inflections,
+      wordsPerTier: validation.tierCounts,
+      manuallyReviewedCount: review.reviewedCandidateCount,
+      manuallyApprovedCount: words.length,
+      ...validation.morphology,
+      removedByCategory,
+      companiesBrandsRemoved: removedByCategory["company-or-brand"] || 0,
+      usStatesRemoved: removedByCategory["us-state"] || 0,
+      usCitiesRemoved: removedByCategory["us-city"] || 0,
+      personalNamesRemoved: removedByCategory["personal-name"] || 0,
+      technicalTermsRemoved: (removedByCategory["technical-term"] || 0) + (removedByCategory["scientific-term"] || 0),
+      abbreviationsRemoved: removedByCategory.abbreviation || 0,
+      regularInflectionsRemoved: removedByCategory["inflected-form"] || 0,
+      ambiguousOrdinaryWordsRetained: ambiguousRetained,
       geographicNamesIncluded: geographicNames,
     },
     words,
@@ -172,15 +205,20 @@ export function buildDataset(sourceText, { personalNames = [], personalNameSourc
 }
 
 async function main() {
-  const sourcePath = process.argv[2];
-  const namesPath = process.argv[3];
-  const outputPath = process.argv[4] || new URL("../data/commonGameplayWords.json", import.meta.url);
-  if (!sourcePath || !namesPath) throw new Error("Usage: node scripts/buildWordPools.mjs <frequency-list> <name-exclusions-json> [output-json]");
+  const [sourcePath, reviewPath, rulesPath, namesPath, outputArg] = process.argv.slice(2);
+  if (!sourcePath || !reviewPath || !rulesPath || !namesPath) {
+    throw new Error("Usage: node scripts/buildWordPools.mjs <frequency-list> <manual-review-json> <quality-rules-json> <name-exclusions-json> [output-json]");
+  }
+  const outputPath = outputArg || new URL("../data/commonGameplayWords.json", import.meta.url);
   const source = await readFile(sourcePath, "utf8");
   const hash = createHash("sha256").update(source).digest("hex");
   if (hash !== SOURCE_SHA256) throw new Error(`Unexpected source checksum: ${hash}`);
+  const review = JSON.parse(await readFile(reviewPath, "utf8"));
+  const qualityRules = JSON.parse(await readFile(rulesPath, "utf8"));
   const namesSource = JSON.parse(await readFile(namesPath, "utf8"));
   const dataset = buildDataset(source, {
+    review,
+    qualityRules,
     personalNames: namesSource.names,
     personalNameSource: namesSource.source,
   });
