@@ -421,14 +421,16 @@ export function renderSpeedTestRun(state, devMode = false, handlers = {}) {
         </div>
       </header>
       <main class="speed-test-stage">
-        <div class="speed-test-prompt-row">
-          <div class="speed-test-status" id="speed-test-status">START TYPING TO BEGIN</div>
-          ${tutorialHelpButton("typing", "Typing Test")}
+        <div class="speed-test-upper-overlay">
+          <div class="speed-test-upper-overlay-content">
+            <div class="speed-test-status" id="speed-test-status">START TYPING TO BEGIN</div>
+            ${timerPosition === "center" ? `<div class="speed-test-center-timer" aria-live="off">
+              <strong id="speed-test-primary">${primaryValue}</strong>
+              ${isTime ? "" : '<span id="speed-test-elapsed">00:00</span>'}
+            </div>` : ""}
+          </div>
         </div>
-        ${timerPosition === "center" ? `<div class="speed-test-center-timer" aria-live="off">
-          <strong id="speed-test-primary">${primaryValue}</strong>
-          ${isTime ? "" : '<span id="speed-test-elapsed">00:00</span>'}
-        </div>` : ""}
+        <div class="speed-test-prompt-actions">${tutorialHelpButton("typing", "Typing Test")}</div>
         <div class="speed-test-word-region">
           <div class="speed-test-word-viewport" id="speed-test-word-viewport">
             <div class="speed-test-word-flow" id="speed-test-word-flow">

@@ -41,3 +41,27 @@ export function isConstrainedSpeedTestLayout({
 export function getSpeedTestWordBodyAnchor({ stageHeight } = {}) {
   return Math.max(0, Number(stageHeight) || 0) / 2;
 }
+
+export function getSpeedTestUpperOverlayGeometry({
+  stageHeight,
+  wordViewportHeight,
+  timerHeight,
+} = {}) {
+  const height = Math.max(0, Number(stageHeight) || 0);
+  const viewportHeight = Math.min(
+    height,
+    Math.max(0, Number(wordViewportHeight) || 0),
+  );
+  const numericTimerHeight = Math.max(0, Number(timerHeight) || 0);
+  const wordBodyAnchor = getSpeedTestWordBodyAnchor({ stageHeight: height });
+  const wordViewportTop = Math.max(0, wordBodyAnchor - viewportHeight / 2);
+  const overlayHeight = wordViewportTop;
+  const timerCenter = overlayHeight / 2;
+  return Object.freeze({
+    wordBodyAnchor,
+    wordViewportTop,
+    overlayHeight,
+    timerCenter,
+    timerToWordGap: Math.max(0, wordViewportTop - (timerCenter + numericTimerHeight / 2)),
+  });
+}
